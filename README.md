@@ -15,8 +15,12 @@ https://tonysteege.github.io/cth-diagrammer/)
   text labels, freehand pen, flip.
 - Rink items: net, coach, puck, puck pile, cone, border pad. One-click 5v5
   centre-ice faceoff.
-- "+ Rink" stacks up to five rinks below as a sequence, saved as one image.
-  Each rink in a sequence wears a name chip - double-click it to rename.
+- The "+ Add Rink" bar under the bottom rink stacks up to five rinks as a
+  sequence, saved as one image. Each rink of a sequence gets a Figma-style
+  frame label (click to rename) and minimal controls above it: move up or
+  down, copy, download, remove - with the whole sequence reflowing. The
+  extra spacing between rinks is editor-only; exports keep the canonical
+  layout.
 - Four customizable color presets (double-click or right-click a swatch).
 - Trackpad pinch to zoom (Cmd+scroll works too, Cmd+0 resets), two-finger
   scroll to pan. Touch support for tablet and phone.

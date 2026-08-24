@@ -229,38 +229,6 @@ function drawElInner(ctx, x) {
   }
 }
 
-// ---- rink name chips (drill sequences) -----------------------------------
-// A named rink wears a Title chip centred at the top of its frame. Shared
-// metrics so the SVG editor and flat exports draw the identical chip.
-export const RINK_CHIP = { size: 64, baseline: 170, cx: 1600 };
-
-export function drawRinkNames(ctx, names, seq) {
-  if (!names || !names.some((n) => n && n.trim())) return;
-  const C = RINK_CHIP;
-  const T = TEXT_CHIP;
-  for (let k = 0; k < (seq || 1); k++) {
-    const name = (names[k] || '').trim();
-    if (!name) continue;
-    const yOff = k * (RINK_H + SEQ_GAP);
-    ctx.font = `800 ${C.size}px Inter, 'Helvetica Neue', sans-serif`;
-    const w = ctx.measureText(name).width;
-    const padX = C.size * T.padX; const padY = C.size * T.padY;
-    const x0 = C.cx - w / 2;
-    const y0 = yOff + C.baseline;
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.roundRect(x0 - padX, y0 - C.size - padY, w + padX * 2, C.size * T.height + padY * 2, C.size * T.radius);
-    ctx.fill();
-    ctx.strokeStyle = INK;
-    ctx.lineWidth = Math.max(1.5, C.size * T.border);
-    ctx.stroke();
-    ctx.fillStyle = INK;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillText(name, x0, y0);
-  }
-}
-
 // Render a stored cthDiagram state to a flat canvas, no live editor needed.
 export async function renderStateFlat(state, scale = 1) {
   const bg = state.bg ? await loadImg(state.bg) : composeRinkBg(state.seq || 1);
@@ -275,7 +243,6 @@ export async function renderStateFlat(state, scale = 1) {
   ctx.fillRect(0, 0, w, h);
   ctx.drawImage(bg, 0, 0, w, h);
   for (const x of state.elements || []) drawEl(ctx, x);
-  if (!state.bg) drawRinkNames(ctx, state.rinkNames, state.seq);
   return c;
 }
 

@@ -408,13 +408,15 @@ async function showEditor(id) {
         </div>
       </header>
       <div class="ed-stagewrap" id="edStageWrap">
-        <div class="ed-stage" id="edStage">
-          <svg id="edSvg" xmlns="http://www.w3.org/2000/svg">
-            <image id="edBg" x="0" y="0"></image>
-            <g id="edEls"></g>
-            <g id="edFrames"></g>
-            <g id="edUi"></g>
-          </svg>
+        <div class="ed-zoom" id="edZoom">
+          <div class="ed-stage" id="edStage">
+            <svg id="edSvg" xmlns="http://www.w3.org/2000/svg">
+              <g id="edBgG"></g>
+              <g id="edEls"></g>
+              <g id="edUi"></g>
+            </svg>
+          </div>
+          <button class="ed-addbar" id="edAddBar" hidden>+ Add Rink</button>
         </div>
       </div>
       <div class="tb" id="edBar"></div>

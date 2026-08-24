@@ -318,12 +318,12 @@ input { font: inherit; color: inherit; }
   background: var(--cloud);
   padding: clamp(10px, 2vw, 28px) clamp(10px, 3vw, 40px) 120px;
 }
-.ed-stage {
+.ed-zoom {
   width: 100%;
   min-width: 320px;
   margin: 0 auto;
-  flex-shrink: 0;
 }
+.ed-stage { width: 100%; }
 #edSvg { display: block; width: 100%; height: 100%; user-select: none; touch-action: none; }
 .ed-rinkchip { cursor: text; }
 
@@ -368,29 +368,43 @@ input { font: inherit; color: inherit; }
 .ed-rot { fill: #ffffff; stroke: var(--select); stroke-width: 2px; cursor: grab; }
 .ed-rotstem { stroke: var(--select); stroke-width: 1.5px; }
 
-/* Per-rink control cluster (sequences) */
+/* Frame strips: the label and ghost controls in the space above each rink
+   of a sequence - minimal, Figma-style, never on the ice. */
+.ed-flabel { fill: var(--mist); cursor: text; }
+.ed-flabel:hover { fill: var(--ink); }
 .ed-rctl { cursor: pointer; }
-.ed-rctl rect { fill: rgba(255, 255, 255, 0.95); stroke: var(--edge); stroke-width: 2px; }
-.ed-rctl g path, .ed-rctl g rect { fill: none; stroke: var(--graphite); stroke-width: 7px; stroke-linecap: round; stroke-linejoin: round; }
-.ed-rctl:hover rect:first-of-type { stroke: var(--ink); }
+.ed-rctl rect:first-of-type { fill: transparent; stroke: none; }
+.ed-rctl g path, .ed-rctl g rect { fill: none; stroke: var(--soft); stroke-width: 8px; stroke-linecap: round; stroke-linejoin: round; }
+.ed-rctl:hover rect:first-of-type { fill: var(--sunken); }
 .ed-rctl:hover g path, .ed-rctl:hover g rect { stroke: var(--ink); }
 
-/* Instant tooltips + the player preset menu (fixed, so the toolbar's
-   overflow can never clip them) */
-.tb-tip {
-  position: fixed;
-  transform: translate(-50%, -100%);
-  background: var(--ink);
-  color: var(--cloud);
-  font-size: 12px;
-  font-weight: 500;
-  padding: 6px 10px;
-  border-radius: 8px;
-  box-shadow: var(--shadow-2);
-  pointer-events: none;
-  white-space: nowrap;
-  z-index: 70;
+.ed-input-flabel {
+  transform: translate(-2px, -0.15em);
+  text-align: left;
+  font-weight: 800;
+  color: var(--ink);
+  border-width: 1.5px;
+  min-width: 120px;
 }
+
+/* The + Add Rink bar under the bottom rink */
+.ed-addbar {
+  display: block;
+  width: 100%;
+  margin: 18px 0 4px;
+  padding: 13px 0;
+  border: 1.5px dashed var(--edge);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--soft);
+  font-size: 14px;
+  font-weight: 800;
+  transition: border-color .12s, color .12s, background .12s;
+}
+.ed-addbar:hover { border-color: var(--soft); color: var(--ink); background: var(--sunken); }
+
+/* The player preset menu (fixed, so the toolbar's overflow can never clip
+   it) */
 .pmenu {
   position: fixed;
   z-index: 65;

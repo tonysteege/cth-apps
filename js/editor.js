@@ -37,9 +37,18 @@ import { putDrill } from './store.js';
 import { toast, esc } from './ui.js';
 import {
   INK, PALETTE, colorOf, labelInkOn, measureText, arrowCtrl, arrowEndAngle,
-  drawEl, drawRinkNames, TEXT_CHIP, RINK_CHIP, shapeLabelSize, ROTATABLE,
+  drawEl, TEXT_CHIP, shapeLabelSize, ROTATABLE,
   rotCenterOf, sliceFrames,
 } from './flat.js';
+
+// Editor-only breathing room in SEQUENCES: extra visual space between and
+// above the rinks, where the frame label and its controls live - exactly
+// like Figma's frame labels. Storage and export coordinates keep the
+// canonical 60px gap (Film Room interchange), so this NEVER touches
+// element coordinates; the renderer shifts each frame down visually and
+// pt() maps pointer positions back.
+const VGAP = 170;
+const VTOP = 170;
 
 let cur = null;
 let wired = false;
@@ -85,13 +94,24 @@ const defaults = () => {
   };
 };
 
+const hasVGaps = () => onRink() && (cur.seq || 1) > 1;
+const vTop = () => (hasVGaps() ? VTOP : 0);
+const vShiftOf = (k) => (hasVGaps() ? k * VGAP : 0);
+const frameOfLY = (ly) => Math.max(0, Math.min((cur.seq || 1) - 1, Math.floor(ly / (RINK_H + SEQ_GAP))));
+const vShiftOfY = (ly) => vShiftOf(frameOfLY(ly));
+const totalVH = () => cur.h + (hasVGaps() ? (cur.seq - 1) * VGAP + VTOP : 0);
+
 function pt(e) {
   const svg = el('edSvg');
   const r = svg.getBoundingClientRect();
-  return {
-    x: (e.clientX - r.left) * (cur.w / r.width),
-    y: (e.clientY - r.top) * (cur.h / r.height),
-  };
+  const scale = cur.w / r.width;
+  const x = (e.clientX - r.left) * scale;
+  const vy = (e.clientY - r.top) * scale - vTop();
+  if (!hasVGaps()) return { x, y: vy };
+  const per = RINK_H + SEQ_GAP + VGAP;
+  const k = Math.max(0, Math.min(cur.seq - 1, Math.floor(vy / per)));
+  const y = Math.max(k * (RINK_H + SEQ_GAP), Math.min((k + 1) * (RINK_H + SEQ_GAP) - 1, vy - k * VGAP));
+  return { x, y };
 }
 
 function setSel(ids) {
@@ -325,7 +345,6 @@ export async function renderFlat(scale = 1) {
   ctx.fillRect(0, 0, cur.w, cur.h);
   ctx.drawImage(cur.bgImg, 0, 0, cur.w, cur.h);
   for (const x of cur.elements) drawEl(ctx, x);
-  if (onRink() && (cur.seq || 1) > 1) drawRinkNames(ctx, cur.rinkNames, cur.seq);
   return c;
 }
 
@@ -351,20 +370,32 @@ export function frameInfo() {
 
 export async function saveNow() {
   if (!cur || !cur.dirty) return;
-  cur.dirty = false;
+  const c = cur; // the editor may close while this runs - never re-read cur
+  c.dirty = false;
   status('Saving…');
   try {
-    const thumbScale = Math.min(1, 480 / cur.w);
-    const thumb = (await renderFlat(thumbScale)).toDataURL('image/jpeg', 0.8);
-    cur.drill.state = structuredClone(currentState());
-    cur.drill.thumb = thumb;
-    await putDrill(cur.drill);
-    status('Saved');
+    c.drill.state = structuredClone(currentState());
+    // The thumbnail is a nicety - a failure there must never block the save.
+    try {
+      const thumbScale = Math.min(1, 480 / c.w);
+      c.drill.thumb = (await renderFlat(thumbScale)).toDataURL('image/jpeg', 0.8);
+    } catch (e) {
+      console.error('thumb render failed', e);
+    }
+    try {
+      await putDrill(c.drill);
+    } catch (e) {
+      // One quiet retry - a transient IndexedDB hiccup should not surface.
+      console.error('save retry after', e);
+      await new Promise((z) => setTimeout(z, 700));
+      await putDrill(c.drill);
+    }
+    if (cur === c) status('Saved');
   } catch (e) {
-    cur.dirty = true;
-    status('Not Saved');
+    c.dirty = true;
+    if (cur === c) status('Not Saved');
     console.error(e);
-    toast('Could not save - see the browser console', true);
+    toast(`Could Not Save (${e?.name || 'Error'}: ${e?.message || 'unknown'})`, true);
   }
 }
 
@@ -453,29 +484,9 @@ function svgEl(x) {
   return '';
 }
 
-// Rink name chips - only in sequences. Double-click one to rename.
-function framesSvg() {
-  if (!onRink() || (cur.seq || 1) < 2) return '';
-  const out = [];
-  const C = RINK_CHIP;
-  const T = TEXT_CHIP;
-  for (let k = 0; k < cur.seq; k++) {
-    const name = (cur.rinkNames?.[k] || '').trim();
-    if (!name) continue;
-    const w = measureText({ size: C.size, text: name });
-    const padX = C.size * T.padX; const padY = C.size * T.padY;
-    const x0 = C.cx - w / 2;
-    const y0 = k * (RINK_H + SEQ_GAP) + C.baseline;
-    out.push(`<g data-rink="${k}" class="ed-rinkchip">
-      <rect x="${x0 - padX}" y="${y0 - C.size - padY}" width="${w + padX * 2}" height="${C.size * T.height + padY * 2}" rx="${C.size * T.radius}" fill="#ffffff" stroke="${INK}" stroke-width="${Math.max(1.5, C.size * T.border)}"></rect>
-      <text x="${x0}" y="${y0}" fill="${INK}" font-family="Inter, sans-serif" font-weight="800" font-size="${C.size}">${esc(name)}</text>
-    </g>`);
-  }
-  return out.join('');
-}
-
-// Per-rink control cluster (sequences only): move up / down, copy,
-// download, remove. Editor chrome - never part of exports.
+// The frame strip: a Figma-style label plus minimal ghost controls in the
+// clear space ABOVE each rink of a sequence. Editor chrome only - never in
+// exports, never on the ice.
 const RCTL_GLYPHS = {
   up: '<path d="M48 70V28M30 46 48 28l18 18"/>',
   down: '<path d="M48 26v42M30 50l18 18 18-18"/>',
@@ -484,31 +495,42 @@ const RCTL_GLYPHS = {
   del: '<path d="M33 33l30 30M63 33 33 63"/>',
 };
 const RCTL_TIPS = {
-  up: 'Move This Rink Up', down: 'Move This Rink Down', copy: 'Copy This Rink',
+  up: 'Move This Rink Up', down: 'Move This Rink Down', copy: 'Copy This Rink To The Clipboard',
   dl: 'Download This Rink As PNG', del: 'Remove This Rink',
 };
-function rinkControlsSvg() {
-  if (!onRink() || (cur.seq || 1) < 2) return '';
+const FLABEL = { size: 46, x: 24, gapAbove: 56 };
+function frameStripsSvg() {
+  if (!hasVGaps()) return '';
   const out = [];
-  const B = 96; const GAP = 18;
+  const B = 68; const GAP = 14;
   for (let k = 0; k < cur.seq; k++) {
-    const yOff = k * (RINK_H + SEQ_GAP);
+    const topV = k * (RINK_H + SEQ_GAP) + vShiftOf(k); // visual frame top
+    const baseline = topV - FLABEL.gapAbove + FLABEL.size * 0.85;
+    const name = (cur.rinkNames?.[k] || '').trim() || `Rink ${k + 1}`;
+    out.push(`<text class="ed-flabel" data-rframe="${k}" x="${FLABEL.x}" y="${baseline}" font-family="Inter, sans-serif" font-weight="800" font-size="${FLABEL.size}">${esc(name)}<title>Click To Rename This Rink</title></text>`);
     const acts = [];
     if (k > 0) acts.push('up');
     if (k < cur.seq - 1) acts.push('down');
     acts.push('copy', 'dl', 'del');
-    let x0 = 3150 - acts.length * (B + GAP);
+    let x0 = RINK_W - acts.length * (B + GAP);
+    const by = topV - FLABEL.gapAbove - (B - FLABEL.size) / 2 - 4;
     for (const a of acts) {
       out.push(`<g class="ed-rctl" data-rctl="${a}" data-frame="${k}">
         <title>${RCTL_TIPS[a]}</title>
-        <rect x="${x0}" y="${yOff + 52}" width="${B}" height="${B}" rx="20"></rect>
-        <g transform="translate(${x0} ${yOff + 52})">${RCTL_GLYPHS[a]}</g>
+        <rect x="${x0}" y="${by}" width="${B}" height="${B}" rx="15"></rect>
+        <g transform="translate(${x0} ${by}) scale(${B / 96})">${RCTL_GLYPHS[a]}</g>
       </g>`);
       x0 += B + GAP;
     }
   }
   return out.join('');
 }
+
+// Wrap rendered markup with the frame's editor-only vertical shift.
+const vWrap = (y, inner) => {
+  const dy = vShiftOfY(y);
+  return dy ? `<g transform="translate(0 ${dy})">${inner}</g>` : inner;
+};
 
 function uiSvg() {
   const out = [];
@@ -518,12 +540,12 @@ function uiSvg() {
   if (sel.length === 1 && primary && primary.type === 'arrow') {
     const x = primary;
     for (const [ax, ay, kind] of [[x.x1, x.y1, 'a1'], [x.mx, x.my, 'mid'], [x.x2, x.y2, 'a2']]) {
-      out.push(`<circle class="ed-anchor${kind === 'mid' ? ' mid' : ''}" data-h="${kind}" cx="${ax}" cy="${ay}" r="${hs}" vector-effect="non-scaling-stroke"></circle>`);
+      out.push(vWrap(centerOf(x).y, `<circle class="ed-anchor${kind === 'mid' ? ' mid' : ''}" data-h="${kind}" cx="${ax}" cy="${ay}" r="${hs}" vector-effect="non-scaling-stroke"></circle>`));
     }
   } else {
     for (const z of sel) {
       const b = elBounds(z);
-      out.push(wrapRot(z, `<rect class="ed-selbox" x="${b.x}" y="${b.y}" width="${Math.max(b.w, 2)}" height="${Math.max(b.h, 2)}" rx="${hs * 0.4}" vector-effect="non-scaling-stroke"></rect>`));
+      out.push(vWrap(centerOf(z).y, wrapRot(z, `<rect class="ed-selbox" x="${b.x}" y="${b.y}" width="${Math.max(b.w, 2)}" height="${Math.max(b.h, 2)}" rx="${hs * 0.4}" vector-effect="non-scaling-stroke"></rect>`)));
     }
     if (sel.length === 1 && primary
       && ['stamp', 'pucks', 'player', 'text', 'box', 'circle'].includes(primary.type)) {
@@ -534,34 +556,45 @@ function uiSvg() {
         chrome += `<line class="ed-rotstem" x1="${cx}" y1="${b.y}" x2="${cx}" y2="${b.y - hs * 2.6}" vector-effect="non-scaling-stroke"></line>
           <circle class="ed-rot" data-h="rot" cx="${cx}" cy="${b.y - hs * 3.4}" r="${hs}" vector-effect="non-scaling-stroke"></circle>`;
       }
-      out.push(wrapRot(primary, chrome));
+      out.push(vWrap(centerOf(primary).y, wrapRot(primary, chrome)));
     }
   }
   if (cur.band) {
     const b = cur.band;
-    out.push(`<rect class="ed-band" x="${Math.min(b.x1, b.x2)}" y="${Math.min(b.y1, b.y2)}" width="${Math.abs(b.x2 - b.x1)}" height="${Math.abs(b.y2 - b.y1)}" vector-effect="non-scaling-stroke"></rect>`);
+    const x0 = Math.min(b.x1, b.x2);
+    const y1 = Math.min(b.y1, b.y2) + vShiftOfY(Math.min(b.y1, b.y2));
+    const y2 = Math.max(b.y1, b.y2) + vShiftOfY(Math.max(b.y1, b.y2));
+    out.push(`<rect class="ed-band" x="${x0}" y="${y1}" width="${Math.abs(b.x2 - b.x1)}" height="${Math.max(2, y2 - y1)}" vector-effect="non-scaling-stroke"></rect>`);
   }
   for (const g of (cur.guides || [])) {
-    if (g.v != null) out.push(`<line class="ed-guide" x1="${g.v}" y1="0" x2="${g.v}" y2="${cur.h}" vector-effect="non-scaling-stroke"></line>`);
-    if (g.h != null) out.push(`<line class="ed-guide" x1="0" y1="${g.h}" x2="${cur.w}" y2="${g.h}" vector-effect="non-scaling-stroke"></line>`);
+    if (g.v != null) out.push(`<line class="ed-guide" x1="${g.v}" y1="${-vTop()}" x2="${g.v}" y2="${totalVH() - vTop()}" vector-effect="non-scaling-stroke"></line>`);
+    if (g.h != null) out.push(`<line class="ed-guide" x1="0" y1="${g.h + vShiftOfY(g.h)}" x2="${cur.w}" y2="${g.h + vShiftOfY(g.h)}" vector-effect="non-scaling-stroke"></line>`);
   }
-  out.push(rinkControlsSvg());
+  out.push(frameStripsSvg());
   return out.join('');
+}
+
+let rinkHrefCache = null;
+function rinkHref() {
+  if (!rinkHrefCache) rinkHrefCache = composeRinkBg(1).toDataURL('image/png');
+  return rinkHrefCache;
 }
 
 let toolsSig = '';
 export function render() {
   const svg = el('edSvg');
   if (!svg || !cur) return;
-  svg.setAttribute('viewBox', `0 0 ${cur.w} ${cur.h}`);
+  svg.setAttribute('viewBox', `0 ${-vTop()} ${cur.w} ${totalVH()}`);
   const stageEl = el('edStage');
-  if (stageEl) stageEl.style.aspectRatio = `${cur.w} / ${cur.h}`;
-  const bg = svg.querySelector('#edBg');
-  bg.setAttribute('href', bgHref());
-  bg.setAttribute('width', cur.w);
-  bg.setAttribute('height', cur.h);
-  svg.querySelector('#edEls').innerHTML = cur.elements.map(svgEl).join('');
-  svg.querySelector('#edFrames').innerHTML = framesSvg();
+  if (stageEl) stageEl.style.aspectRatio = `${cur.w} / ${totalVH()}`;
+  const bgG = svg.querySelector('#edBgG');
+  if (onRink()) {
+    bgG.innerHTML = Array.from({ length: cur.seq || 1 }, (_, k) =>
+      `<image href="${rinkHref()}" x="0" y="${k * (RINK_H + SEQ_GAP) + vShiftOf(k)}" width="${RINK_W}" height="${RINK_H}"></image>`).join('');
+  } else {
+    bgG.innerHTML = `<image href="${bgHref()}" x="0" y="0" width="${cur.w}" height="${cur.h}"></image>`;
+  }
+  svg.querySelector('#edEls').innerHTML = cur.elements.map((x) => vWrap(centerOf(x).y, svgEl(x))).join('');
   svg.querySelector('#edUi').innerHTML = uiSvg();
   const lines = cur.tool === 'arrow' || cur.tool === 'dasharrow' || cur.tool === 'pen'
     || selEls().some((z) => z.type === 'arrow' || z.type === 'pen');
@@ -659,34 +692,8 @@ function itemIcon(key) {
 }
 
 const sep = '<span class="tb-sep"></span>';
-const tip = (toolId, label, extra = '') => {
-  const k = keyFor(toolId);
-  return `data-tip="${esc(label)}${k ? ` &middot; ${k.toUpperCase()}` : ''}${extra ? ` &middot; ${extra}` : ''}"`;
-};
 
-// ---- shared floating tooltip + player preset menu ------------------------
-
-let tipEl = null;
-function hideTip() { tipEl?.remove(); tipEl = null; }
-function showTip(btn) {
-  hideTip();
-  const text = btn.dataset.tip;
-  if (!text) return;
-  tipEl = document.createElement('div');
-  tipEl.className = 'tb-tip';
-  tipEl.innerHTML = text;
-  document.body.appendChild(tipEl);
-  const r = btn.getBoundingClientRect();
-  tipEl.style.left = `${r.left + r.width / 2}px`;
-  tipEl.style.top = `${r.top - 8}px`;
-}
-function wireTips(root) {
-  root.querySelectorAll('[data-tip]').forEach((b) => {
-    b.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') showTip(b); });
-    b.addEventListener('pointerleave', hideTip);
-    b.addEventListener('pointerdown', hideTip);
-  });
-}
+// ---- player preset menu --------------------------------------------------
 
 let pmenuEl = null;
 let pmenuTimer = null;
@@ -728,7 +735,6 @@ function showPlayerMenu(slot, btn) {
 function paintTools() {
   const bar = el('edBar');
   if (!bar || !cur) return;
-  hideTip();
   hidePlayerMenu();
   const headNow = cur.head || 'triangle';
   const hexes = paletteHexes();
@@ -737,20 +743,17 @@ function paintTools() {
     || selEls().some((z) => z.type === 'arrow' || z.type === 'pen');
 
   bar.innerHTML = `
-    ${TOOLS.map(([t, label]) => `<button class="tb-btn${cur.tool === t ? ' on' : ''}" data-tool="${t}" ${tip(t, label)} aria-label="${label}">${ICON[t]}${keyBadge(t)}</button>`).join('')}
+    ${TOOLS.map(([t, label]) => `<button class="tb-btn${cur.tool === t ? ' on' : ''}" data-tool="${t}" aria-label="${label}">${ICON[t]}${keyBadge(t)}</button>`).join('')}
     ${sep}
-    ${PLAYER_SLOTS.map((i) => `<button class="tb-player${cur.tool === `p-${i}` ? ' on' : ''}" data-tool="p-${i}" data-slot-menu="${i}" ${tip(`p-${i}`, 'Player', 'Hover For Preset Letters')} style="--c:${colorOf(slotColor(i))}"></button>`).join('')}
-    <button class="tb-btn tb-word" data-act="faceoff" ${tip('faceoff', 'Place A 5v5 Centre-Ice Faceoff')}>5v5${keyBadge('faceoff')}</button>
+    ${PLAYER_SLOTS.map((i) => `<button class="tb-player${cur.tool === `p-${i}` ? ' on' : ''}" data-tool="p-${i}" data-slot-menu="${i}" aria-label="Player ${i + 1}" style="--c:${colorOf(slotColor(i))}"></button>`).join('')}
+    <button class="tb-btn tb-word" data-act="faceoff" aria-label="5v5 Faceoff">5v5${keyBadge('faceoff')}</button>
     ${sep}
-    ${ITEM_ORDER.map((k) => `<button class="tb-btn${cur.tool === `i-${k}` ? ' on' : ''}" data-tool="i-${k}" ${tip(`i-${k}`, ITEMS[k].label, 'Hold Cmd To Place Several')}>${itemIcon(k)}${keyBadge(`i-${k}`)}</button>`).join('')}
+    ${ITEM_ORDER.map((k) => `<button class="tb-btn${cur.tool === `i-${k}` ? ' on' : ''}" data-tool="i-${k}" aria-label="${ITEMS[k].label}">${itemIcon(k)}${keyBadge(`i-${k}`)}</button>`).join('')}
     ${sep}
-    ${hexes.map((hex, i) => `<button class="tb-swatch${cur.color === slotColor(i) ? ' on' : ''}" data-slot="${i}" style="--c:${hex}" ${tip(`c-${i}`, `Color Preset ${i + 1}`, 'Double-Click To Customize')}></button>`).join('')}
+    ${hexes.map((hex, i) => `<button class="tb-swatch${cur.color === slotColor(i) ? ' on' : ''}" data-slot="${i}" style="--c:${hex}" aria-label="Color Preset ${i + 1}"></button>`).join('')}
     ${lineCtx ? `${sep}
-      ${HEADS.map(([h, label]) => `<button class="tb-btn tb-small${headNow === h ? ' on' : ''}" data-head="${h}" data-tip="${label}">${HEAD_ICONS[h]}</button>`).join('')}
-      ${[4, 8, 14].map((wpx, i) => `<button class="tb-btn tb-small${weight === wpx ? ' on' : ''}" data-weight="${wpx}" data-tip="${['Fine', 'Standard', 'Bold'][i]} Lines"><svg viewBox="0 0 24 24"><path d="M4 12h16" stroke="currentColor" stroke-linecap="round" stroke-width="${1.4 + i * 1.8}"/></svg></button>`).join('')}` : ''}
-    ${onRink() ? `${sep}
-      <button class="tb-btn tb-word" data-act="addRink" ${(cur.seq || 1) >= SEQ_MAX ? 'disabled' : ''} data-tip="Add Another Rink Below (Up To ${SEQ_MAX}) &middot; +">+</button>
-      ${(cur.seq || 1) > 1 ? `<button class="tb-btn tb-word" data-act="delRink" data-tip="Remove The Bottom Rink &middot; &minus;">&minus;</button>` : ''}` : ''}`;
+      ${HEADS.map(([h, label]) => `<button class="tb-btn tb-small${headNow === h ? ' on' : ''}" data-head="${h}" aria-label="${label}">${HEAD_ICONS[h]}</button>`).join('')}
+      ${[4, 8, 14].map((wpx, i) => `<button class="tb-btn tb-small${weight === wpx ? ' on' : ''}" data-weight="${wpx}" aria-label="${['Fine', 'Standard', 'Bold'][i]} Lines"><svg viewBox="0 0 24 24"><path d="M4 12h16" stroke="currentColor" stroke-linecap="round" stroke-width="${1.4 + i * 1.8}"/></svg></button>`).join('')}` : ''}`;
 
   bar.querySelectorAll('[data-tool]').forEach((b) => {
     b.onclick = () => {
@@ -825,10 +828,13 @@ function paintTools() {
     };
   });
   const act = (name, fn) => { const b = bar.querySelector(`[data-act="${name}"]`); if (b) b.onclick = fn; };
-  act('addRink', () => void addRink());
-  act('delRink', () => void removeFrame(cur.seq - 1));
   act('faceoff', () => placeFaceoff());
-  wireTips(bar);
+  // The "+ Add Rink" bar sits under the bottom rink, not in the toolbar.
+  const ab = el('edAddBar');
+  if (ab) {
+    ab.hidden = !(onRink() && (cur.seq || 1) < SEQ_MAX);
+    ab.onclick = () => void addRink();
+  }
   if (hooks.onFrames) hooks.onFrames(frameInfo());
 }
 
@@ -848,8 +854,8 @@ function setTool(t) {
 // ------------------------------------------------------------ zoom / pan
 
 function applyZoom() {
-  const st = el('edStage');
-  if (st) st.style.width = `${cur.view.zoom * 100}%`;
+  const z = el('edZoom');
+  if (z) z.style.width = `${cur.view.zoom * 100}%`;
 }
 
 function zoomAt(clientX, clientY, factor) {
@@ -1122,24 +1128,6 @@ function placeItem(kind, p, e) {
 // Double-press editing: text chips retype, players re-letter, shapes label,
 // rink chips rename.
 function handleDouble(e) {
-  const chip = e.target.closest?.('[data-rink]');
-  if (chip) {
-    const k = Number(chip.dataset.rink);
-    openTextInput({
-      p: { x: RINK_CHIP.cx, y: k * (RINK_H + SEQ_GAP) + RINK_CHIP.baseline - RINK_CHIP.size / 2 },
-      initial: cur.rinkNames?.[k] || '',
-      size: RINK_CHIP.size,
-      centered: true,
-      commit: (text) => {
-        snapshot();
-        if (!cur.rinkNames) cur.rinkNames = [];
-        cur.rinkNames[k] = text.trim();
-        scheduleSave();
-        render();
-      },
-    });
-    return;
-  }
   const hitEl = e.target.closest?.('[data-id]');
   const x = hitEl ? cur.elements.find((z) => z.id === hitEl.dataset.id) : hitAt(pt(e));
   if (!x) return;
@@ -1200,6 +1188,14 @@ function handleDouble(e) {
 
 function onDown(e) {
   if (!cur) return;
+  // A press anywhere outside an open text field commits it first -
+  // preventDefault below stops the browser's own focus transfer, so the
+  // blur that would normally close it never fires on its own.
+  if (activeFinish && e.target?.id !== 'edInput') {
+    const f = activeFinish;
+    activeFinish = null;
+    f(true);
+  }
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (pointers.size === 2) {
     if (drag) { onUp(e); }
@@ -1228,6 +1224,14 @@ function onDown(e) {
     else if (a === 'copy') void copyFrame(k);
     else if (a === 'dl') void downloadFrame(k);
     else if (a === 'del') removeFrame(k);
+    return;
+  }
+
+  // The frame label renames on a single click, Figma-style.
+  const flab = e.target.closest?.('[data-rframe]');
+  if (flab) {
+    e.preventDefault();
+    openFrameLabelInput(Number(flab.dataset.rframe));
     return;
   }
 
@@ -1469,22 +1473,35 @@ function onUp(e) {
 
 // ----------------------------------------------------------- text inputs
 
-// A plain centred field (player letters, shape labels, rink names).
-function openTextInput({ p, initial, size, commit, maxLen = 0, centered = false, onClose = null }) {
-  document.getElementById('edInput')?.remove();
+// Screen offset (px, within the scroll body) for a LOGICAL point - applies
+// the frame's visual shift and the sequence headroom.
+function screenPos(p, useVisualY = false) {
   const body = el('edStageWrap');
   const svg = el('edSvg');
   const r = svg.getBoundingClientRect();
   const br = body.getBoundingClientRect();
   const scale = r.width / cur.w;
+  const vy = useVisualY ? p.y : p.y + vShiftOfY(p.y);
+  return {
+    left: r.left - br.left + body.scrollLeft + p.x * scale,
+    top: r.top - br.top + body.scrollTop + (vy + vTop()) * scale,
+    scale,
+  };
+}
+
+// A plain centred field (player letters, shape labels).
+function openTextInput({ p, initial, size, commit, maxLen = 0, centered = false, onClose = null }) {
+  document.getElementById('edInput')?.remove();
+  const body = el('edStageWrap');
+  const pos = screenPos(p);
   const input = document.createElement('input');
   input.id = 'edInput';
   input.className = 'ed-input';
   input.value = initial;
   if (maxLen) input.maxLength = maxLen;
-  input.style.left = `${r.left - br.left + body.scrollLeft + p.x * scale}px`;
-  input.style.top = `${r.top - br.top + body.scrollTop + p.y * scale}px`;
-  const fpx = Math.max(11, size * scale);
+  input.style.left = `${pos.left}px`;
+  input.style.top = `${pos.top}px`;
+  const fpx = Math.max(11, size * pos.scale);
   input.style.fontSize = `${fpx}px`;
   if (centered || maxLen === 2) {
     input.classList.add('ed-input-center');
@@ -1494,16 +1511,39 @@ function openTextInput({ p, initial, size, commit, maxLen = 0, centered = false,
   wireInput(input, commit, onClose);
 }
 
+// Rename a rink from its frame label (single click, Figma-style).
+function openFrameLabelInput(k) {
+  document.getElementById('edInput')?.remove();
+  const body = el('edStageWrap');
+  const topV = k * (RINK_H + SEQ_GAP) + vShiftOf(k);
+  const pos = screenPos({ x: FLABEL.x, y: topV - FLABEL.gapAbove }, true);
+  const input = document.createElement('input');
+  input.id = 'edInput';
+  input.className = 'ed-input ed-input-flabel';
+  input.value = (cur.rinkNames?.[k] || '').trim() || `Rink ${k + 1}`;
+  input.maxLength = 40;
+  input.style.left = `${pos.left}px`;
+  input.style.top = `${pos.top}px`;
+  input.style.fontSize = `${Math.max(11, FLABEL.size * pos.scale)}px`;
+  body.appendChild(input);
+  wireInput(input, (text) => {
+    snapshot();
+    if (!cur.rinkNames) cur.rinkNames = [];
+    cur.rinkNames[k] = text.trim();
+    scheduleSave();
+  });
+}
+
 // The WYSIWYG Title-chip field: identical styling to the committed chip, so
 // there is no jump between typing and clicking away. Grows as you type.
 function openChipInput({ baseline, initial, size, color, commit, onClose = null }) {
   document.getElementById('edInput')?.remove();
   const body = el('edStageWrap');
-  const svg = el('edSvg');
-  const r = svg.getBoundingClientRect();
-  const br = body.getBoundingClientRect();
-  const scale = r.width / cur.w;
   const T = TEXT_CHIP;
+  // Frame shift comes from the BASELINE (safely inside the frame), not the
+  // chip top, which can poke past the frame boundary.
+  const pos = screenPos({ x: baseline.x - size * T.padX, y: baseline.y - size - size * T.padY + vShiftOfY(baseline.y) }, true);
+  const scale = pos.scale;
   const fpx = Math.max(11, size * scale);
   const padX = fpx * T.padX;
   const padY = fpx * T.padY;
@@ -1512,8 +1552,8 @@ function openChipInput({ baseline, initial, size, color, commit, onClose = null 
   input.id = 'edInput';
   input.className = 'ed-input-chip';
   input.value = initial;
-  input.style.left = `${r.left - br.left + body.scrollLeft + (baseline.x - size * T.padX) * scale - bw / 2}px`;
-  input.style.top = `${r.top - br.top + body.scrollTop + (baseline.y - size - size * T.padY) * scale - bw / 2}px`;
+  input.style.left = `${pos.left - bw / 2}px`;
+  input.style.top = `${pos.top - bw / 2}px`;
   input.style.fontSize = `${fpx}px`;
   input.style.padding = `${padY}px ${padX}px`;
   input.style.borderWidth = `${bw}px`;
@@ -1530,17 +1570,21 @@ function openChipInput({ baseline, initial, size, color, commit, onClose = null 
   wireInput(input, commit, onClose);
 }
 
+let activeFinish = null; // onDown flushes this when a press lands elsewhere
+
 function wireInput(input, commit, onClose) {
   let done = false;
   const finish = (keep) => {
     if (done) return;
     done = true;
+    if (activeFinish === finish) activeFinish = null;
     const v = input.value;
     input.remove();
     if (keep) commit(v);
     if (onClose) onClose();
     render();
   };
+  activeFinish = finish;
   input.onkeydown = (e) => {
     e.stopPropagation();
     if (e.key === 'Enter' || e.keyCode === 13) { e.preventDefault(); finish(true); }
@@ -1661,7 +1705,7 @@ export async function closeEditor() {
   pointers.clear();
   gesture = null;
   drag = null;
-  hideTip();
+  activeFinish = null;
   hidePlayerMenu();
   document.getElementById('edInput')?.remove();
 }
