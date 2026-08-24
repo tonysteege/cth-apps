@@ -1,36 +1,39 @@
-// The drill editor - a faithful port of CTH Film Room's rink diagrammer
-// (renderer/js/imagepeek.js), rebuilt as a standalone web editor.
+// The diagram editor - a port of CTH Film Room's rink diagrammer, rebuilt
+// as a standalone web editor with a floating toolbar, trackpad zoom and
+// pan, customizable color presets, circle shapes, per-rink names, and
+// touch support.
 //
 // Elements on top of the background:
-//   - PLAYERS: black / blue / grey circles (keys 1 / 2 / 3), double-click
-//     to type up to two letters inside.
+//   - PLAYERS: three preset circles (double-click to letter, two chars).
 //   - ARROWS (A) and DASHED ARROWS (D): three anchors - drag the middle one
 //     to bend the line into a curve. Heads: solid, open, stop bar, none.
 //   - RINK ITEMS: net, coach, puck, pucks pyramid, cone, border pad.
-//   - SHADED BOX (B), TEXT (T), PEN (P), CROP (C), FLIP.
+//   - SHADED BOX (B) and CIRCLE (C): translucent washes, double-click to
+//     put a label inside. TEXT (T): a Title chip. PEN (P). FLIP.
 //
 // "+ Rink" stacks another rink below (up to 5) as a drill sequence, saved
-// as one image. Objects snap to each other and to the rink's landmarks
-// (goal lines, blue lines, centre, dots, creases) with guide lines; hold
-// Cmd/Ctrl to switch snapping off. Multi-select: marquee drag, shift-click,
+// as one image. Rinks in a sequence can be named (double-click the chip or
+// the empty top of a frame with Select). Snapping to landmarks and other
+// objects with guides; Cmd disables. Multi-select: marquee, shift-click,
 // group move, group clipboard. Undo depth 60.
 //
-// The live editor is SVG; the exported flat PNG is the same elements drawn
-// onto a canvas - keep drawEl() and svgEl() in step per element type.
+// The live editor is SVG; exports are the same elements drawn onto a
+// canvas - keep svgEl() here and drawEl() (flat.js) in step per type.
 
 import {
   RINK_W, RINK_H, SEQ_GAP, SEQ_MAX, RINK, ITEMS,
-  loadImg, shapeUrl, shapeImg, composeRinkBg,
+  loadImg, shapeUrl, composeRinkBg,
 } from './rink.js';
 import { putDrill } from './store.js';
 import { toast, esc } from './ui.js';
 import {
-  INK, PALETTE, colorOf, labelInkOn, measureText, arrowCtrl, arrowEndAngle, drawEl,
+  INK, PALETTE, colorOf, labelInkOn, measureText, arrowCtrl, arrowEndAngle,
+  drawEl, drawRinkNames, TEXT_CHIP, RINK_CHIP, shapeLabelSize,
 } from './flat.js';
 
 let cur = null;
 let wired = false;
-let onDirtyChange = null; // app.js hook: save-status pill
+let hooks = {};
 
 const el = (id) => document.getElementById(id);
 
@@ -42,6 +45,20 @@ function settings() {
 function saveSettings(patch) {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...settings(), ...patch }));
 }
+
+// Four color presets. Slots keep the Film Room names while at their default
+// value (so files interchange cleanly); a customized slot colors elements
+// with its raw hex instead.
+const DEFAULT_PALETTE = PALETTE.map(([, hex]) => hex);
+const SLOT_NAMES = PALETTE.map(([n]) => n);
+function paletteHexes() {
+  const p = settings().palette;
+  return Array.isArray(p) && p.length === 4 ? p : DEFAULT_PALETTE.slice();
+}
+const slotColor = (i) => {
+  const hex = paletteHexes()[i];
+  return hex.toLowerCase() === DEFAULT_PALETTE[i].toLowerCase() ? SLOT_NAMES[i] : hex;
+};
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
@@ -77,24 +94,58 @@ function setSel(ids) {
 }
 const selEls = () => (cur ? cur.elements.filter((z) => (cur.selIds || []).includes(z.id)) : []);
 
+// True bounds per element - the box the user sees must CONTAIN the whole
+// shape: arrow curves and heads, the player's outer ring, pen stroke width,
+// the full text chip.
 function elBounds(x) {
-  if (x.type === 'stamp' || x.type === 'pucks' || x.type === 'box') return { x: x.x, y: x.y, w: x.w, h: x.h };
-  if (x.type === 'player') return { x: x.x - x.r, y: x.y - x.r, w: x.r * 2, h: x.r * 2 };
+  if (x.type === 'stamp' || x.type === 'pucks' || x.type === 'box' || x.type === 'circle') {
+    return { x: x.x, y: x.y, w: x.w, h: x.h };
+  }
+  if (x.type === 'player') {
+    const ring = Math.max(3, x.r * 0.18) / 2;
+    const r = x.r + ring;
+    return { x: x.x - r, y: x.y - r, w: r * 2, h: r * 2 };
+  }
   if (x.type === 'text') {
+    const T = TEXT_CHIP;
     const w = measureText(x);
-    const padX = x.size * 0.32; const padY = x.size * 0.2;
-    return { x: x.x - padX, y: x.y - x.size - padY, w: w + padX * 2, h: x.size * 1.25 + padY * 2 };
+    const padX = x.size * T.padX; const padY = x.size * T.padY;
+    const bw = Math.max(1.5, x.size * T.border) / 2;
+    return {
+      x: x.x - padX - bw,
+      y: x.y - x.size - padY - bw,
+      w: w + padX * 2 + bw * 2,
+      h: x.size * T.height + padY * 2 + bw * 2,
+    };
   }
   if (x.type === 'arrow') {
-    const xs = [x.x1, x.x2, x.mx]; const ys = [x.y1, x.y2, x.my];
-    return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+    // Sample the quadratic, then add the head's reach and half the stroke.
+    const { cx, cy } = arrowCtrl(x);
+    const xs = []; const ys = [];
+    for (let t = 0; t <= 1.0001; t += 0.1) {
+      xs.push((1 - t) * (1 - t) * x.x1 + 2 * (1 - t) * t * cx + t * t * x.x2);
+      ys.push((1 - t) * (1 - t) * x.y1 + 2 * (1 - t) * t * cy + t * t * x.y2);
+    }
+    const w = x.width || 8;
+    const head = (x.head || 'triangle') === 'none' ? 0 : w * 4.3;
+    const ang = arrowEndAngle(x);
+    for (const a of [ang - 0.6, ang + 0.6, ang + Math.PI / 2, ang - Math.PI / 2]) {
+      xs.push(x.x2 - Math.cos(a) * head);
+      ys.push(y2Head(x, a, head));
+    }
+    const pad = w / 2 + 1;
+    const x0 = Math.min(...xs) - pad; const y0 = Math.min(...ys) - pad;
+    return { x: x0, y: y0, w: Math.max(...xs) + pad - x0, h: Math.max(...ys) + pad - y0 };
   }
   if (x.type === 'pen') {
+    const pad = (x.width || 8) / 2 + 1;
     const xs = x.pts.map((p) => p[0]); const ys = x.pts.map((p) => p[1]);
-    return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+    const x0 = Math.min(...xs) - pad; const y0 = Math.min(...ys) - pad;
+    return { x: x0, y: y0, w: Math.max(...xs) + pad - x0, h: Math.max(...ys) + pad - y0 };
   }
   return { x: 0, y: 0, w: 0, h: 0 };
 }
+const y2Head = (x, a, head) => x.y2 - Math.sin(a) * head;
 
 const centerOf = (x) => {
   const b = elBounds(x);
@@ -125,8 +176,6 @@ function hitAt(p) {
 }
 
 // ------------------------------------------------------------- snapping
-// While dragging, an object's centre pulls to other objects' centres and to
-// the rink's landmarks, with guide lines. Cmd/Ctrl disables it.
 
 function snapTargets(excludeId) {
   const xs = [];
@@ -165,7 +214,7 @@ function snapCenter(cx, cy, excludeId, disabled) {
 function moveElTo(x, cx, cy) {
   const c = centerOf(x);
   const dx = cx - c.x; const dy = cy - c.y;
-  if (x.type === 'stamp' || x.type === 'pucks' || x.type === 'text' || x.type === 'box') { x.x += dx; x.y += dy; }
+  if (x.type === 'stamp' || x.type === 'pucks' || x.type === 'text' || x.type === 'box' || x.type === 'circle') { x.x += dx; x.y += dy; }
   else if (x.type === 'player') { x.x += dx; x.y += dy; }
   else if (x.type === 'arrow') { x.x1 += dx; x.y1 += dy; x.x2 += dx; x.y2 += dy; x.mx += dx; x.my += dy; }
   else if (x.type === 'pen') x.pts = x.pts.map(([px, py]) => [px + dx, py + dy]);
@@ -173,23 +222,33 @@ function moveElTo(x, cx, cy) {
 
 // ------------------------------------------------------------ undo / save
 
-function bgToken() {
-  return cur.bgKind === 'rink' ? null : cur.bgDataUrl;
-}
-
 function snapshot() {
-  cur.undo.push({ elements: structuredClone(cur.elements), bgKind: cur.bgKind, bg: bgToken(), seq: cur.seq });
+  cur.undo.push({
+    elements: structuredClone(cur.elements),
+    bgKind: cur.bgKind,
+    bg: cur.bgKind === 'rink' ? null : cur.bgDataUrl,
+    seq: cur.seq,
+    rinkNames: structuredClone(cur.rinkNames),
+  });
   if (cur.undo.length > 60) cur.undo.shift();
   cur.redoStack.length = 0;
 }
+const marker = () => ({
+  elements: structuredClone(cur.elements),
+  bgKind: cur.bgKind,
+  bg: cur.bgKind === 'rink' ? null : cur.bgDataUrl,
+  seq: cur.seq,
+  rinkNames: structuredClone(cur.rinkNames),
+});
 
 async function restore(snap) {
   cur.elements = structuredClone(snap.elements);
   cur.seq = snap.seq || 1;
-  if (snap.bgKind !== cur.bgKind || (snap.bgKind === 'image' && snap.bg !== cur.bgDataUrl)
-    || (snap.bgKind === 'rink' && cur.seqBg !== cur.seq)) {
-    if (snap.bgKind === 'rink') setRinkBackground(cur.seq);
-    else await setImageBackground(snap.bg);
+  cur.rinkNames = structuredClone(snap.rinkNames || []);
+  if (snap.bgKind === 'rink') {
+    if (cur.bgKind !== 'rink' || cur.seqBg !== cur.seq) setRinkBackground(cur.seq);
+  } else if (snap.bg !== cur.bgDataUrl || cur.bgKind !== 'image') {
+    await setImageBackground(snap.bg);
   }
   setSel([]);
   render();
@@ -198,19 +257,18 @@ async function restore(snap) {
 
 async function undo() {
   if (!cur?.undo.length) return;
-  cur.redoStack.push({ elements: structuredClone(cur.elements), bgKind: cur.bgKind, bg: bgToken(), seq: cur.seq });
+  cur.redoStack.push(marker());
   await restore(cur.undo.pop());
 }
 async function redo() {
   if (!cur?.redoStack.length) return;
-  cur.undo.push({ elements: structuredClone(cur.elements), bgKind: cur.bgKind, bg: bgToken(), seq: cur.seq });
+  cur.undo.push(marker());
   await restore(cur.redoStack.pop());
 }
 
 function status(msg) {
   const s = el('edStatus');
   if (s) s.textContent = msg;
-  if (onDirtyChange) onDirtyChange(msg);
 }
 
 function scheduleSave() {
@@ -228,7 +286,7 @@ function setRinkBackground(n) {
   cur.bgDataUrl = null;
   cur.w = cur.bgImg.width;
   cur.h = cur.bgImg.height;
-  cur.bgHref = null; // rebuilt lazily for the SVG
+  cur.bgHref = null;
 }
 
 async function setImageBackground(dataUrl) {
@@ -256,12 +314,14 @@ export async function renderFlat(scale = 1) {
   ctx.fillRect(0, 0, cur.w, cur.h);
   ctx.drawImage(cur.bgImg, 0, 0, cur.w, cur.h);
   for (const x of cur.elements) drawEl(ctx, x);
+  if (onRink()) drawRinkNames(ctx, cur.rinkNames, cur.seq);
   return c;
 }
 
-// The cthDiagram state - the same shape Film Room embeds in its PNGs.
+// The cthDiagram state - the same shape Film Room embeds in its PNGs, plus
+// the additive rinkNames property (older readers ignore it).
 export function currentState() {
-  return {
+  const st = {
     v: 1,
     w: cur.w,
     h: cur.h,
@@ -269,6 +329,13 @@ export function currentState() {
     seq: cur.seq,
     elements: cur.elements,
   };
+  if (onRink() && cur.rinkNames?.some((n) => n && n.trim())) st.rinkNames = cur.rinkNames;
+  return st;
+}
+
+export function frameInfo() {
+  if (!cur || !onRink()) return { seq: 1, names: [] };
+  return { seq: cur.seq || 1, names: (cur.rinkNames || []).slice() };
 }
 
 export async function saveNow() {
@@ -284,7 +351,7 @@ export async function saveNow() {
     status('Saved');
   } catch (e) {
     cur.dirty = true;
-    status('Not saved');
+    status('Not Saved');
     console.error(e);
     toast('Could not save - see the browser console', true);
   }
@@ -314,8 +381,16 @@ function svgEl(x) {
       ${x.label ? `<text x="${x.x}" y="${x.y}" fill="${labelInkOn(x.color)}" font-family="Inter, sans-serif" font-weight="800" font-size="${fs}" text-anchor="middle" dominant-baseline="central">${esc(x.label)}</text>` : ''}
     </g>`;
   }
-  if (x.type === 'box') {
-    return `<rect data-id="${x.id}" x="${x.x}" y="${x.y}" width="${x.w}" height="${x.h}" rx="${Math.min(x.w, x.h) * 0.06}" fill="${colorOf(x.color)}" fill-opacity="${x.alpha == null ? 0.3 : x.alpha}"></rect>`;
+  if (x.type === 'box' || x.type === 'circle') {
+    const fill = `fill="${colorOf(x.color)}" fill-opacity="${x.alpha == null ? 0.3 : x.alpha}"`;
+    const shape = x.type === 'circle'
+      ? `<ellipse cx="${x.x + x.w / 2}" cy="${x.y + x.h / 2}" rx="${x.w / 2}" ry="${x.h / 2}" ${fill}></ellipse>`
+      : `<rect x="${x.x}" y="${x.y}" width="${x.w}" height="${x.h}" rx="${Math.min(x.w, x.h) * 0.06}" ${fill}></rect>`;
+    const fs = Math.round(shapeLabelSize(x));
+    const label = x.label
+      ? `<text x="${x.x + x.w / 2}" y="${x.y + x.h / 2}" fill="${INK}" font-family="Inter, sans-serif" font-weight="800" font-size="${fs}" text-anchor="middle" dominant-baseline="central">${esc(x.label)}</text>`
+      : '';
+    return `<g data-id="${x.id}">${shape}${label}</g>`;
   }
   if (x.type === 'arrow') {
     const { cx, cy } = arrowCtrl(x);
@@ -346,11 +421,12 @@ function svgEl(x) {
     </g>`;
   }
   if (x.type === 'text') {
+    const T = TEXT_CHIP;
     const w = measureText(x);
-    const padX = x.size * 0.32; const padY = x.size * 0.2;
+    const padX = x.size * T.padX; const padY = x.size * T.padY;
     return `<g data-id="${x.id}">
-      <rect x="${x.x - padX}" y="${x.y - x.size - padY}" width="${w + padX * 2}" height="${x.size * 1.25 + padY * 2}" rx="${x.size * 0.22}" fill="rgba(255,255,255,0.97)" stroke="rgba(26,26,26,0.15)" stroke-width="${Math.max(1, x.size * 0.05)}"></rect>
-      <text x="${x.x}" y="${x.y}" fill="${colorOf(x.color)}" font-family="Inter, sans-serif" font-weight="600" font-size="${x.size}">${esc(x.text || '')}</text>
+      <rect x="${x.x - padX}" y="${x.y - x.size - padY}" width="${w + padX * 2}" height="${x.size * T.height + padY * 2}" rx="${x.size * T.radius}" fill="#ffffff" stroke="${INK}" stroke-width="${Math.max(1.5, x.size * T.border)}"></rect>
+      <text x="${x.x}" y="${x.y}" fill="${colorOf(x.color)}" font-family="Inter, sans-serif" font-weight="800" font-size="${x.size}">${esc(x.text || '')}</text>
     </g>`;
   }
   if (x.type === 'pen') {
@@ -359,9 +435,31 @@ function svgEl(x) {
   return '';
 }
 
+// Rink name chips - Title chips centred at the top of each frame. Rendered
+// above elements; double-click one to rename that rink.
+function framesSvg() {
+  if (!onRink()) return '';
+  const out = [];
+  const C = RINK_CHIP;
+  const T = TEXT_CHIP;
+  for (let k = 0; k < (cur.seq || 1); k++) {
+    const name = (cur.rinkNames?.[k] || '').trim();
+    if (!name) continue;
+    const w = measureText({ size: C.size, text: name });
+    const padX = C.size * T.padX; const padY = C.size * T.padY;
+    const x0 = C.cx - w / 2;
+    const y0 = k * (RINK_H + SEQ_GAP) + C.baseline;
+    out.push(`<g data-rink="${k}" class="ed-rinkchip">
+      <rect x="${x0 - padX}" y="${y0 - C.size - padY}" width="${w + padX * 2}" height="${C.size * T.height + padY * 2}" rx="${C.size * T.radius}" fill="#ffffff" stroke="${INK}" stroke-width="${Math.max(1.5, C.size * T.border)}"></rect>
+      <text x="${x0}" y="${y0}" fill="${INK}" font-family="Inter, sans-serif" font-weight="800" font-size="${C.size}">${esc(name)}</text>
+    </g>`);
+  }
+  return out.join('');
+}
+
 function uiSvg() {
   const out = [];
-  const hs = Math.max(7, cur.w * 0.006);
+  const hs = Math.max(8, cur.w * 0.0065);
   const sel = selEls();
   const primary = cur.elements.find((z) => z.id === cur.sel);
   if (sel.length === 1 && primary && primary.type === 'arrow') {
@@ -372,12 +470,12 @@ function uiSvg() {
   } else {
     for (const z of sel) {
       const b = elBounds(z);
-      out.push(`<rect class="ed-selbox" x="${b.x}" y="${b.y}" width="${Math.max(b.w, 2)}" height="${Math.max(b.h, 2)}" vector-effect="non-scaling-stroke"></rect>`);
+      out.push(`<rect class="ed-selbox" x="${b.x}" y="${b.y}" width="${Math.max(b.w, 2)}" height="${Math.max(b.h, 2)}" rx="${hs * 0.4}" vector-effect="non-scaling-stroke"></rect>`);
     }
     if (sel.length === 1 && primary
-      && (primary.type === 'stamp' || primary.type === 'pucks' || primary.type === 'player' || primary.type === 'text' || primary.type === 'box')) {
+      && ['stamp', 'pucks', 'player', 'text', 'box', 'circle'].includes(primary.type)) {
       const b = elBounds(primary);
-      out.push(`<rect class="ed-grip" data-h="se" x="${b.x + b.w - hs}" y="${b.y + b.h - hs}" width="${hs * 2}" height="${hs * 2}" vector-effect="non-scaling-stroke"></rect>`);
+      out.push(`<rect class="ed-grip" data-h="se" x="${b.x + b.w - hs}" y="${b.y + b.h - hs}" width="${hs * 2}" height="${hs * 2}" rx="${hs * 0.35}" vector-effect="non-scaling-stroke"></rect>`);
     }
   }
   if (cur.band) {
@@ -387,10 +485,6 @@ function uiSvg() {
   for (const g of (cur.guides || [])) {
     if (g.v != null) out.push(`<line class="ed-guide" x1="${g.v}" y1="0" x2="${g.v}" y2="${cur.h}" vector-effect="non-scaling-stroke"></line>`);
     if (g.h != null) out.push(`<line class="ed-guide" x1="0" y1="${g.h}" x2="${cur.w}" y2="${g.h}" vector-effect="non-scaling-stroke"></line>`);
-  }
-  if (cur.cropRect) {
-    const c = cur.cropRect;
-    out.push(`<rect class="ed-crop" x="${Math.min(c.x1, c.x2)}" y="${Math.min(c.y1, c.y2)}" width="${Math.abs(c.x2 - c.x1)}" height="${Math.abs(c.y2 - c.y1)}" vector-effect="non-scaling-stroke"></rect>`);
   }
   return out.join('');
 }
@@ -407,8 +501,11 @@ export function render() {
   bg.setAttribute('width', cur.w);
   bg.setAttribute('height', cur.h);
   svg.querySelector('#edEls').innerHTML = cur.elements.map(svgEl).join('');
+  svg.querySelector('#edFrames').innerHTML = framesSvg();
   svg.querySelector('#edUi').innerHTML = uiSvg();
-  const sig = `${cur.tool}|${cur.color}|${cur.head}|${!!cur.cropRect}|${cur.seq}|${settings().arrowPx || 8}`;
+  const lines = cur.tool === 'arrow' || cur.tool === 'dasharrow' || cur.tool === 'pen'
+    || selEls().some((z) => z.type === 'arrow' || z.type === 'pen');
+  const sig = `${cur.tool}|${cur.color}|${cur.head}|${cur.seq}|${settings().arrowPx || 8}|${paletteHexes().join()}|${lines}`;
   if (sig !== toolsSig) { toolsSig = sig; paintTools(); }
 }
 
@@ -418,16 +515,10 @@ const ICON = {
   select: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 3l7 18 2.5-7.5L21 11z" stroke-linejoin="round"/></svg>',
   arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 20 C 8 10, 14 8, 19 6"/><path d="M14.5 5.2 20 5.5l-1.4 5.3" stroke-linejoin="round"/></svg>',
   dasharrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 20 C 8 10, 14 8, 19 6" stroke-dasharray="3.2 3"/><path d="M14.5 5.2 20 5.5l-1.4 5.3" stroke-linejoin="round"/></svg>',
-  box: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4" y="6" width="16" height="12" rx="2" fill="currentColor" fill-opacity="0.25" stroke-opacity="0.9"/></svg>',
+  box: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4" y="6" width="16" height="12" rx="2" fill="currentColor" fill-opacity="0.22"/></svg>',
+  circle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><ellipse cx="12" cy="12" rx="8.5" ry="6.5" fill="currentColor" fill-opacity="0.22"/></svg>',
   text: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 6V4h14v2"/><path d="M12 4v16"/><path d="M9 20h6"/></svg>',
   pen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>',
-  crop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 2v16a2 2 0 0 0 2 2h14"/><path d="M2 6h16a2 2 0 0 1 2 2v14"/></svg>',
-  flip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3v18"/><path d="M8 8 4 12l4 4"/><path d="m16 8 4 4-4 4"/></svg>',
-  undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>',
-  redo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/></svg>',
-  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
-  download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 21h16"/></svg>',
-  print: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="1.5"/><path d="M6 14h12v7H6z"/></svg>',
   pucks: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="8" cy="16" r="3.4"/><circle cx="16" cy="16" r="3.4"/><circle cx="12" cy="8.5" r="3.4"/></svg>',
   puck: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="12" r="3.2"/></svg>',
   faceoff: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="12" r="2.6"/><circle cx="5" cy="6" r="2.2"/><circle cx="19" cy="6" r="2.2"/><circle cx="5" cy="18" r="2.2"/><circle cx="19" cy="18" r="2.2"/></svg>',
@@ -439,10 +530,10 @@ const HEAD_ICONS = {
   none: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12h18"/></svg>',
 };
 const HEADS = [
-  ['triangle', 'Solid arrowhead'],
-  ['v', 'Open arrowhead'],
-  ['bar', 'Stop bar - a blocking line instead of a point'],
-  ['none', 'No arrowhead - a plain line'],
+  ['triangle', 'Solid Arrowhead'],
+  ['v', 'Open Arrowhead'],
+  ['bar', 'Stop Bar'],
+  ['none', 'Plain Line'],
 ];
 
 const TOOLS = [
@@ -450,20 +541,16 @@ const TOOLS = [
   ['arrow', 'Arrow'],
   ['dasharrow', 'Dashed Arrow'],
   ['box', 'Shaded Box'],
+  ['circle', 'Shaded Circle'],
   ['text', 'Text'],
   ['pen', 'Pen'],
-  ['crop', 'Crop'],
 ];
-const PLAYER_TOOLS = [
-  ['p-black', 'black'],
-  ['p-blue', 'blue'],
-  ['p-grey', 'grey'],
-];
+const PLAYER_SLOTS = [0, 1, 2]; // palette slots used for the player chips
 const ITEM_ORDER = ['coach', 'net', 'puck', 'pucks', 'cone', 'border'];
 
 const DEFAULT_KEYS = {
-  select: 'v', arrow: 'a', dasharrow: 'd', box: 'b', text: 't', pen: 'p', crop: 'c',
-  'p-black': '1', 'p-blue': '2', 'p-grey': '3',
+  select: 'v', arrow: 'a', dasharrow: 'd', box: 'b', circle: 'c', text: 't', pen: 'p',
+  'p-0': '1', 'p-1': '2', 'p-2': '3',
 };
 const customKeys = () => settings().diagramKeys || {};
 function keyFor(toolId) {
@@ -486,15 +573,14 @@ function effectiveKeys() {
 }
 const keyBadge = (toolId) => {
   const k = keyFor(toolId);
-  return k ? `<span class="ed-key">${esc(k.toUpperCase())}</span>` : '';
+  return k ? `<span class="tb-key">${esc(k.toUpperCase())}</span>` : '';
 };
 let capturing = null;
 
 function toolLabel(toolId) {
   const t = TOOLS.find(([id]) => id === toolId);
   if (t) return t[1];
-  const p = PLAYER_TOOLS.find(([id]) => id === toolId);
-  if (p) return `${p[1][0].toUpperCase()}${p[1].slice(1)} player`;
+  if (toolId.startsWith('p-')) return `Player ${Number(toolId.slice(2)) + 1}`;
   if (toolId.startsWith('i-')) return ITEMS[toolId.slice(2)]?.label || toolId;
   return toolId;
 }
@@ -506,26 +592,33 @@ function itemIcon(key) {
   return u ? `<img src="${u}" alt="">` : ITEMS[key].label;
 }
 
-const railGroup = (title, inner) => `<div class="ed-group"><div class="ed-group-label">${title}</div><div class="ed-group-body">${inner}</div></div>`;
+const sep = '<span class="tb-sep"></span>';
 
 function paintTools() {
-  const bar = el('edRail');
+  const bar = el('edBar');
   if (!bar || !cur) return;
   const headNow = cur.head || 'triangle';
-  const shortcutHint = 'Right-click to set a keyboard shortcut';
+  const hexes = paletteHexes();
   const weight = Number(settings().arrowPx) || 8;
+  const lineCtx = cur.tool === 'arrow' || cur.tool === 'dasharrow' || cur.tool === 'pen'
+    || selEls().some((z) => z.type === 'arrow' || z.type === 'pen');
+  const kb = (t) => (keyFor(t) ? ` (${keyFor(t).toUpperCase()})` : '');
+
   bar.innerHTML = `
-    ${railGroup('Tools', TOOLS.map(([t, label]) => `<button class="ed-tool${cur.tool === t ? ' on' : ''}" data-tool="${t}" title="${label}${keyFor(t) ? ` (${keyFor(t).toUpperCase()})` : ''} - ${shortcutHint}">${ICON[t]}${keyBadge(t)}</button>`).join(''))}
-    ${railGroup('Players', PLAYER_TOOLS.map(([t, colorName]) => `<button class="ed-ptool${cur.tool === t ? ' on' : ''}" data-tool="${t}" title="${colorName[0].toUpperCase()}${colorName.slice(1)} player${keyFor(t) ? ` (${keyFor(t).toUpperCase()})` : ''} - double-click a placed player to letter it. ${shortcutHint}" style="--c:${colorOf(colorName)};--label:${labelInkOn(colorName)}"><i>${keyFor(t).toUpperCase() || ''}</i></button>`).join('')
-      + (onRink() ? `<button class="ed-tool" data-act="faceoff" title="Place a full 5v5 centre-ice faceoff: black C, LW, RW, LD, RD against five blue players">${ICON.faceoff}</button>` : ''))}
-    ${railGroup('On the ice', ITEM_ORDER.map((k) => `<button class="ed-tool${cur.tool === `i-${k}` ? ' on' : ''}" data-tool="i-${k}" title="Place a ${ITEMS[k].label.toLowerCase()}${keyFor(`i-${k}`) ? ` (${keyFor(`i-${k}`).toUpperCase()})` : ''} - hold Cmd while clicking the ice to place several. ${shortcutHint}">${itemIcon(k)}${keyBadge(`i-${k}`)}</button>`).join(''))}
-    ${railGroup('Color', PALETTE.map(([name, hex]) => `<button class="ed-swatch${cur.color === name ? ' on' : ''}" data-color="${name}" style="--c:${hex}" title="${name[0].toUpperCase()}${name.slice(1)} - arrows, boxes, text, pen"></button>`).join(''))}
-    ${railGroup('Arrowhead', HEADS.map(([h, label]) => `<button class="ed-tool${headNow === h ? ' on' : ''}" data-head="${h}" title="${label} - applies to new arrows and the selected one">${HEAD_ICONS[h]}</button>`).join(''))}
-    ${railGroup('Line weight', [4, 8, 14].map((wpx, i) => `<button class="ed-tool ed-weight${weight === wpx ? ' on' : ''}" data-weight="${wpx}" title="${['Fine', 'Standard', 'Bold'][i]} lines - applies to new arrows and pens, and to the selected ones"><svg viewBox="0 0 24 24"><path d="M4 12h16" stroke="currentColor" stroke-linecap="round" stroke-width="${1.4 + i * 1.6}"/></svg></button>`).join(''))}
-    ${onRink() ? railGroup('Sequence', `
-      <button class="ed-tool ed-wide" data-act="addRink" ${(cur.seq || 1) >= SEQ_MAX ? 'disabled' : ''} title="Add another rink below, copying the one above it - a drill sequence, saved as one image (up to ${SEQ_MAX})">+ Rink</button>
-      ${(cur.seq || 1) > 1 ? `<button class="ed-tool ed-wide" data-act="delRink" title="Remove the bottom rink (and everything on it)">&minus; Rink</button>` : ''}`) : ''}
-    ${cur.cropRect ? `<button class="ed-apply" data-act="cropApply" title="Crop to the drawn box">Apply Crop</button>` : ''}`;
+    ${TOOLS.map(([t, label]) => `<button class="tb-btn${cur.tool === t ? ' on' : ''}" data-tool="${t}" title="${label}${kb(t)}" aria-label="${label}">${ICON[t]}${keyBadge(t)}</button>`).join('')}
+    ${sep}
+    ${PLAYER_SLOTS.map((i) => `<button class="tb-player${cur.tool === `p-${i}` ? ' on' : ''}" data-tool="p-${i}" title="Player${kb(`p-${i}`)} - Double-Click A Placed Player To Letter It" style="--c:${colorOf(slotColor(i))}"></button>`).join('')}
+    ${onRink() ? `<button class="tb-btn" data-act="faceoff" title="Place A 5v5 Centre-Ice Faceoff">${ICON.faceoff}</button>` : ''}
+    ${sep}
+    ${ITEM_ORDER.map((k) => `<button class="tb-btn${cur.tool === `i-${k}` ? ' on' : ''}" data-tool="i-${k}" title="${ITEMS[k].label}${kb(`i-${k}`)} - Hold Cmd To Place Several">${itemIcon(k)}${keyBadge(`i-${k}`)}</button>`).join('')}
+    ${sep}
+    ${hexes.map((hex, i) => `<button class="tb-swatch${cur.color === slotColor(i) ? ' on' : ''}" data-slot="${i}" style="--c:${hex}" title="Color Preset ${i + 1} - Double-Click To Customize"></button>`).join('')}
+    ${lineCtx ? `${sep}
+      ${HEADS.map(([h, label]) => `<button class="tb-btn tb-small${headNow === h ? ' on' : ''}" data-head="${h}" title="${label}">${HEAD_ICONS[h]}</button>`).join('')}
+      ${[4, 8, 14].map((wpx, i) => `<button class="tb-btn tb-small${weight === wpx ? ' on' : ''}" data-weight="${wpx}" title="${['Fine', 'Standard', 'Bold'][i]} Lines"><svg viewBox="0 0 24 24"><path d="M4 12h16" stroke="currentColor" stroke-linecap="round" stroke-width="${1.4 + i * 1.8}"/></svg></button>`).join('')}` : ''}
+    ${onRink() ? `${sep}
+      <button class="tb-btn tb-word" data-act="addRink" ${(cur.seq || 1) >= SEQ_MAX ? 'disabled' : ''} title="Add Another Rink Below (Up To ${SEQ_MAX}) - A Sequence Saved As One Image">+ Rink</button>
+      ${(cur.seq || 1) > 1 ? `<button class="tb-btn tb-word" data-act="delRink" title="Remove The Bottom Rink">&minus; Rink</button>` : ''}` : ''}`;
 
   bar.querySelectorAll('[data-tool]').forEach((b) => {
     b.onclick = () => setTool(b.dataset.tool);
@@ -533,22 +626,48 @@ function paintTools() {
       e.preventDefault();
       const toolId = b.dataset.tool;
       capturing = { toolId, label: toolLabel(toolId) };
-      toast(`Press a key for ${toolLabel(toolId)} (Esc cancels)`);
+      toast(`Press A Key For ${toolLabel(toolId)} (Esc Cancels)`);
     };
   });
-  bar.querySelectorAll('[data-color]').forEach((b) => {
+  bar.querySelectorAll('[data-slot]').forEach((b) => {
+    const i = Number(b.dataset.slot);
     b.onclick = () => {
-      cur.color = b.dataset.color;
+      cur.color = slotColor(i);
       const styled = selEls().filter((z) => 'color' in z);
       if (styled.length) { snapshot(); styled.forEach((z) => { z.color = cur.color; }); scheduleSave(); }
+      toolsSig = '';
       render();
     };
+    const customize = (e) => {
+      e.preventDefault();
+      const input = document.createElement('input');
+      input.type = 'color';
+      input.value = paletteHexes()[i];
+      input.style.cssText = 'position:fixed;left:-100px;top:0;opacity:0;';
+      document.body.appendChild(input);
+      input.oninput = () => {
+        const p = paletteHexes();
+        p[i] = input.value;
+        saveSettings({ palette: p });
+        cur.color = slotColor(i);
+        const styled = selEls().filter((z) => 'color' in z);
+        if (styled.length) styled.forEach((z) => { z.color = cur.color; });
+        toolsSig = '';
+        render();
+      };
+      input.onchange = () => { input.remove(); scheduleSave(); };
+      input.click();
+    };
+    b.ondblclick = customize;
+    b.oncontextmenu = customize;
   });
   bar.querySelectorAll('[data-head]').forEach((b) => {
     b.onclick = () => {
       cur.head = b.dataset.head;
+      saveSettings({ arrowHead: cur.head });
       const arrows = selEls().filter((z) => z.type === 'arrow');
       if (arrows.length) { snapshot(); arrows.forEach((z) => { z.head = cur.head; }); scheduleSave(); }
+      toolsSig = '';
       render();
     };
   });
@@ -570,13 +689,55 @@ function paintTools() {
   act('addRink', () => void addRink());
   act('delRink', () => void removeRink());
   act('faceoff', () => placeFaceoff());
-  act('cropApply', () => void applyCrop());
+  if (hooks.onFrames) hooks.onFrames(frameInfo());
 }
 
 function setTool(t) {
   cur.tool = t;
-  if (t !== 'crop') cur.cropRect = null;
   render();
+}
+
+// ------------------------------------------------------------ zoom / pan
+
+function applyZoom() {
+  const st = el('edStage');
+  if (st) st.style.width = `${cur.view.zoom * 100}%`;
+}
+
+function zoomAt(clientX, clientY, factor) {
+  const wrap = el('edStageWrap');
+  const st = el('edStage');
+  if (!wrap || !st) return;
+  const zoom0 = cur.view.zoom;
+  const zoom = Math.min(8, Math.max(0.35, zoom0 * factor));
+  if (zoom === zoom0) return;
+  const r = st.getBoundingClientRect();
+  const px = (clientX - r.left) / r.width;
+  const py = (clientY - r.top) / r.height;
+  cur.view.zoom = zoom;
+  applyZoom();
+  const r2 = st.getBoundingClientRect();
+  wrap.scrollLeft += (px * r2.width + r2.left) - clientX;
+  wrap.scrollTop += (py * r2.height + r2.top) - clientY;
+}
+
+function onWheel(e) {
+  if (!cur) return;
+  if (e.ctrlKey || e.metaKey) {
+    e.preventDefault();
+    zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.012));
+  }
+  // Plain wheel / two-finger scroll: the wrap scrolls natively.
+}
+
+// Safari trackpad pinch.
+let gestureZoom0 = 1;
+function onGestureStart(e) { if (!cur) return; e.preventDefault(); gestureZoom0 = cur.view.zoom; }
+function onGestureChange(e) {
+  if (!cur) return;
+  e.preventDefault();
+  const factor = (gestureZoom0 * e.scale) / cur.view.zoom;
+  zoomAt(e.clientX, e.clientY, factor);
 }
 
 // ------------------------------------------------------------- image ops
@@ -592,11 +753,10 @@ async function flipH() {
     ctx.drawImage(cur.bgImg, 0, 0);
     await setImageBackground(c.toDataURL('image/png'));
   }
-  // The rink art is left-right symmetric - flipping the elements is the flip.
   const W = cur.w;
   for (const x of cur.elements) {
     if (x.type === 'stamp') { x.x = W - x.x - x.w; x.flip = !x.flip; }
-    else if (x.type === 'pucks' || x.type === 'box') x.x = W - x.x - x.w;
+    else if (x.type === 'pucks' || x.type === 'box' || x.type === 'circle') x.x = W - x.x - x.w;
     else if (x.type === 'player') x.x = W - x.x;
     else if (x.type === 'text') x.x = W - x.x - measureText(x);
     else if (x.type === 'arrow') { x.x1 = W - x.x1; x.x2 = W - x.x2; x.mx = W - x.mx; }
@@ -606,34 +766,6 @@ async function flipH() {
   scheduleSave();
 }
 
-async function applyCrop() {
-  const c = cur.cropRect;
-  if (!c) return;
-  const x0 = Math.max(0, Math.min(c.x1, c.x2));
-  const y0 = Math.max(0, Math.min(c.y1, c.y2));
-  const w = Math.min(cur.w, Math.max(c.x1, c.x2)) - x0;
-  const h = Math.min(cur.h, Math.max(c.y1, c.y2)) - y0;
-  if (w < 20 || h < 20) { toast('Drag a bigger crop box first', true); return; }
-  snapshot();
-  const cv = document.createElement('canvas');
-  cv.width = Math.round(w); cv.height = Math.round(h);
-  cv.getContext('2d').drawImage(cur.bgImg, x0, y0, w, h, 0, 0, w, h);
-  await setImageBackground(cv.toDataURL('image/png'));
-  for (const x of cur.elements) {
-    if (x.type === 'stamp' || x.type === 'pucks' || x.type === 'text' || x.type === 'player' || x.type === 'box') { x.x -= x0; x.y -= y0; }
-    else if (x.type === 'arrow') { x.x1 -= x0; x.y1 -= y0; x.x2 -= x0; x.y2 -= y0; x.mx -= x0; x.my -= y0; }
-    else if (x.type === 'pen') x.pts = x.pts.map(([px, py]) => [px - x0, py - y0]);
-  }
-  cur.cropRect = null;
-  cur.tool = 'select';
-  cur.seq = 1;
-  render();
-  scheduleSave();
-  toast('Cropped - Cmd+Z brings the full picture back');
-}
-
-// The game-ready furniture for one rink frame: nets on both goal lines,
-// a black G goalie left and a blue G goalie right.
 function rinkFurniture(yOff = 0) {
   const d = defaults();
   const net = ITEMS.net;
@@ -644,10 +776,7 @@ function rinkFurniture(yOff = 0) {
     { id: uid(), type: 'player', color: 'blue', label: 'G', x: RINK.creaseR - 20, y: yOff + RINK.midY, r: d.playerR },
   ];
 }
-export { rinkFurniture };
 
-// One click, a full centre-ice faceoff: black C, LW, RW, LD, RD on the left,
-// five plain blue players mirrored on the right. Lands on the LAST rink.
 function placeFaceoff() {
   if (!onRink()) return;
   const d = defaults();
@@ -669,19 +798,19 @@ function placeFaceoff() {
   }
   scheduleSave();
   render();
-  toast('5v5 faceoff placed - black left, blue right');
+  toast('5v5 Faceoff Placed - Black Left, Blue Right');
 }
 
 function frameOf(x) {
   return Math.max(0, Math.floor(centerOf(x).y / (RINK_H + SEQ_GAP)));
 }
 
-// "+ Rink": stack another rink below - a drill SEQUENCE, one image. The new
-// frame arrives as a COPY of the one above it, players, arrows and all.
 async function addRink() {
   if (!onRink() || (cur.seq || 1) >= SEQ_MAX) return;
   snapshot();
   const n = (cur.seq || 1) + 1;
+  if (!cur.rinkNames?.length) cur.rinkNames = ['Rink 1'];
+  cur.rinkNames[n - 1] = `Rink ${n}`;
   cur.seq = n;
   setRinkBackground(n);
   const shift = RINK_H + SEQ_GAP;
@@ -695,21 +824,21 @@ async function addRink() {
   cur.elements.push(...(clones.length ? clones : rinkFurniture((n - 1) * shift)));
   render();
   scheduleSave();
-  toast(`Rink ${n} of ${SEQ_MAX} added below - a copy of the one above`);
+  toast(`Rink ${n} Of ${SEQ_MAX} Added - Double-Click Its Name Chip To Rename`);
 }
 
-// "- Rink": remove the BOTTOM rink of a sequence, and everything on it.
 async function removeRink() {
   if (!onRink() || (cur.seq || 1) <= 1) return;
   snapshot();
   const n = (cur.seq || 1) - 1;
   cur.seq = n;
+  if (cur.rinkNames) cur.rinkNames = cur.rinkNames.slice(0, n);
   setRinkBackground(n);
   cur.elements = cur.elements.filter((x) => frameOf(x) < n);
   setSel([]);
   render();
   scheduleSave();
-  toast(`Bottom rink removed - ${n} left. Cmd+Z brings it back`);
+  toast(`Bottom Rink Removed - ${n} Left. Cmd+Z Brings It Back`);
 }
 
 // ---------------------------------------------------- element clipboard
@@ -754,6 +883,8 @@ function pasteEls(clones) {
 // ------------------------------------------------------------ interaction
 
 let drag = null;
+const pointers = new Map(); // pointerId -> {x, y}
+let gesture = null;         // two-finger pan / pinch on touch
 
 function placeItem(kind, p, e) {
   const d = defaults();
@@ -771,7 +902,7 @@ function placeItem(kind, p, e) {
   const snapped = snapCenter(p.x, p.y, null, false);
   const id = uid();
   if (kind.startsWith('p-')) {
-    cur.elements.push({ id, type: 'player', color: kind.slice(2), x: snapped.x, y: snapped.y, r: d.playerR, label: '' });
+    cur.elements.push({ id, type: 'player', color: slotColor(Number(kind.slice(2))), x: snapped.x, y: snapped.y, r: d.playerR, label: '' });
   } else {
     const key = kind.slice(2);
     const it = ITEMS[key];
@@ -786,7 +917,25 @@ function placeItem(kind, p, e) {
 }
 
 function onDown(e) {
-  if (!cur || e.button !== 0) return;
+  if (!cur) return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  // A second finger turns the interaction into pan / zoom.
+  if (pointers.size === 2) {
+    if (drag) { onUp(e); }
+    const [a, b] = [...pointers.values()];
+    const wrap = el('edStageWrap');
+    gesture = {
+      d0: Math.hypot(a.x - b.x, a.y - b.y),
+      mid0: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+      zoom0: cur.view.zoom,
+      sl0: wrap.scrollLeft,
+      st0: wrap.scrollTop,
+    };
+    e.preventDefault();
+    return;
+  }
+  if (gesture) return;
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
   const p = pt(e);
   const handle = e.target.closest?.('[data-h]');
 
@@ -840,9 +989,9 @@ function onDown(e) {
     return;
   }
 
-  if (cur.tool === 'box') {
+  if (cur.tool === 'box' || cur.tool === 'circle') {
     snapshot();
-    const b = { id: uid(), type: 'box', x: p.x, y: p.y, w: 0, h: 0, color: cur.color, alpha: 0.3 };
+    const b = { id: uid(), type: cur.tool, x: p.x, y: p.y, w: 0, h: 0, color: cur.color, alpha: 0.3 };
     cur.elements.push(b);
     drag = { kind: 'newBox', id: b.id, start: p, moved: false };
     e.preventDefault();
@@ -876,19 +1025,26 @@ function onDown(e) {
     cur.elements.push(pen);
     drag = { kind: 'pen', id: pen.id, start: p, moved: false };
     e.preventDefault();
-    return;
-  }
-
-  if (cur.tool === 'crop') {
-    cur.cropRect = { x1: p.x, y1: p.y, x2: p.x, y2: p.y };
-    drag = { kind: 'crop', start: p, moved: false };
-    e.preventDefault();
   }
 }
 
 function onMove(e) {
-  if (!cur || !drag) return;
-  if (!(e.buttons & 1)) { onUp(); return; }
+  if (!cur) return;
+  if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (gesture && pointers.size >= 2) {
+    const [a, b] = [...pointers.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y);
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const factor = (gesture.zoom0 * (d / gesture.d0)) / cur.view.zoom;
+    zoomAt(mid.x, mid.y, factor);
+    const wrap = el('edStageWrap');
+    wrap.scrollLeft -= mid.x - gesture.mid0.x;
+    wrap.scrollTop -= mid.y - gesture.mid0.y;
+    gesture.mid0 = mid;
+    return;
+  }
+  if (!drag) return;
+  if (e.pointerType === 'mouse' && !(e.buttons & 1)) { onUp(e); return; }
   const p = pt(e);
   const dx = p.x - drag.start.x;
   const dy = p.y - drag.start.y;
@@ -935,7 +1091,7 @@ function onMove(e) {
   else if (drag.kind === 'h:mid' && x) { x.mx = p.x; x.my = p.y; }
   else if (drag.kind === 'h:se' && x) {
     const o = drag.orig;
-    if (x.type === 'box') {
+    if (x.type === 'box' || x.type === 'circle') {
       x.w = Math.max(24, o.w + dx);
       x.h = Math.max(24, o.h + dy);
     } else if (x.type === 'stamp' || x.type === 'pucks') {
@@ -949,13 +1105,13 @@ function onMove(e) {
   } else if (drag.kind === 'pen' && x) {
     const last = x.pts[x.pts.length - 1];
     if (Math.hypot(p.x - last[0], p.y - last[1]) > 3) x.pts.push([p.x, p.y]);
-  } else if (drag.kind === 'crop') {
-    cur.cropRect.x2 = p.x; cur.cropRect.y2 = p.y;
   }
   render();
 }
 
 function onUp(e) {
+  if (e) pointers.delete(e.pointerId);
+  if (gesture && pointers.size < 2) gesture = null;
   if (!cur || !drag) return;
   const x = drag.id ? cur.elements.find((z) => z.id === drag.id) : null;
   cur.guides = [];
@@ -977,7 +1133,7 @@ function onUp(e) {
     scheduleSave();
   } else if ((drag.kind === 'move' || drag.kind.startsWith('h:')) && !drag.moved) {
     cur.undo.pop();
-  } else if (drag.kind !== 'crop') {
+  } else {
     if (drag.kind === 'pen' && !e?.metaKey && !e?.ctrlKey) cur.tool = 'select';
     scheduleSave();
   }
@@ -987,6 +1143,20 @@ function onUp(e) {
 
 function onDblClick(e) {
   if (!cur) return;
+  // Rename a rink by double-clicking its name chip.
+  const chip = e.target.closest?.('[data-rink]');
+  if (chip) {
+    const k = Number(chip.dataset.rink);
+    const s = scaleF();
+    openTextInput({ x: RINK_CHIP.cx, y: k * (RINK_H + SEQ_GAP) + RINK_CHIP.baseline - RINK_CHIP.size / 2 }, cur.rinkNames?.[k] || '', RINK_CHIP.size * s, (text) => {
+      snapshot();
+      if (!cur.rinkNames) cur.rinkNames = [];
+      cur.rinkNames[k] = text.trim();
+      scheduleSave();
+      render();
+    }, 0, true);
+    return;
+  }
   const hitEl = e.target.closest?.('[data-id]');
   const x = hitEl ? cur.elements.find((z) => z.id === hitEl.dataset.id) : hitAt(pt(e));
   if (!x) return;
@@ -1000,9 +1170,19 @@ function onDblClick(e) {
     }, 2);
     return;
   }
+  if (x.type === 'box' || x.type === 'circle') {
+    setSel([x.id]);
+    openTextInput({ x: x.x + x.w / 2, y: x.y + x.h / 2 }, x.label || '', shapeLabelSize(x), (text) => {
+      snapshot();
+      x.label = text.trim();
+      scheduleSave();
+      render();
+    }, 0, true);
+    return;
+  }
   if (x.type === 'text') {
     setSel([x.id]);
-    openTextInput({ x: x.x, y: x.y - x.size }, x.text || '', x.size, (text) => {
+    openTextInput({ x: x.x, y: x.y - x.size / 2 }, x.text || '', x.size, (text) => {
       snapshot();
       if (!text.trim()) cur.elements = cur.elements.filter((z) => z.id !== x.id);
       else x.text = text.trim();
@@ -1012,7 +1192,10 @@ function onDblClick(e) {
   }
 }
 
-function openTextInput(p, initial, sizePx, commit, maxLen = 0) {
+// The in-canvas text field. `centered` centres the field on the point
+// (players, shape labels, rink chips); otherwise it sits on the text
+// baseline like the chip it becomes.
+function openTextInput(p, initial, sizePx, commit, maxLen = 0, centered = false) {
   document.getElementById('edInput')?.remove();
   const body = el('edStageWrap');
   const svg = el('edSvg');
@@ -1028,9 +1211,9 @@ function openTextInput(p, initial, sizePx, commit, maxLen = 0) {
   input.style.top = `${r.top - br.top + body.scrollTop + p.y * scale}px`;
   const fpx = Math.max(11, sizePx * scale);
   input.style.fontSize = `${fpx}px`;
-  if (maxLen === 2) {
-    input.classList.add('ed-input-tight');
-    input.style.width = `${Math.max(30, Math.round(fpx * 2.4))}px`;
+  if (centered || maxLen === 2) {
+    input.classList.add('ed-input-center');
+    if (maxLen === 2) input.style.width = `${Math.max(30, Math.round(fpx * 2.4))}px`;
   }
   body.appendChild(input);
   let done = false;
@@ -1043,7 +1226,7 @@ function openTextInput(p, initial, sizePx, commit, maxLen = 0) {
   };
   input.onkeydown = (e) => {
     e.stopPropagation();
-    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+    if (e.key === 'Enter' || e.keyCode === 13) { e.preventDefault(); finish(true); }
     if (e.key === 'Escape') { e.preventDefault(); finish(false); }
   };
   input.onblur = () => finish(true);
@@ -1061,9 +1244,9 @@ function onKey(e) {
     e.stopPropagation();
     const { toolId, label } = capturing;
     capturing = null;
-    if (e.key === 'Escape') { toast('Shortcut unchanged'); return; }
+    if (e.key === 'Escape') { toast('Shortcut Unchanged'); return; }
     if (e.key.length !== 1 || e.metaKey || e.ctrlKey || e.altKey || e.key === ' ') {
-      toast('Single letter or number keys only', true);
+      toast('Single Letter Or Number Keys Only', true);
       return;
     }
     const k = e.key.toLowerCase();
@@ -1073,7 +1256,7 @@ function onKey(e) {
     saveSettings({ diagramKeys: all });
     toolsSig = '';
     render();
-    toast(`${label}: now ${k.toUpperCase()}`);
+    toast(`${toolLabel(toolId)}: Now ${k.toUpperCase()}`);
     return;
   }
   if (e.metaKey || e.ctrlKey) {
@@ -1090,11 +1273,11 @@ function onKey(e) {
       pasteEls(selEls());
       return;
     }
+    if (k === '0') { stop(); cur.view.zoom = 1; applyZoom(); return; }
     return;
   }
   if (e.key === 'Escape') {
     e.preventDefault();
-    if (cur.cropRect) { cur.cropRect = null; render(); return; }
     if (cur.tool !== 'select') { setTool('select'); return; }
     if (cur.sel) { setSel([]); render(); return; }
     return;
@@ -1150,16 +1333,17 @@ export async function closeEditor() {
   clearTimeout(c.timer);
   await saveNow();
   cur = null;
+  hooks = {};
+  pointers.clear();
+  gesture = null;
+  drag = null;
   document.getElementById('edInput')?.remove();
 }
 
-export function isDirty() { return !!cur?.dirty; }
-
-// Open a drill record into the editor DOM (app.js builds the shell first).
-export async function openEditor(drill, hooks = {}) {
+export async function openEditor(drill, h = {}) {
   wireOnce();
   if (cur) await closeEditor();
-  onDirtyChange = hooks.onStatus || null;
+  hooks = h || {};
   cur = {
     drill,
     elements: [],
@@ -1169,9 +1353,10 @@ export async function openEditor(drill, hooks = {}) {
     tool: 'select',
     color: 'black',
     head: settings().arrowHead || 'triangle',
-    cropRect: null,
     guides: [],
     seq: 1,
+    rinkNames: [],
+    view: { zoom: 1 },
     undo: [],
     redoStack: [],
     dirty: false,
@@ -1184,6 +1369,12 @@ export async function openEditor(drill, hooks = {}) {
     cur.seq = st.seq || 1;
   } else if (st && Array.isArray(st.elements)) {
     cur.seq = st.seq || 1;
+    cur.rinkNames = structuredClone(st.rinkNames || []);
+    // A sequence always shows name chips - default them so renaming is one
+    // double-click away even on diagrams made before names existed.
+    if (cur.seq > 1 && !cur.rinkNames.length) {
+      cur.rinkNames = Array.from({ length: cur.seq }, (_, k) => `Rink ${k + 1}`);
+    }
     setRinkBackground(cur.seq);
     cur.elements = structuredClone(st.elements);
   } else {
@@ -1194,17 +1385,26 @@ export async function openEditor(drill, hooks = {}) {
     scheduleSave();
   }
   toolsSig = '';
+  applyZoom();
   render();
   status(cur.dirty ? 'Saving…' : 'Saved');
 }
 
+// Window-level listeners attach once; the svg and wrap are rebuilt on every
+// editor open, so their listeners re-attach each time to the fresh nodes.
 function wireOnce() {
-  if (wired) return;
-  wired = true;
+  if (!wired) {
+    wired = true;
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    window.addEventListener('keydown', onKey, true);
+  }
   const svg = el('edSvg');
-  svg.addEventListener('mousedown', onDown);
-  window.addEventListener('mousemove', onMove);
-  window.addEventListener('mouseup', onUp);
+  svg.addEventListener('pointerdown', onDown);
   svg.addEventListener('dblclick', onDblClick);
-  window.addEventListener('keydown', onKey, true);
+  const wrap = el('edStageWrap');
+  wrap.addEventListener('wheel', onWheel, { passive: false });
+  wrap.addEventListener('gesturestart', onGestureStart);
+  wrap.addEventListener('gesturechange', onGestureChange);
 }

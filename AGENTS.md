@@ -5,10 +5,13 @@ GitHub-connected agents). Read this fully before changing anything.
 
 ## What this is
 
-CTH Diagrammer, Tony's hockey drill diagramming web app, live at
-https://tonysteege.github.io/cth-diagrammer/. Static site, no build step:
+CTH Diagrammer, Tony's hockey diagram design web app, live at
+https://diagrammer.coachtonyhockey.com/ (GitHub Pages custom domain; also
+https://tonysteege.github.io/cth-diagrammer/). Static site, no build step:
 GitHub Pages serves the `main` branch as-is. **Merging to `main` IS the
-deploy** - the live app updates within about a minute.
+deploy** - the live app updates within about a minute. The interface says
+"Diagram"; the `#/drill/` hash and the `drills` IndexedDB store are frozen
+storage terms - do not rename them.
 
 ## How to work here
 
@@ -26,13 +29,14 @@ deploy** - the live app updates within about a minute.
 
 ## Hard rules
 
-1. **Never break saved drills.** Drills live in users' IndexedDB as
+1. **Never break saved diagrams.** They live in users' IndexedDB as
    `{ id, name, notes, created, updated, thumb, state }` where `state` is
-   `{ v: 1, w, h, bg, seq, elements }`. Element shapes (player, arrow,
-   stamp, pucks, box, text, pen) and their property names are a storage
-   format AND an interchange format with CTH Film Room - never rename or
-   remove a property. Adding optional properties is fine with a fallback
-   for old records.
+   `{ v: 1, w, h, bg, seq, elements, rinkNames? }`. Element shapes (player,
+   arrow, stamp, pucks, box, circle, text, pen) and their property names
+   are a storage format AND an interchange format with CTH Film Room -
+   never rename or remove a property. Adding optional properties is fine
+   with a fallback for old records. An element's `color` is either a slot
+   name (black / blue / grey / red) or a raw hex from a customized preset.
 2. **Never change the PNG embedding.** `js/png.js` writes the editable
    state into exported PNGs under the `tEXt` keyword `cthDiagram`
    (base64 JSON), byte-compatible with CTH Film Room. Same rule as above:
