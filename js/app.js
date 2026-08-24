@@ -1,6 +1,7 @@
 // CTH Diagrammer - app shell. Two views on one page:
-//   Library (#/)            - saved diagrams as cards: search, open,
-//                             duplicate, delete, import, back up.
+//   Library (#/)            - folder tree + saved diagrams as cards:
+//                             search, open, move, duplicate, delete,
+//                             import, back up.
 //   Editor  (#/drill/ID)    - the rink editor (editor.js) with autosave.
 // (The #/drill/ hash and the "drills" store name are frozen storage terms;
 // the interface says Diagram.)
@@ -20,6 +21,19 @@ const $ = (sel) => document.querySelector(sel);
 
 const safeName = (s) => (s || 'diagram').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase() || 'diagram';
 
+const BACK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12H4"/><path d="m10 18-6-6 6-6"/></svg>';
+
+// ------------------------------------------------------------- folders
+
+const FOLDERS_KEY = 'cthd.folders.v1';
+function folders() {
+  try { return JSON.parse(localStorage.getItem(FOLDERS_KEY)) || []; } catch (_) { return []; }
+}
+function saveFolders(list) {
+  localStorage.setItem(FOLDERS_KEY, JSON.stringify(list));
+}
+let libView = ''; // '' = All Diagrams, else a folder name
+
 // ------------------------------------------------------------- routing
 
 function route() {
@@ -32,7 +46,7 @@ let leaving = false;
 async function go() {
   if (leaving) return;
   leaving = true;
-  await closeEditor(); // flush any pending autosave before the view swaps
+  await closeEditor();
   leaving = false;
   const r = route();
   if (r.view === 'editor') await showEditor(r.id);
@@ -44,6 +58,13 @@ async function go() {
 async function showLibrary() {
   document.title = 'CTH Diagrammer';
   const drills = await listDrills();
+  // A folder that vanished from the list still shows if diagrams point at
+  // it - nothing silently disappears.
+  const known = new Set(folders());
+  for (const d of drills) if (d.folder && !known.has(d.folder)) { known.add(d.folder); }
+  const folderList = [...folders(), ...[...known].filter((f) => !folders().includes(f))];
+  if (libView && !folderList.includes(libView)) libView = '';
+
   const app = $('#app');
   app.innerHTML = `
     <header class="lib-head">
@@ -61,13 +82,140 @@ async function showLibrary() {
         <button class="btn btn-ink" id="libNew">+ New Diagram</button>
       </div>
     </header>
-    <main class="lib-grid" id="libGrid"></main>
+    <div class="lib-body">
+      <aside class="lib-side" id="libSide"></aside>
+      <main class="lib-grid" id="libGrid"></main>
+    </div>
     <footer class="lib-foot">Diagrams Are Saved In This Browser. Use <strong>Back Up</strong> For A File You Can Restore Anywhere. An Exported PNG Reopens Fully Editable Here And In CTH Film Room.</footer>
     <input type="file" id="libFile" accept=".png,.json,application/json,image/png" hidden multiple>`;
 
+  const side = $('#libSide');
   const grid = $('#libGrid');
-  const paint = (q = '') => {
-    const list = drills.filter((d) => !q || (d.name || '').toLowerCase().includes(q) || (d.notes || '').toLowerCase().includes(q));
+
+  const countIn = (f) => drills.filter((d) => (f === '' ? true : (d.folder || '') === f)).length;
+
+  const paintSide = () => {
+    side.innerHTML = `
+      <div class="side-title">Folders</div>
+      <button class="side-row${libView === '' ? ' on' : ''}" data-folder="">
+        <span class="side-name">All Diagrams</span><span class="side-count">${countIn('')}</span>
+      </button>
+      ${folderList.map((f) => `
+        <button class="side-row${libView === f ? ' on' : ''}" data-folder="${esc(f)}">
+          <svg class="side-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+          <span class="side-name">${esc(f)}</span><span class="side-count">${countIn(f)}</span>
+          <span class="side-tools">
+            <span class="side-act" data-ren="${esc(f)}" title="Rename Folder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg></span>
+            <span class="side-act" data-delf="${esc(f)}" title="Delete Folder (Diagrams Move To All)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 6 6 18M6 6l12 12"/></svg></span>
+          </span>
+        </button>`).join('')}
+      <button class="side-new" id="sideNew">+ New Folder</button>`;
+
+    side.querySelectorAll('[data-folder]').forEach((b) => {
+      b.addEventListener('click', (e) => {
+        if (e.target.closest('.side-act')) return;
+        libView = b.dataset.folder;
+        paintSide();
+        paintGrid($('#libSearch').value.trim().toLowerCase());
+      });
+      // Drop a diagram card onto a folder (or onto All to unfile it).
+      b.addEventListener('dragover', (e) => {
+        if (![...e.dataTransfer.types].includes('text/x-cthd-drill')) return;
+        e.preventDefault();
+        b.classList.add('side-drop');
+      });
+      b.addEventListener('dragleave', () => b.classList.remove('side-drop'));
+      b.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        b.classList.remove('side-drop');
+        const id = e.dataTransfer.getData('text/x-cthd-drill');
+        if (!id) return;
+        const d = await getDrill(id);
+        if (!d) return;
+        d.folder = b.dataset.folder;
+        await putDrill(d);
+        await showLibrary();
+        toast(b.dataset.folder ? `Moved To "${b.dataset.folder}"` : 'Moved To All Diagrams');
+      });
+    });
+    side.querySelectorAll('[data-ren]').forEach((s) => {
+      s.onclick = () => renameFolder(s.dataset.ren);
+    });
+    side.querySelectorAll('[data-delf]').forEach((s) => {
+      s.onclick = async () => {
+        const f = s.dataset.delf;
+        const n = countIn(f);
+        const ok = await confirmSheet({
+          title: `Delete Folder "${f}"?`,
+          body: n ? `Its ${n} diagram${n === 1 ? '' : 's'} move to All Diagrams - nothing is deleted.` : 'The folder is empty.',
+          action: 'Delete Folder',
+        });
+        if (!ok) return;
+        saveFolders(folders().filter((x) => x !== f));
+        for (const d of drills) {
+          if ((d.folder || '') === f) { d.folder = ''; await putDrill(d); }
+        }
+        if (libView === f) libView = '';
+        await showLibrary();
+      };
+    });
+    $('#sideNew').onclick = () => {
+      const row = document.createElement('div');
+      row.className = 'side-row side-editing';
+      row.innerHTML = '<input class="side-input" placeholder="Folder Name…" maxlength="40">';
+      side.insertBefore(row, $('#sideNew'));
+      const input = row.querySelector('input');
+      const commit = () => {
+        const name = input.value.trim();
+        row.remove();
+        if (!name || folders().includes(name)) { if (name) toast('That Folder Already Exists', true); return; }
+        saveFolders([...folders(), name]);
+        libView = name;
+        void showLibrary();
+      };
+      input.onkeydown = (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter' || e.keyCode === 13) { e.preventDefault(); commit(); }
+        if (e.key === 'Escape') { e.preventDefault(); row.remove(); }
+      };
+      input.onblur = commit;
+      input.focus();
+    };
+  };
+
+  const renameFolder = (f) => {
+    const row = side.querySelector(`[data-folder="${CSS.escape(f)}"]`);
+    if (!row) return;
+    const name = row.querySelector('.side-name');
+    const input = document.createElement('input');
+    input.className = 'side-input';
+    input.value = f;
+    input.maxLength = 40;
+    name.replaceWith(input);
+    const commit = async () => {
+      const to = input.value.trim();
+      if (!to || to === f) { paintSide(); return; }
+      if (folders().includes(to)) { toast('That Folder Already Exists', true); paintSide(); return; }
+      saveFolders(folders().map((x) => (x === f ? to : x)));
+      for (const d of drills) {
+        if ((d.folder || '') === f) { d.folder = to; await putDrill(d); }
+      }
+      if (libView === f) libView = to;
+      await showLibrary();
+    };
+    input.onkeydown = (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter' || e.keyCode === 13) { e.preventDefault(); void commit(); }
+      if (e.key === 'Escape') { e.preventDefault(); paintSide(); }
+    };
+    input.onblur = () => void commit();
+    input.focus();
+    input.select();
+  };
+
+  const paintGrid = (q = '') => {
+    const inView = drills.filter((d) => (libView === '' ? true : (d.folder || '') === libView));
+    const list = inView.filter((d) => !q || (d.name || '').toLowerCase().includes(q) || (d.notes || '').toLowerCase().includes(q));
     if (!drills.length) {
       grid.innerHTML = `
         <div class="lib-empty">
@@ -80,17 +228,18 @@ async function showLibrary() {
       return;
     }
     if (!list.length) {
-      grid.innerHTML = '<div class="lib-none">No Diagrams Match That Search.</div>';
+      grid.innerHTML = `<div class="lib-none">${q ? 'No Diagrams Match That Search.' : 'This Folder Is Empty - Drag A Diagram Onto It, Or Use Move On A Card.'}</div>`;
       return;
     }
     grid.innerHTML = list.map((d) => `
-      <article class="card" data-id="${d.id}" tabindex="0">
+      <article class="card" data-id="${d.id}" tabindex="0" draggable="true">
         <div class="card-thumb">${d.thumb ? `<img src="${d.thumb}" alt="" loading="lazy">` : '<div class="card-thumb-blank"></div>'}</div>
         <div class="card-meta">
           <h3>${esc(d.name || 'Untitled Diagram')}</h3>
           <span>${fmtDate(d.updated)}</span>
         </div>
         <div class="card-tools">
+          <button class="mini" data-do="move" title="Move To A Folder">Move</button>
           <button class="mini" data-do="dup" title="Duplicate This Diagram">Duplicate</button>
           <button class="mini" data-do="png" title="Download This Diagram As A PNG (Reopens Editable)">PNG</button>
           <button class="mini mini-danger" data-do="del" title="Delete This Diagram">Delete</button>
@@ -101,6 +250,11 @@ async function showLibrary() {
       const open = () => { location.hash = `#/drill/${id}`; };
       c.addEventListener('click', (e) => { if (!e.target.closest('.mini')) open(); });
       c.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.target.closest('.mini')) open(); });
+      c.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('text/x-cthd-drill', id);
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      c.querySelector('[data-do="move"]').onclick = (e) => showMoveMenu(e.currentTarget, id);
       c.querySelector('[data-do="dup"]').onclick = async () => {
         const d = await getDrill(id);
         const copy = { ...structuredClone(d), id: uid(), name: `${d.name || 'Untitled Diagram'} Copy`, created: Date.now() };
@@ -128,13 +282,42 @@ async function showLibrary() {
       };
     });
   };
-  paint();
 
-  $('#libSearch').addEventListener('input', (e) => paint(e.target.value.trim().toLowerCase()));
+  const showMoveMenu = (btn, id) => {
+    document.querySelector('.move-menu')?.remove();
+    const menu = document.createElement('div');
+    menu.className = 'move-menu';
+    menu.innerHTML = `
+      <button data-f="">All Diagrams (No Folder)</button>
+      ${folderList.map((f) => `<button data-f="${esc(f)}">${esc(f)}</button>`).join('')}`;
+    document.body.appendChild(menu);
+    const r = btn.getBoundingClientRect();
+    menu.style.left = `${Math.min(window.innerWidth - menu.offsetWidth - 8, r.left)}px`;
+    menu.style.top = `${r.bottom + 6}px`;
+    const close = () => { menu.remove(); window.removeEventListener('pointerdown', onAway, true); };
+    const onAway = (e) => { if (!menu.contains(e.target)) close(); };
+    window.addEventListener('pointerdown', onAway, true);
+    menu.querySelectorAll('[data-f]').forEach((b) => {
+      b.onclick = async () => {
+        close();
+        const d = await getDrill(id);
+        d.folder = b.dataset.f;
+        await putDrill(d);
+        await showLibrary();
+        toast(b.dataset.f ? `Moved To "${b.dataset.f}"` : 'Moved To All Diagrams');
+      };
+    });
+  };
+
+  paintSide();
+  paintGrid();
+
+  $('#libSearch').addEventListener('input', (e) => paintGrid(e.target.value.trim().toLowerCase()));
   $('#libNew').onclick = newDrill;
   $('#libExport').onclick = async () => {
     const payload = await exportAll();
     if (!payload.drills.length) { toast('Nothing To Back Up Yet', true); return; }
+    payload.folders = folders();
     downloadBlob(new Blob([JSON.stringify(payload)], { type: 'application/json' }),
       `cth-diagrams-backup-${new Date().toISOString().slice(0, 10)}.json`);
     toast(`Backed Up ${payload.drills.length} Diagram${payload.drills.length === 1 ? '' : 's'}`);
@@ -147,7 +330,11 @@ async function showLibrary() {
     for (const f of files) {
       try {
         if (/\.json$/i.test(f.name)) {
-          const n = await importAll(JSON.parse(await f.text()));
+          const payload = JSON.parse(await f.text());
+          const n = await importAll(payload);
+          if (Array.isArray(payload.folders)) {
+            saveFolders([...new Set([...folders(), ...payload.folders])]);
+          }
           toast(`Imported ${n} Diagram${n === 1 ? '' : 's'} From Backup`);
         } else {
           const id = await importPng(f);
@@ -163,13 +350,11 @@ async function showLibrary() {
 }
 
 async function newDrill() {
-  const drill = { id: uid(), name: '', notes: '', created: Date.now(), state: null, thumb: null };
+  const drill = { id: uid(), name: '', notes: '', folder: libView || '', created: Date.now(), state: null, thumb: null };
   await putDrill(drill);
   location.hash = `#/drill/${drill.id}`;
 }
 
-// Import a PNG - if it carries cthDiagram state (from here or Film Room) it
-// arrives fully editable; a plain image becomes the diagram background.
 async function importPng(file) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const state = pngReadDiagram(bytes);
@@ -190,7 +375,7 @@ async function importPng(file) {
   } else {
     st = { v: 1, w: 0, h: 0, bg: dataUrl, seq: 1, elements: [] };
   }
-  const drill = { id: uid(), name, notes: '', created: Date.now(), state: st, thumb: null };
+  const drill = { id: uid(), name, notes: '', folder: libView || '', created: Date.now(), state: st, thumb: null };
   await putDrill(drill);
   toast(`Imported "${name}"${state ? ' - Fully Editable' : ''}`);
   return drill.id;
@@ -208,7 +393,7 @@ async function showEditor(id) {
   app.innerHTML = `
     <div class="ed">
       <header class="ed-head">
-        <button class="btn btn-back" id="edBack" title="Back To Your Diagrams">&larr;</button>
+        <button class="btn btn-back" id="edBack" title="Back To Your Diagrams" aria-label="Back To Your Diagrams">${BACK_ICON}</button>
         <input id="edTitle" class="ed-title" value="${esc(drill.name || '')}" placeholder="Name This Diagram…" autocomplete="off" spellcheck="false">
         <span class="ed-status" id="edStatus">Saved</span>
         <div class="ed-head-actions">
@@ -301,7 +486,8 @@ function printCanvas(canvas, name) {
 }
 
 // Pick one, several, or all rinks of a sequence, then copy / print /
-// download exactly those frames.
+// download exactly those. (Each rink also has its own one-click controls
+// right on the canvas.)
 function showRinksSheet(drill) {
   if (document.querySelector('.sheet-veil')) return;
   const { seq, names } = curFrames;
@@ -371,13 +557,16 @@ function downloadBlob(blob, filename) {
 function showShortcuts() {
   if (document.querySelector('.sheet-veil')) return;
   const rows = [
-    ['V', 'Select & Move'], ['A', 'Arrow'], ['D', 'Dashed Arrow'], ['B', 'Shaded Box'],
-    ['C', 'Shaded Circle'], ['T', 'Text'], ['P', 'Pen'], ['1 / 2 / 3', 'Players'],
+    ['V', 'Select & Move'], ['A / D', 'Arrow / Dashed Arrow'], ['B / C', 'Shaded Box / Circle'],
+    ['T / P', 'Text / Pen'], ['1 / 2 / 3', 'Players (Hover A Player Button For Preset Letters)'],
+    ['F', '5v5 Faceoff'], ['H / N / K / S / O / W', 'Coach / Net / Puck / Pucks / Cone / Border'],
+    ['6 / 7 / 8 / 9', 'Color Presets'], ['+ / -', 'Add / Remove A Rink'],
     ['Cmd+Z / Shift+Cmd+Z', 'Undo / Redo'], ['Cmd+C / X / V', 'Copy / Cut / Paste Selection'],
     ['Cmd+D', 'Duplicate Selection'], ['Delete', 'Remove Selection'],
     ['Arrows', 'Nudge (Shift = Larger Step)'], ['Cmd While Dragging', 'Snapping Off'],
     ['Cmd While Placing', 'Place Several In A Row'], ['Shift-Click', 'Add To Selection'],
     ['Pinch / Cmd+Scroll', 'Zoom (Cmd+0 Resets)'], ['Two-Finger Scroll', 'Pan The Canvas'],
+    ['Round Handle', 'Rotate The Selected Item (Snaps To 15 Degrees, Cmd = Free)'],
     ['Double-Click', 'Edit Text, Letter A Player, Label A Shape, Rename A Rink'],
     ['Right-Click A Tool', 'Set Your Own Shortcut Key'],
   ];

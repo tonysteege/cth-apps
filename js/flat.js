@@ -30,7 +30,24 @@ export const labelInkOn = (c) => (luminance(colorOf(c)) > 0.55 ? INK : '#ffffff'
 
 // Text chips are drawn like Figma's Title chip: white fill, ink border,
 // extra-bold text. These ratios are shared by draw, SVG, and hit bounds.
-export const TEXT_CHIP = { padX: 0.5, padY: 0.3, height: 1.3, radius: 0.32, border: 0.09 };
+// The border ratio lands the default chip border at the same drawn weight
+// as the default player ring (Tony 2026-08-24).
+export const TEXT_CHIP = { padX: 0.5, padY: 0.3, height: 1.3, radius: 0.32, border: 0.17 };
+
+// Elements that can carry a `rot` (degrees, clockwise, about their centre).
+export const ROTATABLE = new Set(['stamp', 'pucks', 'box', 'circle', 'text']);
+
+// The centre a rotated element turns about - shared by canvas, SVG and hit
+// testing so all three agree.
+export function rotCenterOf(x) {
+  if (x.type === 'text') {
+    const T = TEXT_CHIP;
+    const w = measureText(x);
+    const padX = x.size * T.padX; const padY = x.size * T.padY;
+    return { x: x.x - padX + (w + padX * 2) / 2, y: x.y - x.size - padY + (x.size * T.height + padY * 2) / 2 };
+  }
+  return { x: x.x + x.w / 2, y: x.y + x.h / 2 };
+}
 
 let measureCtx = null;
 export function measureText(x) {
@@ -69,7 +86,7 @@ function drawPucksInto(ctx, x) {
 function drawShapeLabel(ctx, x) {
   if (!x.label) return;
   const fs = shapeLabelSize(x);
-  ctx.fillStyle = INK;
+  ctx.fillStyle = labelInkOn(x.color);
   ctx.font = `800 ${Math.round(fs)}px Inter, 'Helvetica Neue', sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -77,6 +94,20 @@ function drawShapeLabel(ctx, x) {
 }
 
 export function drawEl(ctx, x) {
+  if (x.rot && ROTATABLE.has(x.type)) {
+    const c = rotCenterOf(x);
+    ctx.save();
+    ctx.translate(c.x, c.y);
+    ctx.rotate((x.rot * Math.PI) / 180);
+    ctx.translate(-c.x, -c.y);
+    drawElInner(ctx, x);
+    ctx.restore();
+    return;
+  }
+  drawElInner(ctx, x);
+}
+
+function drawElInner(ctx, x) {
   if (x.type === 'stamp') {
     const img = shapeImg(x.name);
     if (!img) return;

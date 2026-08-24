@@ -30,8 +30,9 @@ storage terms - do not rename them.
 ## Hard rules
 
 1. **Never break saved diagrams.** They live in users' IndexedDB as
-   `{ id, name, notes, created, updated, thumb, state }` where `state` is
-   `{ v: 1, w, h, bg, seq, elements, rinkNames? }`. Element shapes (player,
+   `{ id, name, notes, folder?, created, updated, thumb, state }` where
+   `state` is `{ v: 1, w, h, bg, seq, elements, rinkNames? }` and elements
+   may carry an optional `rot` (degrees). Element shapes (player,
    arrow, stamp, pucks, box, circle, text, pen) and their property names
    are a storage format AND an interchange format with CTH Film Room -
    never rename or remove a property. Adding optional properties is fine
