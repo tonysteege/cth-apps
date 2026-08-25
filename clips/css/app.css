@@ -121,232 +121,208 @@
   background: #fff; padding: 2px 6px; outline: none; min-width: 80px;
 }
 
-/* The transport is one tight centred row now; the clock moved onto the
-   timeline above it, so this row only holds controls. */
-.vp-transport {
-  display: flex; align-items: center; gap: 4px;
-  padding: 3px 12px; background: var(--cloud); flex-wrap: nowrap;
-}
-.tbtn {
-  width: 30px; height: 28px; display: inline-flex; align-items: center; justify-content: center;
-  border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--graphite);
-}
-.tbtn svg { width: 17px; height: 17px; }
-.tbtn:hover { background: var(--sunken); color: var(--ink); }
-.tbtn-play { background: var(--ink); color: var(--cloud); width: 38px; }
-.tbtn-play:hover { background: var(--ink-raised); color: var(--cloud); }
-.tbtn-word { width: auto; padding: 0 9px; font-size: 12px; font-weight: 800; }
-.vp-hintkeys { margin-left: auto; color: var(--soft); font-size: 11px; white-space: nowrap; }
 
-/* SLIM TIMELINE with the timecodes ON it (2026-08-25, mChapters as the
-   reference): the clip lane is the scrub bar, and the two codes sit at its
-   ends instead of on a row of their own. ~76px of height came back to the
-   picture between this and the trimmed transport row. */
-.vp-tlwrap { position: relative; background: var(--cloud); border-top: 1px solid var(--edge-soft); }
-.vp-timeline { width: 100%; height: 30px; display: block; cursor: pointer; touch-action: none; }
-.vp-tc {
-  position: absolute; bottom: 1px; font-size: 10.5px; line-height: 1;
-  color: var(--soft); font-variant-numeric: tabular-nums; pointer-events: none;
-  background: var(--cloud); padding: 0 3px; border-radius: 3px;
-}
-.vp-tc--l { left: 4px; }
-.vp-tc--r { right: 4px; }
+/* ============================================================
+   THE PLAYER, mChapters layout (2026-08-25, Tony's call)
 
-/* ---------------------------------------------------------- tag side panel
-   A slim vertical column on the right (moved from a two-row bar under the
-   timeline, 2026-08-25): the bar's height came straight out of the picture,
-   a narrow column costs the stage almost nothing and scrolls as the button
-   list grows. */
-/* Resizable and collapsible (2026-08-25). The width is set inline by the
-   drag handle and persists in settings; the container query below switches
-   the buttons to a compact drawing on its own, so a narrow panel is a real
-   working size rather than a squeezed wide one. */
-.vp-side {
-  width: 172px; flex-shrink: 0; overflow-y: auto; container-type: inline-size;
-  display: flex; flex-direction: column; gap: 4px;
-  padding: 10px 9px 14px; background: var(--cloud);
-}
-.vp.side-hidden .vp-side, .vp.side-hidden .vp-vsplit { display: none; }
-/* The tag panel's drag handle - the vertical twin of the log's .vp-split. */
-.vp-vsplit {
-  width: 9px; flex-shrink: 0; cursor: col-resize; touch-action: none;
+   Left to right: Clip Log, tag column, video. The log is a real table -
+   striped rows, a timecode column, a name column - because that is what a
+   coach scans. The tag column is slim and the buttons are 7-character
+   chips. Everything on this screen shares one drawing: 6px radii, one
+   hairline, one type ramp, and colour only where it carries meaning.
+   ============================================================ */
+
+/* The grips. Wide enough to grab, invisible until you do. */
+.vp-grip {
+  width: 7px; flex-shrink: 0; cursor: col-resize; touch-action: none;
   display: flex; align-items: center; justify-content: center;
-  border-left: 1px solid var(--edge-soft); background: var(--cloud);
+  background: var(--cloud); border-right: 1px solid var(--edge-soft);
+  transition: background .12s;
 }
-.vp-vsplit span { width: 4px; height: 40px; border-radius: 2px; background: var(--edge); }
-.vp-vsplit:hover span, .vp-vsplit:active span { background: var(--soft); }
-.side-label {
-  font-size: 10px; font-weight: 800; text-transform: uppercase;
-  letter-spacing: 0.09em; color: var(--soft); margin: 6px 3px 1px;
-}
-.side-label:first-child { margin-top: 0; }
-/* A divider inside the panel: a hairline that groups the buttons around it. */
-.side-div { padding: 3px 2px; cursor: grab; }
-.side-div span { display: block; height: 1px; background: var(--edge); }
-.side-div.drag-over span, .tag-btn.drag-over { background: var(--select); }
-/* THE BUTTON CARRIES ITS OWN COLOUR AS A LIGHT WASH (2026-08-25, Tony's
-   call): --c is the assigned colour, and color-mix keeps the tint at 12%
-   against white so a row of them still reads as a quiet panel rather than a
-   paint chart. The dot stays as the full-strength cue. */
-.tag-btn {
-  position: relative; display: flex; align-items: center; width: 100%; text-align: left;
-  border: 1px solid color-mix(in srgb, var(--c, var(--soft)) 32%, var(--edge));
-  border-radius: 9px; cursor: grab;
-  padding: 6px 8px 6px 19px;
-  background: color-mix(in srgb, var(--c, var(--soft)) 12%, var(--cloud));
-  font-size: 12.5px; font-weight: 800; color: var(--ink); white-space: nowrap;
-}
-.tag-btn::before {
-  content: ''; position: absolute; left: 7px; top: 50%; transform: translateY(-50%);
-  width: 7px; height: 7px; border-radius: 50%; background: var(--c, var(--soft));
-}
-.tag-btn:hover { border-color: color-mix(in srgb, var(--c, var(--soft)) 55%, var(--edge)); box-shadow: var(--shadow-1); }
-.tag-btn:active { cursor: grabbing; }
-.tag-btn-word { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.tag-btn-tag { font-weight: 600; }
-.tag-btn-tag.on { background: var(--ink); border-color: var(--ink); color: var(--cloud); }
-.tag-btn-mode { border-style: dashed; }
-.tag-edit {
-  padding-left: 10px; color: var(--soft); font-weight: 500; margin-top: 6px;
-  background: var(--cloud); border-color: var(--edge); cursor: pointer;
-}
-.tag-edit::before { display: none; }
-.tag-key { margin-left: 6px; font-size: 9px; font-weight: 800; color: var(--soft); flex-shrink: 0; }
-.tag-btn-tag.on .tag-key { color: rgba(255, 255, 255, .7); }
-/* Under ~130px the panel goes compact: smaller type, tighter padding, and
-   the hotkey badge steps aside so the label keeps the room. */
-@container (max-width: 130px) {
-  .vp-side { padding: 8px 6px 12px; gap: 3px; }
-  .tag-btn { font-size: 11px; padding: 4px 5px 4px 15px; border-radius: 7px; }
-  .tag-btn::before { left: 5px; width: 5px; height: 5px; }
-  .tag-key { display: none; }
-  .side-label { font-size: 9px; margin: 4px 2px 1px; }
-}
+.vp-grip span { width: 3px; height: 26px; border-radius: 2px; background: transparent; transition: background .12s; }
+.vp-grip:hover { background: var(--sunken); }
+.vp-grip:hover span, .vp-grip:active span { background: var(--soft); }
+.vp.log-hidden #vpLog, .vp.log-hidden #vpGripLog { display: none; }
+.vp.side-hidden #vpSide, .vp.side-hidden #vpGripSide { display: none; }
 
-/* ---------------------------------------------------------- clip log
-   Full-width under the video (moved from a 300px right rail, 2026-08-25),
-   split from the stage by a drag bar. A row is one line: name, time, then
-   the tags with their write-in box taking the width the rail never had. */
-.vp-split {
-  height: 11px; flex-shrink: 0; cursor: row-resize; touch-action: none;
-  display: flex; align-items: center; justify-content: center;
-  border-top: 1px solid var(--edge-soft); background: var(--cloud);
-}
-.vp-split span { width: 44px; height: 4px; border-radius: 2px; background: var(--edge); }
-.vp-split:hover span, .vp-split:active span { background: var(--soft); }
+/* ---------------------------------------------------------- clip log */
 .vp-log {
-  height: 210px; flex-shrink: 0; display: flex; flex-direction: column;
-  background: var(--cloud); min-height: 0;
+  width: 300px; flex-shrink: 0; display: flex; flex-direction: column;
+  background: var(--cloud); min-height: 0; overflow: hidden;
 }
-.vp.log-hidden .vp-log, .vp.log-hidden .vp-split { display: none; }
 .log-head {
-  display: flex; align-items: center; gap: 7px;
-  padding: 7px 12px; border-bottom: 1px solid var(--edge-soft);
+  display: flex; align-items: center; gap: 5px;
+  padding: 7px 8px; border-bottom: 1px solid var(--edge);
+  background: var(--cloud);
 }
 #vpLogSearch {
-  flex: 0 1 220px; min-width: 120px; height: 30px; padding: 0 10px; font-size: 13px;
-  border: 1px solid var(--edge); border-radius: var(--r-sm); outline: none;
+  flex: 1; min-width: 0; height: 26px; padding: 0 8px; font-size: 12px;
+  border: 1px solid var(--edge); border-radius: 6px; outline: none; background: var(--cloud);
 }
 #vpLogSearch:focus { border-color: var(--soft); }
 .log-head select {
-  height: 28px; max-width: 130px; font: inherit; font-size: 12px;
-  border: 1px solid var(--edge); border-radius: 7px; background: var(--cloud); color: var(--graphite);
+  height: 26px; max-width: 84px; font: inherit; font-size: 11.5px;
+  border: 1px solid var(--edge); border-radius: 6px; background: var(--cloud);
+  color: var(--graphite); padding: 0 2px;
 }
-.log-count { margin-left: auto; color: var(--soft); font-size: 11px; white-space: nowrap; }
-.log-list { flex: 1; overflow-y: auto; padding: 4px 6px 8px; }
+.log-count { color: var(--soft); font-size: 10.5px; white-space: nowrap; padding: 0 2px; }
+.log-list { flex: 1; overflow-y: auto; }
+/* Column headers, the table's own. Sticky so a long log keeps its labels. */
+.log-cols {
+  display: flex; gap: 8px; padding: 4px 10px;
+  position: sticky; top: 0; z-index: 1;
+  background: var(--sunken); border-bottom: 1px solid var(--edge);
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--soft);
+}
+.log-cols .c-time { width: 58px; flex-shrink: 0; }
+/* ALTERNATING ROWS (Tony's ask, mChapters' own look): the stripe is what
+   lets the eye track a timecode across to its name in a long list. */
 .log-row {
-  position: relative; display: flex; align-items: center; gap: 9px;
-  padding: 4px 9px; border-radius: 9px; cursor: pointer; min-height: 34px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 10px; min-height: 26px; cursor: pointer;
+  border-bottom: 1px solid transparent;
+  font-size: 12px; color: var(--graphite);
 }
-.log-row:hover { background: var(--sunken); }
-.log-row.on { background: var(--sunken); box-shadow: inset 0 0 0 1.5px var(--select); }
-.log-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); flex-shrink: 0; }
+.log-row:nth-child(even) { background: var(--sunken); }
+.log-row:hover { background: #ececec; color: var(--ink); }
+.log-row.on { background: var(--ink); color: var(--cloud); }
+.log-row.on .log-time, .log-row.on .tag-chip { color: rgba(255,255,255,.72); }
+.log-row.on .tag-chip { background: rgba(255,255,255,.14); border-color: transparent; }
+.log-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--c); flex-shrink: 0; }
+.log-time {
+  width: 58px; flex-shrink: 0; font-size: 11px; color: var(--mist);
+  font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
+}
 .log-name {
-  flex-shrink: 1; min-width: 0; max-width: 320px; font-size: 13px; font-weight: 800;
+  flex-shrink: 1; min-width: 0; font-weight: 600;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.log-time { flex-shrink: 0; font-size: 11.5px; color: var(--mist); font-variant-numeric: tabular-nums; }
-.log-tags { flex: 1; min-width: 100px; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.log-tags { flex: 1; min-width: 0; display: flex; align-items: center; gap: 3px; overflow: hidden; }
 .log-tagin {
-  border: none; background: none; outline: none; font: inherit; font-size: 12px;
-  color: var(--graphite); min-width: 56px; width: 56px; padding: 2px 0; opacity: 0;
+  border: none; background: none; outline: none; font: inherit; font-size: 11px;
+  color: var(--graphite); min-width: 40px; width: 40px; padding: 1px 0; opacity: 0;
 }
 .log-tagin::placeholder { color: var(--soft); }
 .log-row:hover .log-tagin, .log-tagin:focus { opacity: 1; }
-.log-acts { display: none; gap: 2px; flex-shrink: 0; }
+.log-acts { display: none; gap: 1px; flex-shrink: 0; }
 .log-row:hover .log-acts { display: inline-flex; }
-.log-empty { color: var(--mist); font-size: 13px; line-height: 1.5; padding: 16px 12px; }
+.log-acts .mini { height: 20px; padding: 0 5px; font-size: 10.5px; }
+.log-empty { color: var(--mist); font-size: 12px; line-height: 1.5; padding: 14px 10px; }
 
-/* panel editor */
-.pe-title { font-weight: 800; font-size: 13px; margin: 16px 0 6px; }
-.pe-cols { color: var(--soft); font-weight: 500; font-size: 11px; margin-left: 8px; }
-.pe-list { display: flex; flex-direction: column; }
-.pe-adds { display: flex; gap: 6px; margin-top: 4px; }
-.pe-row { display: flex; gap: 6px; align-items: center; margin-bottom: 5px; }
-.pe-row.dragging { opacity: 0.45; }
-.pe-row input { border: 1px solid var(--edge); border-radius: 7px; height: 30px; font: inherit; font-size: 13px; padding: 0 8px; }
-.pe-grip { cursor: grab; color: var(--soft); font-size: 13px; line-height: 1; user-select: none; padding: 0 1px; }
-.pe-grip:active { cursor: grabbing; }
-/* The preset swatches. Light grey is in the set on purpose; the colour well
-   beside them still reaches anything else. */
-.pe-swatches { display: flex; gap: 3px; flex-shrink: 0; }
-.pe-sw {
-  width: 15px; height: 22px; border-radius: 5px; padding: 0;
-  border: 1px solid rgba(0, 0, 0, .12); background: var(--c);
+/* ---------------------------------------------------------- tag column
+   Slim by design. A button is a 7-character chip carrying its colour as a
+   left rule and a soft wash - enough to tell them apart at a glance, quiet
+   enough that a column of twelve is not a paint chart. */
+.vp-side {
+  width: 124px; flex-shrink: 0; overflow-y: auto; container-type: inline-size;
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 8px 7px 12px; background: var(--cloud);
 }
-.pe-sw.on { box-shadow: 0 0 0 2px var(--cloud), 0 0 0 3.5px var(--ink); }
-.pe-color { width: 30px; padding: 2px !important; flex-shrink: 0; }
-.pe-label { flex: 1; min-width: 60px; }
-.pe-key { width: 40px; text-align: center; flex-shrink: 0; }
-.pe-num { width: 52px; flex-shrink: 0; }
-.pe-spacer { width: 110px; flex-shrink: 0; }
-.pe-row--div { color: var(--soft); }
-.pe-divword {
-  flex: 1; border-top: 1px dashed var(--edge); font-size: 11px;
-  text-transform: uppercase; letter-spacing: 0.08em; padding-top: 3px;
+.side-label {
+  font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.1em; color: var(--soft); margin: 7px 2px 2px;
+}
+.side-label:first-child { margin-top: 0; }
+.side-div { padding: 4px 2px; cursor: grab; }
+.side-div span { display: block; height: 1px; background: var(--edge); }
+.side-div.drag-over span { background: var(--select); }
+.tag-btn {
+  position: relative; display: flex; align-items: center; width: 100%;
+  text-align: left; cursor: grab;
+  border: 1px solid var(--edge); border-left: 2.5px solid var(--c, var(--soft));
+  border-radius: 6px; padding: 5px 6px 5px 7px;
+  background: color-mix(in srgb, var(--c, var(--soft)) 7%, var(--cloud));
+  font-size: 11.5px; font-weight: 650; color: var(--ink);
+  letter-spacing: -0.01em; white-space: nowrap;
+  transition: background .12s, border-color .12s, transform .06s;
+}
+.tag-btn:hover {
+  background: color-mix(in srgb, var(--c, var(--soft)) 15%, var(--cloud));
+  border-color: color-mix(in srgb, var(--c, var(--soft)) 45%, var(--edge));
+  border-left-color: var(--c, var(--soft));
+}
+.tag-btn:active { transform: translateY(0.5px); }
+.tag-btn.drag-over { box-shadow: inset 0 2px 0 var(--select); }
+.tag-btn-word { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tag-btn-tag { font-weight: 600; }
+.tag-btn-tag.on {
+  background: var(--ink); border-color: var(--ink); border-left-color: var(--c, var(--ink));
+  color: var(--cloud);
+}
+.tag-btn-mode { border-style: dashed; }
+.tag-edit {
+  justify-content: center; color: var(--soft); font-weight: 600; margin-top: 7px;
+  background: var(--cloud); border: 1px solid var(--edge); border-left: 1px solid var(--edge);
+  cursor: pointer; font-size: 10.5px; letter-spacing: 0.02em;
+}
+.tag-edit:hover { background: var(--sunken); color: var(--graphite); border-left-color: var(--edge); }
+.tag-key {
+  margin-left: 5px; font-size: 8.5px; font-weight: 700; color: var(--soft);
+  flex-shrink: 0; font-variant-numeric: tabular-nums;
+}
+.tag-btn-tag.on .tag-key { color: rgba(255,255,255,.6); }
+/* Under 96px the column is icon-width: the dot rule and 7 characters only. */
+@container (max-width: 96px) {
+  .vp-side { padding: 8px 4px 12px; }
+  .tag-btn { font-size: 10.5px; padding: 4px 3px 4px 5px; }
+  .tag-key { display: none; }
+  .side-label { font-size: 8px; letter-spacing: 0.06em; }
+  /* "Edit Buttons" does not fit an icon-width column; the pencil word does. */
+  .tag-edit { font-size: 0; }
+  .tag-edit::after { content: 'Edit'; font-size: 10.5px; }
 }
 
-/* upload sheet */
-.up-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-.up-name { color: var(--mist); font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.up-label { font-size: 13px; font-weight: 800; }
-.up-row select {
-  flex: 1; min-width: 0; height: 32px; font: inherit; font-size: 13px;
-  border: 1px solid var(--edge); border-radius: 7px; background: var(--cloud); color: var(--graphite);
-}
-.up-bar { height: 8px; border-radius: 4px; background: var(--sunken); overflow: hidden; margin: 12px 0 6px; }
-.up-bar span { display: block; height: 100%; width: 0; background: var(--ink); border-radius: 4px; transition: width .2s; }
-.up-status { color: var(--mist); font-size: 12.5px; min-height: 18px; }
+/* ---------------------------------------------------------- stage */
+.vp-stagecol { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.vp-stage { flex: 1; min-height: 0; }
 
-/* email sheet */
-.em-groups { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
-#emTo { width: 100%; height: 34px; border: 1px solid var(--edge); border-radius: var(--r-sm); padding: 0 10px; font: inherit; outline: none; }
-#emTo:focus { border-color: var(--soft); }
-.em-list { max-height: 34vh; overflow-y: auto; }
-.em-time { margin-left: auto; color: var(--soft); font-size: 12px; }
-.em-note { color: var(--soft); font-size: 12px; margin: 10px 0 0; }
+/* The timeline: one thin lane, no chrome around it. */
+.vp-tlwrap { position: relative; background: var(--ink); }
+.vp-timeline { width: 100%; height: 26px; display: block; cursor: pointer; touch-action: none; }
+
+/* The transport: timecode, controls, timecode - one row, centred. */
+.vp-transport {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; padding: 3px 10px; background: var(--cloud);
+  border-top: 1px solid var(--edge-soft);
+}
+.vp-tbtns { display: flex; align-items: center; gap: 2px; }
+.vp-tc {
+  font-size: 10.5px; color: var(--mist); font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em; min-width: 58px;
+}
+.vp-tc--r { text-align: right; }
+.tbtn {
+  width: 27px; height: 25px; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--graphite);
+}
+.tbtn svg { width: 15px; height: 15px; }
+.tbtn:hover { background: var(--sunken); color: var(--ink); }
+.tbtn-play { background: var(--ink); color: var(--cloud); width: 33px; }
+.tbtn-play:hover { background: var(--ink-raised); color: var(--cloud); }
+.tbtn-word { width: auto; padding: 0 8px; font-size: 11px; font-weight: 700; }
 
 /* ---------------------------------------------------------- responsive */
-@media (max-width: 900px) {
-  /* The side panel becomes a horizontal strip under everything: near the
-     thumbs on a tablet, and a narrow screen has no width to give a column. */
-  .vp-main { flex-direction: column; }
+/* Below 1100px the two side panels stack UNDER the video rather than
+   squeezing it: on a laptop screen a 300px log plus a tag column plus a
+   16:9 picture does not fit side by side and the picture is what loses. */
+@media (max-width: 1100px) {
+  .vp-main { flex-wrap: wrap; }
+  .vp-stagecol { order: -1; flex-basis: 100%; }
+  .vp-log { width: auto !important; flex: 1 1 260px; height: 190px; }
   .vp-side {
-    width: auto !important; flex-direction: row; align-items: center; overflow-x: auto; overflow-y: hidden;
-    container-type: normal;
-    border-left: none; border-top: 1px solid var(--edge-soft); padding: 8px 10px;
+    width: auto !important; flex: 0 0 auto; flex-direction: row; align-items: center;
+    overflow-x: auto; overflow-y: hidden; container-type: normal; padding: 7px 8px;
   }
   .vp-side .side-label { display: none; }
   .vp-side .tag-btn { width: auto; flex-shrink: 0; }
   .vp-side .tag-edit { margin-top: 0; }
-  /* The vertical handle has nothing to resize once the panel is a strip. */
-  .vp-vsplit { display: none; }
+  .vp-grip { display: none; }
   .side-div { padding: 0 3px; align-self: stretch; display: flex; align-items: center; }
   .side-div span { width: 1px; height: 60%; }
-  .vp-log { height: 180px; }
-  .log-name { max-width: 160px; }
-  .vp-hintkeys { display: none; }
 }
 @media (max-width: 560px) {
-  .vp-transport { gap: 3px; }
+  .vp-transport { gap: 2px; padding: 3px 6px; }
+  .vp-tc { min-width: 50px; font-size: 10px; }
 }

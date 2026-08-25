@@ -107,8 +107,8 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   are storage formats - additive changes only. `videoTags` (2026-08-25) is
   an optional array of strings on the game record: the VIDEO's own tags,
   shown and edited in the library file tree, distinct from a clip's `tags`.
-  Settings gained optional `logH` (the clip log's height in px) and
-  `sideW` (the tag panel's width in px).
+  Settings gained optional `logW` / `sideW` (the clip log's and tag
+  column's widths in px) and `scrubSensitivity`.
 - **The library file tree is full-width and tag-aware** (2026-08-25). Video
   rows carry their `videoTags` as chips with a write-in box (Enter adds,
   the chip's x removes, clicking a chip searches it); the search bar above
@@ -120,48 +120,48 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   `files/create_folder_v2`. Exporting a clip also writes a library record
   for the exported file carrying the clip's label and tags, so exports
   arrive in the tree already tagged.
-- **The player layout** (2026-08-25): tag buttons live in a slim vertical
-  side panel on the right (a horizontal strip below 900px); the clip log
-  sits full-width UNDER the video, split from it by a drag bar (height
-  persists in `settings.logH`, double-click resets); the header Clips
-  button hides the log entirely for a full-height picture. Log rows are one
-  line with tag chips and a write-in tag box per clip.
-- **Upload lives on the library header** (2026-08-25, Tony's ask): a sheet
-  uploads a picked video into the folder open in the tree, either Original
-  (as-is) or Compressed. Compression is the CTH Compressor's recipe done
-  with browser parts (canvas + MediaRecorder at 1080p ~4 Mbps or 720p
-  ~2.5 Mbps, audio kept via a silent WebAudio route), so it plays the clip
-  through once in REAL TIME - right for clips, wrong for whole games; the
-  Mac droplet stays the tool for those. Uploads go through
-  `dbxUploadProgress` (XHR for real progress; upload sessions chunk
-  anything past 24MB, so big film works), always `autorename` - an upload
-  must never overwrite film already there.
-- **Scrubbing is batched, never per-event, and CALIBRATED TO QUICKTIME**
-  (2026-08-25). A gesture accumulates into a target; at most one seek is in
-  flight, one precise seek settles on gesture end, and the playhead and
-  clock read the TARGET while a gesture runs. Steps under 1.5s seek
-  PRECISELY (fastSeek would snap them to keyframes, which reads as sticking
-  then teleporting on sparse-keyframe game film); bigger jumps take the
-  cheap keyframe landing and the settle seek finishes them.
-  **The rate is a FIXED 0.005 s/px, NOT duration-proportional.** The first
-  cut scaled it to duration and ran 7-50 s of video per second of swiping
-  on a 30-minute file; measured frame-by-frame off Tony's own screen
-  recordings of QuickTime scrubbing the same file, QuickTime moves 2-4 s
-  per second of swiping and barely accelerates. So: 0.005 s/px, a weak 1.4x
-  flick multiplier that only starts past 20px per event, Shift 8x finer.
-  Crossing a long file is the TIMELINE's job, not the swipe's.
-  **Swiping right moves forward**: macOS natural scrolling reports that as
-  negative deltaX, so the delta is negated (`scrubReverse` flips it back).
-  A gesture is claimed once and kept so vertical finger drift cannot
-  stutter it. The timeline drag rides the same pipe. Do not go back to
-  seeking per wheel or pointer event, and do not reintroduce
-  duration-scaling.
-- **The timeline is SLIM and carries its own timecodes** (2026-08-25,
-  mChapters as the reference): a 30px canvas where the clip lane is the
-  scrub bar, freeze marks tuck under it, and the current/total codes sit on
-  its ends instead of on a row of their own. With the tightened transport
-  row that returned ~76px of height to the picture.
-- **The tag panel resizes, collapses, and reorders** (2026-08-25): its own
+- **The scrub engine is PORTED FROM CTH FILM ROOM** (2026-08-25), from
+  `film-room/renderer/js/player.js`, which is where that feel was tuned.
+  `scrubDeltaSeconds` and `scrubMotionStep` are copied to the number - do
+  not "simplify" them into a constant rate:
+  - The rate is VELOCITY based (px per millisecond) with an asinh knee that
+    compresses only the fast tail, then integrated over each event's real
+    elapsed time. That integration is why light and coalesced gestures land
+    in the same place: macOS reports trackpad force as bigger deltas AND may
+    fold the same travel into fewer events, so anything counting per-event
+    measures the reporting, not the finger. Verified: 4px/8ms, 8px/16ms and
+    16px/32ms all give 6.91 s/sec.
+  - `scrubMotionStep` is a time-based spring easing the PAINTED position
+    onto the finger, and it is the smoothness. Two positions are kept apart:
+    `aim` (raw, jumpy) and `pos` (eased). Readouts follow `pos`.
+  - Steps under half a frame are not seeked; one seek is in flight at a
+    time, released by the video's own `seeked` event. That listener is
+    load-bearing: without it every gesture fires one seek and then waits out
+    the 250ms safety timeout, which is a scrub that moves in lurches.
+  - Swipe RIGHT advances (macOS sends negative deltaX; `scrubReverse`
+    flips it). The timeline drag rides the same engine via `scrubTo`.
+  - NOT ported: Film Room's WebCodecs decoder overlay (`scrubsource.js`),
+    which paints from a decoder it owns so a step costs a ~2ms decode
+    instead of a ~28ms seek. It needs a keyframe index and raw byte ranges,
+    which in Film Room come from Electron's main process; in the browser
+    that means a JS demuxer plus range requests against the Dropbox link.
+    This is the remaining gap if scrubbing still needs to be smoother.
+  - History worth keeping: a duration-proportional rate (a swipe crosses the
+    file) ran 7-50 s/sec on game film and was far too fast; a fixed 0.005
+    s/px was then too slow and still choppy because `fastSeek` was snapping
+    every small step to a keyframe. Do not reintroduce either.
+- **The player layout is mChapters-shaped** (2026-08-25, Tony's call):
+  left to right, Clip Log, tag column, video. The log is a striped table
+  (sticky TIME | CLIP header, alternating rows, H:MM:SS via `fmtHMS`, ink
+  selection); the tag column is slim with 7-character chips (`btnLabel`,
+  `BTN_MAX`) carrying their colour as a left rule plus a 7% wash. Both
+  panels have a grip and go genuinely narrow (log 150px, tags 58px, where a
+  container query compacts the chips) and both collapse from their header
+  button, which is what gives the video the whole window. Widths persist in
+  `settings.logW` / `settings.sideW`. The timeline is a 26px lane on ink
+  with the two timecodes in the transport row beneath it, and there is no
+  permanent hint text on screen.
+- **The tag panel reorders and the editor builds it** (2026-08-25): its own
   vertical drag handle (width persists in `settings.sideW`, double-click
   resets, 96px minimum where a container query switches the buttons to a
   compact drawing), a header Tags button to collapse it, and drag-to-

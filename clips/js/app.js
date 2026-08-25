@@ -369,6 +369,10 @@ async function showPlayer(id) {
         </div>
       </header>
       <div class="vp-main">
+        <section class="vp-log" id="vpLog"></section>
+        <div class="vp-grip" id="vpGripLog" title="Drag To Resize - Double-Click Resets"><span></span></div>
+        <aside class="vp-side" id="vpSide"></aside>
+        <div class="vp-grip" id="vpGripSide" title="Drag To Resize - Double-Click Resets"><span></span></div>
         <div class="vp-stagecol">
           <div class="vp-stage" id="vpStage">
             <video id="vpVideo" playsinline crossorigin="anonymous"></video>
@@ -381,23 +385,20 @@ async function showPlayer(id) {
           </div>
           <div class="vp-tlwrap">
             <canvas id="vpTimeline" class="vp-timeline"></canvas>
-            <span class="vp-tc vp-tc--l" id="vpClock">0:00.0</span>
-            <span class="vp-tc vp-tc--r" id="vpTotal">0:00</span>
           </div>
           <div class="vp-transport">
-            <button class="tbtn" id="vpBack5" title="Back 5s (Left Arrow)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 17l-5-5 5-5"/><path d="M18 17l-5-5 5-5"/></svg></button>
-            <button class="tbtn" id="vpFrameB" title="Previous Frame (,)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 17l-5-5 5-5"/><path d="M6 6v12"/></svg></button>
-            <button class="tbtn tbtn-play" id="vpPlay" title="Play / Pause (Space)"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M7 4.5v15l13-7.5z"/></svg></button>
-            <button class="tbtn" id="vpFrameF" title="Next Frame (.)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 17l5-5-5-5"/><path d="M18 6v12"/></svg></button>
-            <button class="tbtn" id="vpFwd5" title="Forward 5s (Right Arrow)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 17l5-5-5-5"/><path d="M6 17l5-5-5-5"/></svg></button>
-            <button class="tbtn tbtn-word" id="vpSpeed" title="Playback Speed (J Slower / L Faster)">1x</button>
-            <span class="vp-hintkeys">Two-Finger Swipe Scrubs (Shift = Fine) &middot; I/O Trim &middot; F Freeze</span>
+            <span class="vp-tc" id="vpClock">0:00:00</span>
+            <span class="vp-tbtns">
+              <button class="tbtn" id="vpBack5" title="Back 5s"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 17l-5-5 5-5"/><path d="M18 17l-5-5 5-5"/></svg></button>
+              <button class="tbtn" id="vpFrameB" title="Previous Frame"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 17l-5-5 5-5"/><path d="M6 6v12"/></svg></button>
+              <button class="tbtn tbtn-play" id="vpPlay" title="Play / Pause"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M7 4.5v15l13-7.5z"/></svg></button>
+              <button class="tbtn" id="vpFrameF" title="Next Frame"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 17l5-5-5-5"/><path d="M18 6v12"/></svg></button>
+              <button class="tbtn" id="vpFwd5" title="Forward 5s"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 17l5-5-5-5"/><path d="M6 17l5-5-5-5"/></svg></button>
+              <button class="tbtn tbtn-word" id="vpSpeed" title="Playback Speed">1x</button>
+            </span>
+            <span class="vp-tc vp-tc--r" id="vpTotal">0:00:00</span>
           </div>
-          <div class="vp-split" id="vpSplit" title="Drag To Resize The Clip Log - Double-Click Resets"><span></span></div>
-          <section class="vp-log" id="vpLog"></section>
         </div>
-        <div class="vp-vsplit" id="vpSplitV" title="Drag To Resize The Tag Panel - Double-Click Resets"><span></span></div>
-        <aside class="vp-side" id="vpSide"></aside>
       </div>
     </div>`;
 
@@ -405,8 +406,7 @@ async function showPlayer(id) {
   $('#vpLogBtn').onclick = () => { document.querySelector('.vp').classList.toggle('log-hidden'); };
   $('#vpSideBtn').onclick = () => { document.querySelector('.vp').classList.toggle('side-hidden'); };
   $('#vpEmail').onclick = () => openEmailSheet(game);
-  wireLogSplit();
-  wireSidePanel();
+  wirePanels();
 
   await openPlayer(game, src, {
     onShare: (clip, anchor) => openShareMenu(game, clip, anchor),
@@ -420,48 +420,65 @@ async function showPlayer(id) {
   });
 }
 
-// The tag panel's own drag handle, the same idiom as the log's: drag to
-// resize, double-click resets, width persists in settings. It goes narrow
-// enough (96px) that the buttons read as compact chips rather than rows.
-const SIDE_W_DEFAULT = 172;
-const SIDE_W_MIN = 96;
-function wireSidePanel() {
-  const split = $('#vpSplitV');
-  const side = $('#vpSide');
+// BOTH PANELS RESIZE AND COLLAPSE (2026-08-25, Tony's ask). Each has a grip
+// and each goes properly narrow: the log to 150px (a timecode plus a short
+// name), the tag column to 58px, where the buttons are 7-character chips.
+// Either collapses to nothing from its header button, which is the real
+// "out of the way" - a drag can only ever get small, never disappear.
+const LOG_W_DEFAULT = 300;
+const LOG_W_MIN = 150;
+const SIDE_W_DEFAULT = 124;
+const SIDE_W_MIN = 58;
+
+function wireResize({ grip, panel, key, def, min, max }) {
+  const h = $(grip);
+  const el = $(panel);
   const main = document.querySelector('.vp-main');
-  if (!split || !side) return;
-  const clampW = (w) => Math.max(SIDE_W_MIN, Math.min(Math.min(420, main.clientWidth - 320), w));
+  if (!h || !el) return;
+  // The ceiling is only meaningful once the row has a width. At init the
+  // panel is often measured before layout settles (main.clientWidth is 0),
+  // and clamping against that collapsed both panels to their minimums on
+  // every load - so the ceiling applies only when there is one to apply.
+  const clampW = (w) => {
+    const room = main.clientWidth ? Math.min(max, main.clientWidth - 280) : max;
+    return Math.max(min, Math.min(Math.max(min, room), w));
+  };
   void (async () => {
     const s = await getSettings();
-    side.style.width = `${clampW(s.sideW || SIDE_W_DEFAULT)}px`;
+    el.style.width = `${clampW(s[key] || def)}px`;
   })();
   let drag = null;
-  split.addEventListener('pointerdown', (e) => {
+  h.addEventListener('pointerdown', (e) => {
     e.preventDefault();
-    drag = { startX: e.clientX, startW: side.getBoundingClientRect().width };
+    drag = { startX: e.clientX, startW: el.getBoundingClientRect().width };
     // A pointer id can vanish between down and capture (and a synthetic
     // event has none); capture is an optimization, never a requirement.
-    try { split.setPointerCapture?.(e.pointerId); } catch (_) { /* fine */ }
+    try { h.setPointerCapture?.(e.pointerId); } catch (_) { /* fine */ }
   });
-  split.addEventListener('pointermove', (e) => {
+  h.addEventListener('pointermove', (e) => {
     if (!drag) return;
-    side.style.width = `${clampW(drag.startW + (drag.startX - e.clientX))}px`;
+    el.style.width = `${clampW(drag.startW + (e.clientX - drag.startX))}px`;
   });
   const done = async () => {
     if (!drag) return;
     drag = null;
     const s = await getSettings();
-    s.sideW = Math.round(side.getBoundingClientRect().width);
+    s[key] = Math.round(el.getBoundingClientRect().width);
     await putSettings(s);
   };
-  split.addEventListener('pointerup', done);
-  split.addEventListener('pointercancel', done);
-  split.addEventListener('dblclick', async () => {
-    side.style.width = `${SIDE_W_DEFAULT}px`;
+  h.addEventListener('pointerup', done);
+  h.addEventListener('pointercancel', done);
+  h.addEventListener('dblclick', async () => {
+    el.style.width = `${def}px`;
     const s = await getSettings();
-    s.sideW = SIDE_W_DEFAULT;
+    s[key] = def;
     await putSettings(s);
   });
+}
+
+function wirePanels() {
+  wireResize({ grip: '#vpGripLog', panel: '#vpLog', key: 'logW', def: LOG_W_DEFAULT, min: LOG_W_MIN, max: 560 });
+  wireResize({ grip: '#vpGripSide', panel: '#vpSide', key: 'sideW', def: SIDE_W_DEFAULT, min: SIDE_W_MIN, max: 240 });
 }
 
 // ------------------------------------------------------------- upload
@@ -609,48 +626,6 @@ function openUploadSheet() {
   };
 }
 
-// The drag bar between the video and the clip log: pulling it up grows the
-// log, pulling it down grows the picture. The height persists in settings so
-// the split lands where Tony left it; double-click resets to the default.
-const LOG_H_DEFAULT = 210;
-function wireLogSplit() {
-  const split = $('#vpSplit');
-  const log = $('#vpLog');
-  const col = document.querySelector('.vp-stagecol');
-  if (!split || !log) return;
-  const clampH = (h) => Math.max(96, Math.min(col.clientHeight - 260, h));
-  void (async () => {
-    const s = await getSettings();
-    log.style.height = `${clampH(s.logH || LOG_H_DEFAULT)}px`;
-  })();
-  let drag = null;
-  split.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    drag = { startY: e.clientY, startH: log.getBoundingClientRect().height };
-    // A pointer id can vanish between down and capture (and a synthetic
-    // event has none); capture is an optimization, never a requirement.
-    try { split.setPointerCapture?.(e.pointerId); } catch (_) { /* fine */ }
-  });
-  split.addEventListener('pointermove', (e) => {
-    if (!drag) return;
-    log.style.height = `${clampH(drag.startH + (drag.startY - e.clientY))}px`;
-  });
-  const done = async () => {
-    if (!drag) return;
-    drag = null;
-    const s = await getSettings();
-    s.logH = Math.round(log.getBoundingClientRect().height);
-    await putSettings(s);
-  };
-  split.addEventListener('pointerup', done);
-  split.addEventListener('pointercancel', done);
-  split.addEventListener('dblclick', async () => {
-    log.style.height = `${LOG_H_DEFAULT}px`;
-    const s = await getSettings();
-    s.logH = LOG_H_DEFAULT;
-    await putSettings(s);
-  });
-}
 
 // ------------------------------------------------------------- share
 

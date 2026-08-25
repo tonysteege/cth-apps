@@ -27,6 +27,23 @@ export const fmtTime = (t, withTenths = false) => {
   return withTenths ? `${base}.${Math.floor((s % 1) * 10)}` : base;
 };
 
+// H:MM:SS, the clip log's and the transport's format (2026-08-25, Tony's
+// call, mChapters' own): a game is an hour long, so minutes-only reads
+// wrong past 60, and tenths are noise when you are scanning a list.
+export const fmtHMS = (t) => {
+  if (!isFinite(t)) return '0:00:00';
+  const s = Math.max(0, Math.floor(t));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return `${h}:${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+};
+
+// A button label is capped at 7 characters (Tony's call): the tag column is
+// slim by design and a long word either wraps it wider or gets cut mid-air.
+// Cutting at source keeps every chip the same shape.
+export const BTN_MAX = 7;
+export const btnLabel = (s) => (s || '').slice(0, BTN_MAX);
+
 export const video = () => el('vpVideo');
 
 export function clipName(c) {
@@ -113,7 +130,7 @@ function pressTagButton(b) {
 
 export function seek(t, keepFreeze = false) {
   const v = video();
-  seekState.target = null;
+  abortScrub(); // an explicit seek wins over a gesture still in flight
   v.currentTime = Math.max(0, Math.min(cur?.duration || v.duration || 0, t));
   if (!keepFreeze) cancelFreezeHold();
   cur.prevTick = null;
@@ -121,68 +138,148 @@ export function seek(t, keepFreeze = false) {
   paintClock();
 }
 
-// --- Batched seeking: the core of the QuickTime feel -----------------------
+// --- The scrub engine, ported from CTH Film Room -------------------------
 //
-// A trackpad burst (or a fast timeline drag) emits events far faster than a
-// video element can seek, and the old code seeked on every one, reading
-// `currentTime` back between them. A read mid-seek returns the in-flight
-// landing, so each event fought the last and the picture stuttered while the
-// playhead barely moved. The fix is the CTH Skills Academy film player's
-// model, ported whole: a TARGET is the single authority while the gesture
-// runs, at most one seek is in the pipe at a time (applied on animation
-// frames, `fastSeek` where the browser has it for cheap keyframe landings),
-// and one precise `currentTime` seek settles the frame when the gesture ends.
-const seekState = { target: null, raf: 0, timer: 0 };
+// This is `attachScrub` out of `film-room/renderer/js/player.js`, which is
+// where the feel Tony wants was built and tuned. The two functions below are
+// its heart and are copied to the number:
+//
+//   scrubDeltaSeconds - how a wheel event becomes media seconds. Velocity
+//     based (px per MILLISECOND, not px per event) with an asinh knee that
+//     compresses only the fast tail, then integrated over the event's real
+//     elapsed time. That last part is what makes light and coalesced
+//     gestures land in the same place: macOS reports trackpad force as
+//     bigger deltas AND may fold the same physical travel into fewer
+//     events, so anything that counts per-event is measuring the reporting,
+//     not the finger.
+//
+//   scrubMotionStep - a time-based spring easing the PAINTED position onto
+//     the finger. THIS is the smoothness. A trackpad does not hand out even
+//     deltas; Film Room measured step sizes varying 0.70 of their mean
+//     against QuickTime's 0.47 at the same painted rate. Pinning the
+//     picture rigidly to the raw total shows that unevenness as judder.
+//     Easing spends it instead. tau tightens from 46ms to 18ms as the gap
+//     grows, so a fling still keeps up while a resting finger settles
+//     exactly.
+//
+// TWO POSITIONS, and keeping them apart is the whole trick: `aim` is where
+// the finger has asked to be (raw, jumpy), `pos` is what we paint (eased).
+// Readouts follow `pos`, never `aim`.
+//
+// NOT ported: Film Room's WebCodecs decoder overlay (`scrubsource.js`),
+// which paints frames from a decoder it owns so a step costs a ~2ms decode
+// instead of a ~28ms seek. It needs a demuxed keyframe index and raw byte
+// ranges of the file, which in Film Room come from Electron's main process.
+// In the browser that means a JS demuxer plus range requests against the
+// Dropbox link. So this port keeps <video> as the only picture source, and
+// the seek pacing below is written around its ~30 seeks/sec ceiling.
+const seekState = { aim: null, pos: null, raf: 0, busy: false, unlock: 0, lastPumpAt: 0, lastPumped: null };
 
-function armApply() {
-  if (seekState.raf) return;
-  seekState.raf = requestAnimationFrame(applyQueuedSeek);
-  // rAF stops when the tab is hidden or occluded (same reason the freeze
-  // tick also rides timeupdate); the timer backstop keeps a queued seek
-  // from stranding there.
-  clearTimeout(seekState.timer);
-  seekState.timer = setTimeout(applyQueuedSeek, 64);
+// Copied verbatim from film-room/renderer/js/player.js. Do not "simplify"
+// these into a constant rate: the asinh knee and the dt integration are the
+// reason a hard swipe and a gentle one both land where the finger meant.
+export function scrubDeltaSeconds(deltaX, dtMs, sensitivity = 1, fine = false) {
+  const dt = Math.max(4, Math.min(40, Number(dtMs) || 8));
+  const rawV = Math.abs(Number(deltaX) || 0) / dt;
+  const knee = 0.65;
+  const v = knee * Math.asinh(rawV / knee);
+  const scale = fine ? 0.002 : 0.015;
+  return Math.sign(deltaX || 0) * v * dt * scale * Math.max(0.3, Math.min(3, sensitivity || 1));
 }
-function queueSeek(t) {
-  if (!cur) return;
-  seekState.target = Math.max(0, Math.min(cur.duration || 0, t));
-  armApply();
+
+export function scrubMotionStep(pos, aim, dtMs, frameRate = 30) {
+  const gap = aim - pos;
+  if (Math.abs(gap) < 0.5 / Math.max(10, frameRate || 30)) return aim;
+  const x = Math.max(0, Math.min(1, (Math.abs(gap) - 0.08) / 1.42));
+  const blend = x * x * (3 - 2 * x);
+  const tau = 46 + (18 - 46) * blend;
+  const alpha = 1 - Math.exp(-Math.max(4, Math.min(40, dtMs || 8)) / tau);
+  return pos + gap * alpha;
 }
-function applyQueuedSeek() {
-  cancelAnimationFrame(seekState.raf);
-  clearTimeout(seekState.timer);
+
+const FRAME_DUR = 1 / 30; // honest default; the browser will not report real fps
+
+// One display refresh of work: ease the painted position toward the finger,
+// then seek the element only when it is free and the move is worth a frame.
+function pump() {
   seekState.raf = 0;
-  seekState.timer = 0;
-  if (!cur || seekState.target == null) return;
+  if (seekState.pos == null || seekState.aim == null) return;
   const v = video();
-  // One seek in flight at a time: wait a beat rather than piling on.
-  if (v.seeking) { armApply(); return; }
-  // Small steps seek PRECISELY so a slow scrub steps through real frames
-  // the way QuickTime does; fastSeek would snap them all to the nearest
-  // keyframe, which on sparse-keyframe game film reads as the picture
-  // sticking then teleporting. Big jumps (a flick, a timeline drag across
-  // minutes) take the cheap keyframe landing first, and settleSeek's
-  // precise seek finishes the job when the gesture ends.
-  const step = Math.abs(seekState.target - v.currentTime);
-  if (step > 1.5 && typeof v.fastSeek === 'function') v.fastSeek(seekState.target);
-  else v.currentTime = seekState.target;
-  cur.prevTick = null;
+  const now = performance.now();
+  const dt = Math.max(4, now - (seekState.lastPumpAt || now - 8));
+  seekState.pos = scrubMotionStep(seekState.pos, seekState.aim, dt, 1 / FRAME_DUR);
+  const travel = Math.abs(seekState.pos - (seekState.lastPumped == null ? seekState.pos : seekState.lastPumped));
+  seekState.lastPumped = seekState.pos;
+  seekState.lastPumpAt = now;
+  // Readouts follow the PICTURE, not the raw finger.
+  drawTimeline();
+  paintClock();
+  // One seek in flight at a time. Half a frame of error is not worth a seek
+  // that would block the next one - that queueing IS the choppiness.
+  if (!seekState.busy && Math.abs(seekState.pos - v.currentTime) >= FRAME_DUR / 2) {
+    seekState.busy = true;
+    v.currentTime = seekState.pos;
+    // Safety valve: a 'seeked' that never arrives must not kill the gesture.
+    clearTimeout(seekState.unlock);
+    seekState.unlock = setTimeout(() => { seekState.busy = false; }, 250);
+  }
+  scheduleScrub();
 }
-function settleSeek() {
-  if (!cur || seekState.target == null) return;
-  const t = seekState.target;
-  cancelAnimationFrame(seekState.raf);
-  clearTimeout(seekState.timer);
-  seekState.raf = 0;
-  seekState.timer = 0;
-  seekState.target = null;
-  video().currentTime = t; // the one precise, non-fast seek
-  cur.prevTick = null;
+function scheduleScrub() {
+  if (seekState.raf == null || seekState.raf === 0) {
+    if (seekState.pos != null) seekState.raf = requestAnimationFrame(pump);
+  }
 }
-// While a gesture runs the UI tracks the finger, not the decoder: the
-// playhead and clock read the target so they stay glued to the gesture even
-// when a between-keyframes landing is still decoding.
-function headTime() { return seekState.target ?? video().currentTime; }
+
+// The gesture is over: hand the element the exact final position.
+function endScrubGesture() {
+  const finalPos = seekState.aim;
+  seekState.aim = null;
+  seekState.pos = null;
+  seekState.lastPumped = null;
+  seekState.lastPumpAt = 0;
+  seekState.busy = false;
+  clearTimeout(seekState.unlock);
+  if (seekState.raf) { cancelAnimationFrame(seekState.raf); seekState.raf = 0; }
+  if (cur && finalPos != null) {
+    const v = video();
+    if (Math.abs(v.currentTime - finalPos) >= FRAME_DUR / 2) v.currentTime = finalPos;
+    cur.prevTick = null;
+  }
+}
+
+// While a gesture runs the UI tracks the eased picture position, not the
+// decoder, so the playhead and clock never freeze mid-scrub and then leap.
+function headTime() { return seekState.pos ?? video().currentTime; }
+
+// Drive the same eased engine from something that is not a wheel event -
+// the timeline drag, which hands an absolute time rather than a delta.
+function scrubTo(t, start = false) {
+  if (!cur) return;
+  const v = video();
+  if (start || seekState.pos == null) {
+    if (!v.paused) v.pause();
+    cancelFreezeHold();
+    seekState.pos = v.currentTime;
+    seekState.lastPumped = seekState.pos;
+    seekState.lastPumpAt = 0;
+  }
+  seekState.aim = Math.max(0, Math.min(cur.duration || v.duration || 0, t));
+  scheduleScrub();
+}
+
+// Drop a live gesture WITHOUT settling it: an explicit seek elsewhere is
+// where the user is going, and settling would yank the playhead back.
+function abortScrub() {
+  seekState.aim = null;
+  seekState.pos = null;
+  seekState.lastPumped = null;
+  seekState.lastPumpAt = 0;
+  seekState.busy = false;
+  clearTimeout(seekState.unlock);
+  clearTimeout(scrubEndTimer);
+  if (seekState.raf) { cancelAnimationFrame(seekState.raf); seekState.raf = 0; }
+}
 
 function togglePlay() {
   const v = video();
@@ -204,63 +301,42 @@ function setSpeed(s) {
   if (b) b.textContent = `${s}x`;
 }
 
-// QuickTime-style two-finger scrub on the stage. The rate is CALIBRATED TO
-// QUICKTIME ITSELF, measured frame-by-frame off Tony's own screen recordings
-// of both apps scrubbing the same 30:00 game file (2026-08-25): QuickTime
-// moves 2-4 seconds of video per second of swiping at every finger speed,
-// and it does NOT scale with the length of the file. The first cut here
-// scaled the rate to duration (a 900px swipe crossed the file), which on
-// game film hit its ceiling and ran 7-50 s/sec - five to fifteen times
-// QuickTime, with the picture teleporting whole seconds per painted frame.
-// Duration scaling is gone; crossing a long file is the timeline's job.
+// The wheel handler, ported from Film Room's `attachScrub`. A gesture is a
+// stream of wheel events; it ends when they stop for a beat (260ms there,
+// kept here - shorter and momentum's own gaps end the gesture early).
 //
-// So: a fixed ~0.006 s/px base (a normal ~500px/s swipe = ~3 s/sec, right in
-// QuickTime's band), with a MILD per-event acceleration so a hard flick
-// travels rather than crawls, capped low enough that the picture never
-// teleports. Shift is the fine pass, eight times slower, for finding the
-// frame where stick meets puck.
-//
-// A gesture is CLAIMED once and kept, so finger drift cannot stutter it;
-// vertical scrolls are never stolen (1.4 margin - trackpads leak a little of
-// the other axis on every gesture). Seeks batch through queueSeek, never one
-// per wheel event.
-// Measured off the recordings: a trackpad emits ~60 wheel events a second,
-// and QuickTime moved ~3 seconds of video per second of swiping. At 0.005
-// s/px a normal ~8px-per-event swipe lands on 2.4 s/sec and a gentle 3px
-// one on 0.9 - QuickTime's band. Acceleration is deliberately WEAK (1.4x,
-// and it only starts on a genuine flick) because Tony's recording shows
-// QuickTime barely accelerating at all: he swiped at several speeds and the
-// playhead kept about the same pace.
-const SCRUB_SEC_PER_PX = 0.005;
-const SCRUB_ACCEL_START = 20; // px per event before a swipe counts as a flick
-const SCRUB_ACCEL_MAX = 1.4;  // flick multiplier ceiling
-const FINE_DIVISOR = 8;
-const SCRUB_END_MS = 140;
+// Direction: swipe RIGHT advances. macOS natural scrolling delivers a
+// NEGATIVE deltaX for a rightward swipe, so the sign is inverted; the
+// scrubReverse setting flips it back for anyone on classic scrolling.
+const GESTURE_IDLE_MS = 260;
+let scrubEndTimer = 0;
+let lastWheelAt = 0;
 
-const isScrubGesture = (dx, dy) => Math.abs(dx) > Math.abs(dy) * 1.4 && Math.abs(dx) > 0.5;
-
-let scrub = null; // { endTimer } - target lives in seekState
 function onStageWheel(e) {
   if (!cur) return;
-  if (!scrub && !isScrubGesture(e.deltaX, e.deltaY)) return; // vertical = page scroll
+  if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return; // vertical = page scroll
+  if (e.ctrlKey) return;                                // pinch-zoom, not a scrub
   e.preventDefault();
   const v = video();
-  if (!scrub) {
-    if (!v.paused) v.pause();
-    cancelFreezeHold();
-    scrub = { endTimer: 0 };
-    seekState.target = v.currentTime;
+  if (!v.duration) return;
+  if (!v.paused) v.pause();
+  cancelFreezeHold();
+  if (seekState.pos == null) {
+    seekState.aim = seekState.pos = v.currentTime;
+    seekState.lastPumped = seekState.pos;
+    seekState.lastPumpAt = 0;
+    lastWheelAt = 0;
   }
-  // Swiping RIGHT moves FORWARD (2026-08-25, Tony's report: it was
-  // backwards). macOS natural scrolling reports a rightward two-finger
-  // swipe as NEGATIVE deltaX, so the default direction negates the delta;
-  // scrubReverse stays as the escape hatch for flipped scroll settings.
   const dir = cur.settings.scrubReverse ? 1 : -1;
-  const accel = Math.min(SCRUB_ACCEL_MAX, Math.max(1, Math.abs(e.deltaX) / SCRUB_ACCEL_START));
-  const rate = (SCRUB_SEC_PER_PX * accel) / (e.shiftKey ? FINE_DIVISOR : 1);
-  queueSeek(seekState.target + dir * e.deltaX * rate);
-  clearTimeout(scrub.endTimer);
-  scrub.endTimer = setTimeout(() => { scrub = null; settleSeek(); }, SCRUB_END_MS);
+  const sens = cur.settings.scrubSensitivity || 1;
+  const at = performance.now();
+  const eventDt = lastWheelAt ? at - lastWheelAt : 8;
+  lastWheelAt = at;
+  const step = scrubDeltaSeconds(e.deltaX, eventDt, sens, e.shiftKey);
+  seekState.aim = Math.min(cur.duration || v.duration, Math.max(0, seekState.aim + dir * step));
+  scheduleScrub();
+  clearTimeout(scrubEndTimer);
+  scrubEndTimer = setTimeout(endScrubGesture, GESTURE_IDLE_MS);
 }
 
 // ------------------------------------------------------------- clip mode
@@ -463,17 +539,17 @@ function onTlDown(e) {
     if (hit && hit.id !== cur.sel) setSel(hit.id);
     tlDrag = { kind: 'seek' };
     cancelFreezeHold();
-    queueSeek(t);
+    scrubTo(t, true);
   }
   tlCanvas().setPointerCapture?.(e.pointerId);
 }
 function onTlMove(e) {
   if (!tlDrag || !cur) return;
   const t = tlPointT(e);
-  // Same batched pipe the trackpad scrub uses: a fast drag emits pointer
+  // The same eased pipe the trackpad scrub uses: a fast drag emits pointer
   // events quicker than the video can seek, so per-event seeks stutter here
   // for exactly the same reason they did on the stage.
-  if (tlDrag.kind === 'seek') { queueSeek(t); return; }
+  if (tlDrag.kind === 'seek') { scrubTo(t); return; }
   const c = cur.game.clips.find((x) => x.id === tlDrag.id);
   if (!c) return;
   if (tlDrag.kind === 'in') c.in = Math.max(0, Math.min(c.out - 0.3, t));
@@ -483,7 +559,7 @@ function onTlMove(e) {
 }
 function onTlUp() {
   if (!tlDrag) return;
-  if (tlDrag.kind === 'seek') settleSeek();
+  if (tlDrag.kind === 'seek') endScrubGesture();
   else scheduleSave();
   tlDrag = null;
 }
@@ -507,10 +583,10 @@ function paintBar() {
     if (b.divider) return `<div class="side-div" data-drag="${b.id}" draggable="true" title="Divider - Drag To Move"><span></span></div>`;
     return b.tier === 1 ? `
     <button class="tag-btn" draggable="true" data-drag="${b.id}" data-clipbtn="${b.id}" style="--c:${b.color}" title="${esc(b.label)}: Clip ${b.lead}s Before To ${b.lag}s After The Playhead. Drag To Reorder">
-      <span class="tag-btn-word">${esc(b.label)}</span>${keyBadge(b.key)}
+      <span class="tag-btn-word">${esc(btnLabel(b.label))}</span>${keyBadge(b.key)}
     </button>` : `
     <button class="tag-btn tag-btn-tag${c?.tags.includes(b.label) ? ' on' : ''}" draggable="true" data-drag="${b.id}" data-tagbtn="${b.id}" style="--c:${b.color}" title="Toggle #${esc(b.label)} On The Selected Clip. Drag To Reorder">
-      <span class="tag-btn-word">#${esc(b.label)}</span>${keyBadge(b.key)}
+      <span class="tag-btn-word">${esc(btnLabel(b.label))}</span>${keyBadge(b.key)}
     </button>`;
   };
   bar.innerHTML = `
@@ -602,28 +678,29 @@ export function paintLog() {
   log.innerHTML = `
     <div class="log-head">
       <input id="vpLogSearch" type="search" placeholder="Search Clips…" value="${esc(view.search)}" autocomplete="off">
-      <select id="vpLogLabel" title="Filter By Clip Button">
+      <select id="vpLogLabel">
         <option value="">All Clips</option>
         ${labels.map((l) => `<option${view.label === l ? ' selected' : ''}>${esc(l)}</option>`).join('')}
       </select>
-      <select id="vpLogTag" title="Filter By Tag">
+      <select id="vpLogTag">
         <option value="">All Tags</option>
         ${tags.map((t) => `<option${view.tag === t ? ' selected' : ''}>${esc(t)}</option>`).join('')}
       </select>
-      <button class="mini" id="vpLogSort" title="Flip Sort Order">${view.sort === 'timedesc' ? 'Newest' : 'Timeline'}</button>
+      <button class="mini" id="vpLogSort">${view.sort === 'timedesc' ? 'Newest' : 'Timeline'}</button>
       <div class="log-count">${list.length} Of ${cur.game.clips.length} Clip${cur.game.clips.length === 1 ? '' : 's'}</div>
     </div>
     <datalist id="vpTagOpts">${tagOpts.map((t) => `<option value="${esc(t)}">`).join('')}</datalist>
+    <div class="log-cols"><span class="c-time">Time</span><span>Clip</span></div>
     <div class="log-list">
       ${list.map((c) => `
         <div class="log-row${c.id === cur.sel ? ' on' : ''}" data-id="${c.id}">
+          <span class="log-time">${fmtHMS(c.in)}</span>
           <span class="log-dot" style="--c:${c.color || '#3b82f6'}"></span>
-          <span class="log-name" title="Double-Click To Rename">${esc(c.name || c.label)}</span>
-          <span class="log-time">${fmtTime(c.in)} - ${fmtTime(c.out)}</span>
+          <span class="log-name">${esc(c.name || c.label)}</span>
           <span class="log-tags">
             ${c.tags.map((t) => `<span class="tag-chip">#${esc(t)}<button data-rmtag="${esc(t)}" title="Remove #${esc(t)}">&times;</button></span>`).join('')}
             <input class="log-tagin" data-tagrow="${c.id}" list="vpTagOpts" placeholder="+ Tag" autocomplete="off"
-              title="Type A Tag And Press Enter - It Lands On This Clip">
+              >
           </span>
           <span class="log-acts">
             <button class="mini" data-do="play" title="Play This Clip">Play</button>
@@ -883,9 +960,9 @@ function onKey(e) {
 function paintClock() {
   if (!cur) return;
   const c = el('vpClock');
-  if (c) c.textContent = fmtTime(headTime(), true);
+  if (c) c.textContent = fmtHMS(headTime());
   const t = el('vpTotal');
-  if (t) t.textContent = fmtTime(cur.duration);
+  if (t) t.textContent = fmtHMS(cur.duration);
 }
 
 function raf() {
@@ -988,6 +1065,14 @@ function wireOnce() {
   // rAF stops in background tabs; the media clock does not. timeupdate keeps
   // freezes and clip bounds firing even when the tab is not compositing.
   el('vpVideo').addEventListener('timeupdate', () => { if (cur) { freezeTick(); clipModeTick(); } });
+  // THE PUMP'S RELEASE VALVE. One seek is allowed in flight at a time, and
+  // this is what says the last one landed. Without it every gesture fires a
+  // single seek, waits out the 250ms safety timeout, fires another - which
+  // is a scrub that moves in lurches. Film Room learned the same lesson.
+  el('vpVideo').addEventListener('seeked', () => {
+    clearTimeout(seekState.unlock);
+    seekState.busy = false;
+  });
   const tl = tlCanvas();
   tl.addEventListener('pointerdown', onTlDown);
   tl.addEventListener('pointermove', onTlMove);
