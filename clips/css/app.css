@@ -108,6 +108,13 @@
   position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain;
 }
 #vpOverlay { pointer-events: none; }
+/* The scrub overlay: the decoder's picture, painted over the video while a
+   gesture runs. Same box, same object-fit, so the swap is pixel-invisible. */
+.scrub-paint {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: contain; display: none; pointer-events: none; background: #0b0b0b;
+}
+.scrub-paint.on { display: block; }
 
 .an-root { position: absolute; inset: 0; background: #0b0b0b; }
 .an-frame { pointer-events: none; }
@@ -228,35 +235,36 @@
 .side-div span { display: block; height: 1px; background: var(--edge); }
 .side-div.drag-over span { background: var(--select); }
 .tag-btn {
-  position: relative; display: flex; align-items: center; width: 100%;
+  display: flex; align-items: center; gap: 6px; width: 100%;
   text-align: left; cursor: grab;
-  border: 1px solid var(--edge); border-left: 2.5px solid var(--c, var(--soft));
-  border-radius: 6px; padding: 5px 6px 5px 7px;
-  background: color-mix(in srgb, var(--c, var(--soft)) 7%, var(--cloud));
-  font-size: 11.5px; font-weight: 650; color: var(--ink);
+  border: 1px solid var(--edge); border-radius: var(--r-sm);
+  padding: 3px 7px;
+  background: var(--cloud); box-shadow: var(--shadow-1);
+  font-size: 11.5px; font-weight: 600; color: var(--graphite);
   letter-spacing: -0.01em; white-space: nowrap;
-  transition: background .12s, border-color .12s, transform .06s;
+  transition: box-shadow .12s, border-color .12s, color .12s, transform .06s;
 }
-.tag-btn:hover {
-  background: color-mix(in srgb, var(--c, var(--soft)) 15%, var(--cloud));
-  border-color: color-mix(in srgb, var(--c, var(--soft)) 45%, var(--edge));
-  border-left-color: var(--c, var(--soft));
+/* The dot IS the button's colour - vibrant, set per button in the panel
+   editor's colour settings. */
+.tag-btn::before {
+  content: ''; flex-shrink: 0;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--c, var(--soft));
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, .12);
 }
-.tag-btn:active { transform: translateY(0.5px); }
+.tag-btn:hover { border-color: #cfcfcf; color: var(--ink); box-shadow: var(--shadow-2); }
+.tag-btn:active { transform: translateY(0.5px); cursor: grabbing; }
 .tag-btn.drag-over { box-shadow: inset 0 2px 0 var(--select); }
 .tag-btn-word { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .tag-btn-tag { font-weight: 600; }
-.tag-btn-tag.on {
-  background: var(--ink); border-color: var(--ink); border-left-color: var(--c, var(--ink));
-  color: var(--cloud);
-}
+.tag-btn-tag.on { background: var(--ink); border-color: var(--ink); color: var(--cloud); box-shadow: none; }
 .tag-btn-mode { border-style: dashed; }
 .tag-edit {
   justify-content: center; color: var(--soft); font-weight: 600; margin-top: 7px;
-  background: var(--cloud); border: 1px solid var(--edge); border-left: 1px solid var(--edge);
-  cursor: pointer; font-size: 10.5px; letter-spacing: 0.02em;
+  cursor: pointer; font-size: 10.5px; letter-spacing: 0.02em; box-shadow: none;
 }
-.tag-edit:hover { background: var(--sunken); color: var(--graphite); border-left-color: var(--edge); }
+.tag-edit::before { display: none; }
+.tag-edit:hover { background: var(--sunken); color: var(--graphite); box-shadow: none; }
 .tag-key {
   margin-left: 5px; font-size: 8.5px; font-weight: 700; color: var(--soft);
   flex-shrink: 0; font-variant-numeric: tabular-nums;
@@ -265,7 +273,8 @@
 /* Under 96px the column is icon-width: the dot rule and 7 characters only. */
 @container (max-width: 96px) {
   .vp-side { padding: 8px 4px 12px; }
-  .tag-btn { font-size: 10.5px; padding: 4px 3px 4px 5px; }
+  .tag-btn { font-size: 10.5px; padding: 3px 4px; gap: 4px; }
+  .tag-btn::before { width: 7px; height: 7px; }
   .tag-key { display: none; }
   .side-label { font-size: 8px; letter-spacing: 0.06em; }
   /* "Edit Buttons" does not fit an icon-width column; the pencil word does. */

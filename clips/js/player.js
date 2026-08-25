@@ -10,6 +10,7 @@
 // itself is never touched.
 
 import { getSettings, putSettings, putGame, uid } from './store.js';
+import { openScrubSource, releaseScrubSource, scrubProviderFor } from './scrubsource.js';
 import { toast, esc } from './ui.js';
 import { drawEl } from '/diagrams/js/flat.js';
 
@@ -138,46 +139,29 @@ export function seek(t, keepFreeze = false) {
   paintClock();
 }
 
-// --- The scrub engine, ported from CTH Film Room -------------------------
+// --- The scrub engine: CTH Film Room's attachScrub, whole ----------------
 //
-// This is `attachScrub` out of `film-room/renderer/js/player.js`, which is
-// where the feel Tony wants was built and tuned. The two functions below are
-// its heart and are copied to the number:
+// Ported 2026-08-25 from film-room/renderer/js/player.js AND its decoder
+// (scrubsource.js), because the spring alone was not enough: every element
+// seek still cost ~28ms and re-decoded from the previous keyframe, and that
+// unevenness is what Tony kept filming as chop. The engine has three layers:
 //
-//   scrubDeltaSeconds - how a wheel event becomes media seconds. Velocity
-//     based (px per MILLISECOND, not px per event) with an asinh knee that
-//     compresses only the fast tail, then integrated over the event's real
-//     elapsed time. That last part is what makes light and coalesced
-//     gestures land in the same place: macOS reports trackpad force as
-//     bigger deltas AND may fold the same physical travel into fewer
-//     events, so anything that counts per-event is measuring the reporting,
-//     not the finger.
+//   1. scrubDeltaSeconds turns wheel events into media seconds (velocity
+//      based, asinh knee, integrated over each event's real elapsed time).
+//   2. scrubMotionStep eases the PAINTED position onto the finger - `aim` is
+//      the raw target, `pos` is what we paint, and readouts follow `pos`.
+//   3. The pump asks OUR OWN DECODER first (scrubsource.js): it paints
+//      decoded frames onto an overlay canvas at display rate, so a step
+//      costs ~2ms instead of a 28ms seek. Only when the decoder cannot serve
+//      does the element get seeked - snapped to a keyframe when the keyframe
+//      is nearer than the step being taken. On release the element takes the
+//      exact final frame and the overlay drops only once it has it.
 //
-//   scrubMotionStep - a time-based spring easing the PAINTED position onto
-//     the finger. THIS is the smoothness. A trackpad does not hand out even
-//     deltas; Film Room measured step sizes varying 0.70 of their mean
-//     against QuickTime's 0.47 at the same painted rate. Pinning the
-//     picture rigidly to the raw total shows that unevenness as judder.
-//     Easing spends it instead. tau tightens from 46ms to 18ms as the gap
-//     grows, so a fling still keeps up while a resting finger settles
-//     exactly.
-//
-// TWO POSITIONS, and keeping them apart is the whole trick: `aim` is where
-// the finger has asked to be (raw, jumpy), `pos` is what we paint (eased).
-// Readouts follow `pos`, never `aim`.
-//
-// NOT ported: Film Room's WebCodecs decoder overlay (`scrubsource.js`),
-// which paints frames from a decoder it owns so a step costs a ~2ms decode
-// instead of a ~28ms seek. It needs a demuxed keyframe index and raw byte
-// ranges of the file, which in Film Room come from Electron's main process.
-// In the browser that means a JS demuxer plus range requests against the
-// Dropbox link. So this port keeps <video> as the only picture source, and
-// the seek pacing below is written around its ~30 seeks/sec ceiling.
-const seekState = { aim: null, pos: null, raf: 0, busy: false, unlock: 0, lastPumpAt: 0, lastPumped: null };
+// The decoder is optional by design: webm, fragmented mp4, unsupported
+// codecs, rotated files and range-refusing servers all just mean layer 3
+// falls back to seeks - the pre-decoder behaviour, spring intact.
+const FRAME_DUR = 1 / 30; // honest default; the browser will not report real fps
 
-// Copied verbatim from film-room/renderer/js/player.js. Do not "simplify"
-// these into a constant rate: the asinh knee and the dt integration are the
-// reason a hard swipe and a gentle one both land where the finger meant.
 export function scrubDeltaSeconds(deltaX, dtMs, sensitivity = 1, fine = false) {
   const dt = Math.max(4, Math.min(40, Number(dtMs) || 8));
   const rawV = Math.abs(Number(deltaX) || 0) / dt;
@@ -197,89 +181,195 @@ export function scrubMotionStep(pos, aim, dtMs, frameRate = 30) {
   return pos + gap * alpha;
 }
 
-const FRAME_DUR = 1 / 30; // honest default; the browser will not report real fps
+// The decoder source for the OPEN video (null = plain seeking). Owned by
+// openPlayer/closePlayer; the gesture borrows it via gestureSrc.
+let scrubSrc = null;
+let gestureSrc = null;   // the source THIS gesture is painting from, if any
+let paint = null;        // the overlay canvas while it is showing
+let pctx = null;
+let lastPaintT = null;   // media time of the frame the overlay shows
 
-// One display refresh of work: ease the painted position toward the finger,
-// then seek the element only when it is free and the move is worth a frame.
+const seekState = {
+  aim: null, pos: null, raf: 0, timer: 0,
+  busy: false, ourSeekT: null, unlock: 0,
+  lastPumpAt: 0, lastPumped: null,
+};
+
+// Warm the decoder wherever the playhead rests, so the next gesture starts
+// with frames already decoded around it instead of walking a keyframe run
+// while <video> covers. Debounced, never against playback or a live gesture.
+let primeTimer = 0;
+function primeSoon(delay = 350) {
+  clearTimeout(primeTimer);
+  primeTimer = setTimeout(() => {
+    const v = video();
+    if (!cur || !scrubSrc || seekState.pos != null) return;
+    if (v.paused && v.readyState >= 1) scrubSrc.prime(v.currentTime);
+  }, delay);
+}
+
+// The overlay lives on the stage beside the video; both are inset:0 with
+// object-fit contain, so the swap between them is pixel-invisible.
+function startPaint(source) {
+  const v = video();
+  if (v.readyState < 2) return false;
+  const stage = el('vpStage');
+  if (!stage) return false;
+  let c = stage.querySelector(':scope > canvas.scrub-paint');
+  if (!c) {
+    c = document.createElement('canvas');
+    c.className = 'scrub-paint';
+    stage.insertBefore(c, v.nextSibling);
+  }
+  if (c.width !== source.width || c.height !== source.height) { c.width = source.width; c.height = source.height; }
+  paint = c;
+  pctx = c.getContext('2d', { alpha: false });
+  try { pctx.drawImage(v, 0, 0, c.width, c.height); } catch (_) { paint = null; pctx = null; return false; }
+  lastPaintT = v.currentTime;
+  c.classList.add('on');
+  return true;
+}
+
+// Hand the real video the final position and only then drop the overlay -
+// hiding it first would flash whatever frame the element was left on.
+// `external` = an outside seek is already in flight: keep the overlay until
+// IT lands, and never counter-seek it.
+function settle(finalPos, external = false) {
+  if (!paint) return;
+  const v = video();
+  const c = paint;
+  paint = null; pctx = null;
+  let tid = null;
+  const done = () => { v.removeEventListener('seeked', done); clearTimeout(tid); c.classList.remove('on'); };
+  if (external) {
+    v.addEventListener('seeked', done);
+    tid = setTimeout(done, 700);
+    return;
+  }
+  if (finalPos == null || Math.abs(v.currentTime - finalPos) < FRAME_DUR / 2) { done(); return; }
+  v.addEventListener('seeked', done);
+  tid = setTimeout(done, 700); // a seek that never lands must not strand it
+  v.currentTime = finalPos;
+}
+
+// One refresh of work: ease toward the finger, ask the decoder, fall back to
+// an element seek only when it cannot serve.
 function pump() {
   seekState.raf = 0;
-  if (seekState.pos == null || seekState.aim == null) return;
+  clearTimeout(seekState.timer);
+  seekState.timer = 0;
+  if (!cur || seekState.pos == null || seekState.aim == null) return;
   const v = video();
   const now = performance.now();
   const dt = Math.max(4, now - (seekState.lastPumpAt || now - 8));
   seekState.pos = scrubMotionStep(seekState.pos, seekState.aim, dt, 1 / FRAME_DUR);
   const travel = Math.abs(seekState.pos - (seekState.lastPumped == null ? seekState.pos : seekState.lastPumped));
+  // Demand in video-frames per SECOND: per-refresh would read differently on
+  // a 120Hz panel than a 60Hz one and the decoder's throughput is the same.
+  const speed = (travel / FRAME_DUR) / (dt / 1000);
   seekState.lastPumped = seekState.pos;
   seekState.lastPumpAt = now;
-  // Readouts follow the PICTURE, not the raw finger.
   drawTimeline();
   paintClock();
-  // One seek in flight at a time. Half a frame of error is not worth a seek
-  // that would block the next one - that queueing IS the choppiness.
-  if (!seekState.busy && Math.abs(seekState.pos - v.currentTime) >= FRAME_DUR / 2) {
+
+  let served = false;
+  if (gestureSrc && paint) {
+    // A served frame may sit a hair off the finger while the decoder catches
+    // up - a little over one refresh of travel, so the error is always
+    // smaller than the motion itself.
+    const tol = Math.max(FRAME_DUR * 1.5, travel * 1.25);
+    const r = gestureSrc.request(seekState.pos, speed, tol);
+    if (r) { pctx.drawImage(r.c, 0, 0, paint.width, paint.height); lastPaintT = r.t; served = true; }
+  }
+  if (window.__scrubTrace) {
+    const st = gestureSrc && gestureSrc.stats;
+    window.__scrubTrace.push({ at: now, aim: seekState.aim, pos: seekState.pos, shown: lastPaintT, served, speed,
+      hit: st && st.hit, near: st && st.near, fb: st && st.fallback, dec: st && st.decoded, rs: st && st.reseed });
+  }
+
+  if (!served && !seekState.busy && Math.abs(seekState.pos - v.currentTime) >= FRAME_DUR / 2) {
+    // Snap to a keyframe only when it is nearer than the step being taken -
+    // the error is then smaller than the motion, and the seek costs a
+    // fraction as much.
+    let t = seekState.pos;
+    if (gestureSrc) { const kt = gestureSrc.keyTimeBelow(seekState.pos); if (kt != null && seekState.pos - kt <= travel) t = kt; }
     seekState.busy = true;
-    v.currentTime = seekState.pos;
-    // Safety valve: a 'seeked' that never arrives must not kill the gesture.
+    seekState.ourSeekT = t;
+    v.currentTime = t;
     clearTimeout(seekState.unlock);
     seekState.unlock = setTimeout(() => { seekState.busy = false; }, 250);
   }
   scheduleScrub();
 }
 function scheduleScrub() {
-  if (seekState.raf == null || seekState.raf === 0) {
-    if (seekState.pos != null) seekState.raf = requestAnimationFrame(pump);
-  }
+  if (seekState.pos == null) return;
+  if (!seekState.raf) seekState.raf = requestAnimationFrame(pump);
+  // rAF stops in hidden or occluded windows; the timer backstop keeps a
+  // gesture from stranding there.
+  if (!seekState.timer) seekState.timer = setTimeout(pump, 33);
 }
 
-// The gesture is over: hand the element the exact final position.
-function endScrubGesture() {
-  const finalPos = seekState.aim;
+function clearGestureState() {
   seekState.aim = null;
   seekState.pos = null;
   seekState.lastPumped = null;
   seekState.lastPumpAt = 0;
   seekState.busy = false;
+  seekState.ourSeekT = null;
   clearTimeout(seekState.unlock);
+  clearTimeout(scrubEndTimer);
   if (seekState.raf) { cancelAnimationFrame(seekState.raf); seekState.raf = 0; }
-  if (cur && finalPos != null) {
-    const v = video();
-    if (Math.abs(v.currentTime - finalPos) >= FRAME_DUR / 2) v.currentTime = finalPos;
-    cur.prevTick = null;
-  }
+  clearTimeout(seekState.timer);
+  seekState.timer = 0;
 }
 
-// While a gesture runs the UI tracks the eased picture position, not the
-// decoder, so the playhead and clock never freeze mid-scrub and then leap.
-function headTime() { return seekState.pos ?? video().currentTime; }
+// The gesture is over: hand the element the exact final frame. `external`
+// means an outside seek owns the playhead - let it stand.
+function endScrubGesture(external = false) {
+  const finalPos = seekState.aim;
+  clearGestureState();
+  settle(finalPos, external);
+  if (!external && cur && finalPos != null && !paint) {
+    const v = video();
+    if (Math.abs(v.currentTime - finalPos) >= FRAME_DUR / 2) v.currentTime = finalPos;
+  }
+  if (cur) cur.prevTick = null;
+  if (gestureSrc) { gestureSrc.rest(); gestureSrc = null; }
+  primeSoon();
+}
 
-// Drive the same eased engine from something that is not a wheel event -
-// the timeline drag, which hands an absolute time rather than a delta.
+// Begin a gesture from the current playhead (shared by the trackpad and the
+// timeline drag).
+function beginGesture() {
+  const v = video();
+  if (!v.paused) v.pause();
+  cancelFreezeHold();
+  seekState.aim = seekState.pos = v.currentTime;
+  seekState.lastPumped = seekState.pos;
+  seekState.lastPumpAt = 0;
+  gestureSrc = (scrubSrc && startPaint(scrubSrc)) ? scrubSrc : null;
+}
+
+// Drive the engine from something that is not a wheel event - the timeline
+// drag, which hands an absolute time rather than a delta.
 function scrubTo(t, start = false) {
   if (!cur) return;
-  const v = video();
-  if (start || seekState.pos == null) {
-    if (!v.paused) v.pause();
-    cancelFreezeHold();
-    seekState.pos = v.currentTime;
-    seekState.lastPumped = seekState.pos;
-    seekState.lastPumpAt = 0;
-  }
-  seekState.aim = Math.max(0, Math.min(cur.duration || v.duration || 0, t));
+  if (start || seekState.pos == null) beginGesture();
+  seekState.aim = Math.max(0, Math.min(cur.duration || video().duration || 0, t));
   scheduleScrub();
 }
 
 // Drop a live gesture WITHOUT settling it: an explicit seek elsewhere is
 // where the user is going, and settling would yank the playhead back.
 function abortScrub() {
-  seekState.aim = null;
-  seekState.pos = null;
-  seekState.lastPumped = null;
-  seekState.lastPumpAt = 0;
-  seekState.busy = false;
-  clearTimeout(seekState.unlock);
-  clearTimeout(scrubEndTimer);
-  if (seekState.raf) { cancelAnimationFrame(seekState.raf); seekState.raf = 0; }
+  clearGestureState();
+  if (paint) { const c = paint; paint = null; pctx = null; c.classList.remove('on'); }
+  if (gestureSrc) { gestureSrc.rest(); gestureSrc = null; }
 }
+
+// While a gesture runs the UI tracks the eased picture position, so the
+// playhead and clock never freeze mid-scrub and then leap.
+function headTime() { return seekState.pos ?? video().currentTime; }
 
 function togglePlay() {
   const v = video();
@@ -319,14 +409,9 @@ function onStageWheel(e) {
   e.preventDefault();
   const v = video();
   if (!v.duration) return;
-  if (!v.paused) v.pause();
-  cancelFreezeHold();
-  if (seekState.pos == null) {
-    seekState.aim = seekState.pos = v.currentTime;
-    seekState.lastPumped = seekState.pos;
-    seekState.lastPumpAt = 0;
-    lastWheelAt = 0;
-  }
+  if (seekState.pos == null) { beginGesture(); lastWheelAt = 0; }
+  // Swipe RIGHT advances: macOS natural scrolling reports that as negative
+  // deltaX, so the delta is negated; scrubReverse flips it back.
   const dir = cur.settings.scrubReverse ? 1 : -1;
   const sens = cur.settings.scrubSensitivity || 1;
   const at = performance.now();
@@ -338,7 +423,6 @@ function onStageWheel(e) {
   clearTimeout(scrubEndTimer);
   scrubEndTimer = setTimeout(endScrubGesture, GESTURE_IDLE_MS);
 }
-
 // ------------------------------------------------------------- clip mode
 
 function enterClipMode(id, { loop = false } = {}) {
@@ -1020,6 +1104,25 @@ export function playerSettings() { return cur?.settings || null; }
 
 export async function openPlayer(game, videoUrl, h = {}) {
   hooks = h || {};
+  // The decoder source (scrubsource.js): built in the background so the
+  // player never waits on indexing. Until it lands - or if this file cannot
+  // be driven (webm, fragmented mp4, rotated, no ranges) - gestures seek the
+  // element exactly as before.
+  scrubSrc = null;
+  const provider = scrubProviderFor(h.scrubFile || null, videoUrl);
+  if (provider) {
+    void openScrubSource(game.id, provider).then((s) => {
+      if (cur && cur.game === game) {
+        scrubSrc = s;
+        if (s) primeSoon();
+        // Diagnostic tap, Film Room's idiom: only populated when a debugger
+        // created the object first. How "is the decoder driving this file"
+        // gets answered without guessing.
+        if (window.__scrubDebug) window.__scrubDebug.src = s;
+      }
+      else if (s) releaseScrubSource(game.id);
+    });
+  }
   cur = {
     game,
     settings: await getSettings(),
@@ -1050,6 +1153,10 @@ export async function openPlayer(game, videoUrl, h = {}) {
 
 export async function closePlayer() {
   if (!cur) return;
+  abortScrub();
+  clearTimeout(primeTimer);
+  releaseScrubSource(cur.game.id);
+  scrubSrc = null;
   cancelAnimationFrame(cur.raf);
   cancelFreezeHold();
   await saveNow();
@@ -1072,7 +1179,35 @@ function wireOnce() {
   el('vpVideo').addEventListener('seeked', () => {
     clearTimeout(seekState.unlock);
     seekState.busy = false;
+    seekState.ourSeekT = null;
+    // While the overlay is up, copy a landed seek across - but only if it is
+    // at least as close to the finger as what the overlay already shows: a
+    // seek takes 2-3 refreshes to land, and painting its older frame over a
+    // newer decoder frame made the picture jump backward then forward on
+    // every engine handoff (Film Room's "jumping around" of 2026-08-06).
+    const v = el('vpVideo');
+    if (paint && seekState.pos != null && v.readyState >= 2) {
+      const closer = lastPaintT == null
+        || Math.abs(v.currentTime - seekState.pos) <= Math.abs(lastPaintT - seekState.pos);
+      if (closer) {
+        try { pctx.drawImage(v, 0, 0, paint.width, paint.height); lastPaintT = v.currentTime; } catch (_) { /* not decodable yet */ }
+      }
+    }
+    if (seekState.pos == null) primeSoon();
   });
+  // An OUTSIDE seek (timeline click landing elsewhere, a frame step, play)
+  // ends the gesture and stands: a stale scrub target must never yank the
+  // playhead back. Our own pump seeks are told apart by their exact target.
+  el('vpVideo').addEventListener('seeking', () => {
+    if (seekState.pos == null) return;
+    const v = el('vpVideo');
+    const ours = seekState.busy && seekState.ourSeekT != null && Math.abs(v.currentTime - seekState.ourSeekT) < 0.001;
+    if (!ours) endScrubGesture(true);
+  });
+  el('vpVideo').addEventListener('play', () => { if (seekState.pos != null) endScrubGesture(); });
+  el('vpVideo').addEventListener('emptied', () => { abortScrub(); });
+  el('vpVideo').addEventListener('loadeddata', () => primeSoon(800));
+  el('vpVideo').addEventListener('pause', () => primeSoon());
   const tl = tlCanvas();
   tl.addEventListener('pointerdown', onTlDown);
   tl.addEventListener('pointermove', onTlMove);

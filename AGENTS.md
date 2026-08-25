@@ -140,12 +140,23 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
     the 250ms safety timeout, which is a scrub that moves in lurches.
   - Swipe RIGHT advances (macOS sends negative deltaX; `scrubReverse`
     flips it). The timeline drag rides the same engine via `scrubTo`.
-  - NOT ported: Film Room's WebCodecs decoder overlay (`scrubsource.js`),
-    which paints from a decoder it owns so a step costs a ~2ms decode
-    instead of a ~28ms seek. It needs a keyframe index and raw byte ranges,
-    which in Film Room come from Electron's main process; in the browser
-    that means a JS demuxer plus range requests against the Dropbox link.
-    This is the remaining gap if scrubbing still needs to be smoother.
+  - THE DECODER IS PORTED TOO (2026-08-25, second pass): `scrubsource.js`
+    is Film Room's WebCodecs engine plus its mp4 demuxer, whole - the moov
+    sample tables are parsed in the browser (DataView instead of Buffer)
+    and frame bytes come from `File.slice` for a locally opened video or
+    HTTP Range requests against the Dropbox temp link (the same URL the
+    <video> streams from; a server answering 200 to a Range request is
+    refused and the engine falls back). While a gesture runs, decoded
+    frames paint onto a `.scrub-paint` overlay canvas over the video, so a
+    step costs ~2ms instead of a ~28ms element seek; on release the element
+    takes the exact final frame and the overlay drops only once it has it.
+    Verified in-browser: a 30-minute 54,000-sample H.264 file indexed in
+    ~200ms local / ~830ms over ranges, and 77 of 80 scrub requests served
+    exact decoded frames. Degrades to plain seeking for webm, fragmented
+    mp4, rotated files, unsupported codecs and range-refusing servers.
+    Debugging: create `window.__scrubDebug = {}` before a video opens to
+    get the live source (`.src.stats`), and `window.__scrubTrace = []` to
+    record per-refresh pump decisions - Film Room's own diagnostics.
   - History worth keeping: a duration-proportional rate (a swipe crosses the
     file) ran 7-50 s/sec on game film and was far too fast; a fixed 0.005
     s/px was then too slow and still choppy because `fastSeek` was snapping
@@ -161,6 +172,11 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   `settings.logW` / `settings.sideW`. The timeline is a 26px lane on ink
   with the two timecodes in the transport row beneath it, and there is no
   permanent hint text on screen.
+- **Tag and clip buttons are small top-bar buttons** (2026-08-25, Tony's
+  call): the shared `.btn` drawing at chip size - white, hairline border,
+  `--r-sm` radius, `--shadow-1`, tight 3px/7px padding - with a vibrant
+  8px colour dot before the 7-character label. The dot is the button's
+  assigned colour from the panel editor; there is no background wash.
 - **The tag panel reorders and the editor builds it** (2026-08-25): its own
   vertical drag handle (width persists in `settings.sideW`, double-click
   resets, 96px minimum where a container query switches the buttons to a

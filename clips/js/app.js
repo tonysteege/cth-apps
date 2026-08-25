@@ -25,8 +25,11 @@ const $ = (sel) => document.querySelector(sel);
 const BACK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12H4"/><path d="m10 18-6-6 6-6"/></svg>';
 const stem = (s) => (s || 'clip').replace(/\.[^.]+$/, '').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase() || 'clip';
 
-// Object URLs for locally opened files live only for this session.
+// Object URLs for locally opened files live only for this session. The File
+// objects ride beside them: the scrub decoder slices frame bytes straight
+// off the File, which an object URL cannot do.
 const localUrls = new Map();
+const localFiles = new Map();
 
 // ------------------------------------------------------------- routing
 
@@ -306,6 +309,7 @@ async function paintBrowser() {
 async function openLocal(file) {
   const id = `local:${file.name}:${file.size}`;
   localUrls.set(id, URL.createObjectURL(file));
+  localFiles.set(id, file);
   let g = await getGame(id);
   if (!g) {
     g = { id, name: file.name.replace(/\.[^.]+$/, ''), path: file.name, source: 'local', clips: [], freezes: [] };
@@ -340,6 +344,7 @@ async function showPlayer(id) {
         const f = e.target.files[0];
         if (!f) return;
         localUrls.set(id, URL.createObjectURL(f));
+        localFiles.set(id, f);
         void showPlayer(id);
       };
       return;
@@ -409,6 +414,9 @@ async function showPlayer(id) {
   wirePanels();
 
   await openPlayer(game, src, {
+    // The decoder slices bytes off the File for a local game; a Dropbox game
+    // range-requests the same temp link the <video> streams from.
+    scrubFile: localFiles.get(id) || null,
     onShare: (clip, anchor) => openShareMenu(game, clip, anchor),
     onAnnotate: (freeze) => {
       openAnnotate(freeze, grabFrame(), {
