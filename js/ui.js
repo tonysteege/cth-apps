@@ -44,6 +44,36 @@ export function confirmSheet({ title, body, action = 'Delete', danger = true }) 
   });
 }
 
+// The unsaved-work prompt. Saving is manual, so leaving is the one moment
+// work can actually be lost - this is the only thing standing in front of it.
+// Returns 'save', 'discard' or 'cancel'. Deliberately NOT confirmSheet: that
+// one is a yes/no and this genuinely has three answers.
+export function leaveSheet(name) {
+  return new Promise((res) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'sheet-veil';
+    wrap.innerHTML = `
+      <div class="sheet" role="dialog" aria-modal="true">
+        <h3>Save Before Leaving?</h3>
+        <p>${esc(name ? `"${name}"` : 'This diagram')} has changes that are not saved yet.</p>
+        <div class="sheet-row">
+          <button class="btn" data-x="cancel">Cancel</button>
+          <button class="btn btn-danger" data-x="discard">Discard</button>
+          <button class="btn btn-ink" data-x="save">Save</button>
+        </div>
+      </div>`;
+    const done = (v) => { wrap.remove(); window.removeEventListener('keydown', onEsc, true); res(v); };
+    const onEsc = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done('cancel'); } };
+    wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) done('cancel'); });
+    wrap.querySelector('[data-x="cancel"]').onclick = () => done('cancel');
+    wrap.querySelector('[data-x="discard"]').onclick = () => done('discard');
+    wrap.querySelector('[data-x="save"]').onclick = () => done('save');
+    window.addEventListener('keydown', onEsc, true);
+    document.body.appendChild(wrap);
+    wrap.querySelector('[data-x="save"]').focus();
+  });
+}
+
 export function fmtDate(ts) {
   if (!ts) return '';
   const d = new Date(ts);

@@ -12,27 +12,78 @@ const STORE = 'drills';
 
 let dbPromise = null;
 
-function db() {
-  if (!dbPromise) {
-    dbPromise = new Promise((res, rej) => {
-      const req = indexedDB.open(DB_NAME, 1);
-      req.onupgradeneeded = () => {
-        req.result.createObjectStore(STORE, { keyPath: 'id' });
+// THE CONNECTION CAN DIE UNDER US. A browser closes an IndexedDB connection
+// on its own: it reclaims one in a backgrounded tab, another tab opening the
+// database at a new version fires `versionchange`, and the page starting to
+// unload closes it too. Once that has happened every transaction on that
+// handle throws `InvalidStateError: The database connection is closing.`
+//
+// The handle used to be cached forever, so ONE closed connection poisoned
+// every later save for the whole session - which is exactly what the
+// "Could Not Save" toast was. Retrying could not help, because the retry
+// reused the same dead handle. So: drop the cache the moment a connection
+// closes, and reopen on the next call.
+function forget(p) {
+  if (dbPromise === p) dbPromise = null;
+}
+
+function openDb() {
+  const p = new Promise((res, rej) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore(STORE, { keyPath: 'id' });
+    };
+    req.onsuccess = () => {
+      const d = req.result;
+      d.onclose = () => forget(p);
+      d.onversionchange = () => {
+        try { d.close(); } catch (_) { /* already gone */ }
+        forget(p);
       };
-      req.onsuccess = () => res(req.result);
-      req.onerror = () => rej(req.error);
-    });
-  }
+      res(d);
+    };
+    req.onerror = () => { forget(p); rej(req.error); };
+  });
+  return p;
+}
+
+function db() {
+  if (!dbPromise) dbPromise = openDb();
   return dbPromise;
 }
 
-function tx(mode, fn) {
+// A dead-connection failure, as opposed to a real data error. Only these are
+// worth reopening for; anything else is a genuine problem and must surface.
+const isClosing = (e) => !!e && (
+  e.name === 'InvalidStateError'
+  || e.name === 'TransactionInactiveError'
+  || /connection is clos/i.test(e.message || '')
+);
+
+function runTx(mode, fn) {
   return db().then((d) => new Promise((res, rej) => {
-    const t = d.transaction(STORE, mode);
-    const out = fn(t.objectStore(STORE));
-    t.oncomplete = () => res(out.result !== undefined ? out.result : out);
-    t.onerror = () => rej(t.error);
+    // `d.transaction()` THROWS synchronously on a closing connection rather
+    // than rejecting, so the whole body has to sit inside try/catch.
+    try {
+      const t = d.transaction(STORE, mode);
+      const out = fn(t.objectStore(STORE));
+      t.oncomplete = () => res(out && out.result !== undefined ? out.result : out);
+      t.onerror = () => rej(t.error);
+      t.onabort = () => rej(t.error || new DOMException('Transaction aborted', 'AbortError'));
+    } catch (e) {
+      rej(e);
+    }
   }));
+}
+
+async function tx(mode, fn) {
+  try {
+    return await runTx(mode, fn);
+  } catch (e) {
+    if (!isClosing(e)) throw e;
+    dbPromise = null;
+    return runTx(mode, fn);
+  }
 }
 
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);

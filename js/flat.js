@@ -9,10 +9,20 @@
 import { composeRinkBg, loadImg, shapeImg, RINK_H, SEQ_GAP } from './rink.js';
 
 export const INK = '#1e1e1e';
+// The first SLOT_COUNT entries are the toolbar's four default presets. Every
+// entry, default or not, stays resolvable by colorOf() forever: an element's
+// stored `color` may name any of them, and the names are shared with CTH Film
+// Room. Never remove a name from this list - it would silently repaint saved
+// diagrams black.
+export const SLOT_COUNT = 4;
 export const PALETTE = [
   ['black', INK],
   ['blue', '#75d8ff'],
   ['grey', '#d9d9d9'],
+  ['green', '#16a34a'],
+  // `red` stopped being the fourth default preset on 2026-08-24 (Tony swapped
+  // it for green). It is still listed because diagrams saved before that date,
+  // and anything arriving from Film Room, store color: 'red'.
   ['red', '#dc2626'],
 ];
 export const colorOf = (c) => {

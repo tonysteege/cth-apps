@@ -36,7 +36,7 @@ import {
 import { putDrill } from './store.js';
 import { toast, esc } from './ui.js';
 import {
-  INK, PALETTE, colorOf, labelInkOn, measureText, arrowCtrl, arrowEndAngle,
+  INK, PALETTE, SLOT_COUNT, colorOf, labelInkOn, measureText, arrowCtrl, arrowEndAngle,
   drawEl, TEXT_CHIP, shapeLabelSize, ROTATABLE,
   rotCenterOf, sliceFrames,
 } from './flat.js';
@@ -65,8 +65,10 @@ function saveSettings(patch) {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...settings(), ...patch }));
 }
 
-const DEFAULT_PALETTE = PALETTE.map(([, hex]) => hex);
-const SLOT_NAMES = PALETTE.map(([n]) => n);
+// Only the first SLOT_COUNT palette entries are toolbar presets; the rest are
+// retired names kept resolvable for old diagrams.
+const DEFAULT_PALETTE = PALETTE.slice(0, SLOT_COUNT).map(([, hex]) => hex);
+const SLOT_NAMES = PALETTE.slice(0, SLOT_COUNT).map(([n]) => n);
 function paletteHexes() {
   const p = settings().palette;
   return Array.isArray(p) && p.length === 4 ? p : DEFAULT_PALETTE.slice();
@@ -283,7 +285,7 @@ async function restore(snap) {
   }
   setSel([]);
   render();
-  scheduleSave();
+  markDirty();
 }
 
 async function undo() {
@@ -302,12 +304,15 @@ function status(msg) {
   if (s) s.textContent = msg;
 }
 
-function scheduleSave() {
+// SAVING IS MANUAL (Tony's call 2026-08-24). This used to start a 1.2s
+// autosave timer. Now an edit only raises the flag; the diagram is written
+// when Tony presses Save, hits Cmd+S, or confirms the leave prompt. Every
+// edit path calls this, so it is the single place the dirty state is set.
+function markDirty() {
   if (!cur) return;
   cur.dirty = true;
-  status('Edited');
-  clearTimeout(cur.timer);
-  cur.timer = setTimeout(() => void saveNow(), 1200);
+  status('Unsaved');
+  if (hooks.onDirty) hooks.onDirty(true);
 }
 
 function setRinkBackground(n) {
@@ -369,10 +374,12 @@ export function frameInfo() {
 }
 
 export async function saveNow() {
-  if (!cur || !cur.dirty) return;
+  if (!cur) return;
+  if (!cur.dirty) { status('Saved'); return; }
   const c = cur; // the editor may close while this runs - never re-read cur
   c.dirty = false;
   status('Saving…');
+  if (hooks.onDirty) hooks.onDirty(false);
   try {
     c.drill.state = structuredClone(currentState());
     // The thumbnail is a nicety - a failure there must never block the save.
@@ -394,9 +401,16 @@ export async function saveNow() {
   } catch (e) {
     c.dirty = true;
     if (cur === c) status('Not Saved');
+    if (cur === c && hooks.onDirty) hooks.onDirty(true);
     console.error(e);
     toast(`Could Not Save (${e?.name || 'Error'}: ${e?.message || 'unknown'})`, true);
   }
+}
+
+// Does the open diagram hold edits that are not on disk? The leave prompts in
+// app.js ask this before letting the page or the route go.
+export function isDirty() {
+  return !!(cur && cur.dirty);
 }
 
 // ------------------------------------------------------------- SVG render
@@ -732,6 +746,147 @@ function showPlayerMenu(slot, btn) {
   });
 }
 
+// ---------------------------------------------------------- context menus
+//
+// One small popup serves both right-click menus: the object menu on the ice
+// and the customize menu on a colour preset. It closes on Escape, on any
+// press outside it, and as soon as an item runs.
+
+let ctxEl = null;
+
+function onMenuAway(e) { if (ctxEl && !ctxEl.contains(e.target)) closeMenu(); }
+function onMenuKey(e) {
+  if (e.key !== 'Escape') return;
+  e.preventDefault();
+  e.stopPropagation();
+  closeMenu();
+}
+function closeMenu() {
+  if (!ctxEl) return;
+  window.removeEventListener('pointerdown', onMenuAway, true);
+  window.removeEventListener('keydown', onMenuKey, true);
+  ctxEl.remove();
+  ctxEl = null;
+}
+
+// `items` are { label, hint?, swatch?, run } objects, or the string 'sep'.
+function showMenu(items, clientX, clientY) {
+  closeMenu();
+  ctxEl = document.createElement('div');
+  ctxEl.className = 'ctxmenu';
+  ctxEl.innerHTML = items.map((it, i) => (it === 'sep'
+    ? '<div class="ctx-sep"></div>'
+    : `<button class="ctx-item" data-i="${i}">`
+      + (it.swatch ? `<span class="ctx-dot" style="--c:${it.swatch}"></span>` : '')
+      + `<span class="ctx-label">${esc(it.label)}</span>`
+      + (it.hint ? `<span class="ctx-hint">${esc(it.hint)}</span>` : '')
+      + '</button>')).join('');
+  document.body.appendChild(ctxEl);
+  // Clamp into the viewport. The toolbar sits at the bottom of the window, so
+  // a menu opened from a preset would otherwise hang off the bottom edge.
+  const w = ctxEl.offsetWidth;
+  const h = ctxEl.offsetHeight;
+  ctxEl.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, clientX))}px`;
+  ctxEl.style.top = `${Math.max(8, Math.min(window.innerHeight - h - 8, clientY))}px`;
+  ctxEl.querySelectorAll('[data-i]').forEach((b) => {
+    b.onclick = () => {
+      const it = items[Number(b.dataset.i)];
+      closeMenu();
+      it.run();
+    };
+  });
+  // Deferred so the press that opened the menu does not immediately close it.
+  setTimeout(() => {
+    if (!ctxEl) return;
+    window.addEventListener('pointerdown', onMenuAway, true);
+    window.addEventListener('keydown', onMenuKey, true);
+  }, 0);
+}
+
+function deleteSel() {
+  if (!cur) return;
+  const ids = new Set(cur.selIds || []);
+  if (!ids.size) return;
+  snapshot();
+  cur.elements = cur.elements.filter((z) => !ids.has(z.id));
+  setSel([]);
+  render();
+  markDirty();
+}
+
+// Right-click on the ice. Over an object it opens the object menu; over empty
+// ice it is left alone so the browser's own menu still works.
+function onCanvasMenu(e) {
+  if (!cur) return;
+  const hit = e.target.closest?.('[data-id]');
+  const x = hit ? cur.elements.find((z) => z.id === hit.dataset.id) : hitAt(pt(e));
+  if (!x) return;
+  e.preventDefault();
+  if (!(cur.selIds || []).includes(x.id)) { setSel([x.id]); render(); }
+  const n = (cur.selIds || []).length;
+  showMenu([
+    { label: 'Bring To Front', hint: ']', run: () => stackSel(true) },
+    { label: 'Send To Back', hint: '[', run: () => stackSel(false) },
+    'sep',
+    { label: 'Flip Selection', hint: 'Flip', run: () => void flipH() },
+    { label: 'Duplicate', hint: 'Cmd D', run: () => { pasteCount = 0; pasteEls(selEls()); } },
+    'sep',
+    { label: n > 1 ? `Delete ${n} Objects` : 'Delete', hint: 'Del', run: () => deleteSel() },
+  ], e.clientX, e.clientY);
+}
+
+// The colour choices offered on a preset. Black, blue, grey, green and red are
+// the named palette slots that travel to Film Room; the rest are raw hexes,
+// which the storage format allows on any element.
+const PRESET_CHOICES = [
+  ['Black', INK],
+  ['Blue', '#75d8ff'],
+  ['Grey', '#d9d9d9'],
+  ['Green', '#16a34a'],
+  ['Red', '#dc2626'],
+  ['Orange', '#f59e0b'],
+  ['Purple', '#8b5cf6'],
+  ['White', '#ffffff'],
+];
+
+function applySlotHex(i, hex) {
+  const pal = paletteHexes();
+  pal[i] = hex;
+  saveSettings({ palette: pal });
+  cur.color = slotColor(i);
+  // Text is skipped here for the same reason it is skipped everywhere: text
+  // chips are always black.
+  const styled = selEls().filter((z) => 'color' in z && z.type !== 'text');
+  if (styled.length) { snapshot(); styled.forEach((z) => { z.color = cur.color; }); markDirty(); }
+  toolsSig = '';
+  render();
+}
+
+function pickCustomColor(i) {
+  const input = document.createElement('input');
+  input.type = 'color';
+  input.value = paletteHexes()[i];
+  input.style.cssText = 'position:fixed;left:12px;bottom:12px;width:1px;height:1px;opacity:0;';
+  document.body.appendChild(input);
+  input.oninput = () => applySlotHex(i, input.value);
+  input.onchange = () => input.remove();
+  input.click();
+}
+
+function showSwatchMenu(i, btn, clientX, clientY) {
+  const now = paletteHexes()[i].toLowerCase();
+  const items = PRESET_CHOICES.map(([name, hex]) => ({
+    label: now === hex.toLowerCase() ? `${name} (Current)` : name,
+    swatch: hex,
+    run: () => applySlotHex(i, hex),
+  }));
+  items.push('sep');
+  items.push({ label: 'Custom Color…', run: () => pickCustomColor(i) });
+  items.push({ label: 'Reset To Default', swatch: DEFAULT_PALETTE[i], run: () => applySlotHex(i, DEFAULT_PALETTE[i]) });
+  const r = btn.getBoundingClientRect();
+  showMenu(items, clientX ?? r.left, clientY ?? r.top);
+}
+
 function paintTools() {
   const bar = el('edBar');
   if (!bar || !cur) return;
@@ -780,25 +935,10 @@ function paintTools() {
   bar.querySelectorAll('[data-slot]').forEach((b) => {
     const i = Number(b.dataset.slot);
     b.onclick = () => chooseSlot(i);
+    // Right-click (or double-click) a preset to change what colour it holds.
     const customize = (e) => {
       e.preventDefault();
-      const input = document.createElement('input');
-      input.type = 'color';
-      input.value = paletteHexes()[i];
-      input.style.cssText = 'position:fixed;left:-100px;top:0;opacity:0;';
-      document.body.appendChild(input);
-      input.oninput = () => {
-        const p = paletteHexes();
-        p[i] = input.value;
-        saveSettings({ palette: p });
-        cur.color = slotColor(i);
-        const styled = selEls().filter((z) => 'color' in z);
-        if (styled.length) styled.forEach((z) => { z.color = cur.color; });
-        toolsSig = '';
-        render();
-      };
-      input.onchange = () => { input.remove(); scheduleSave(); };
-      input.click();
+      showSwatchMenu(i, b, e.clientX, e.clientY);
     };
     b.ondblclick = customize;
     b.oncontextmenu = customize;
@@ -808,7 +948,7 @@ function paintTools() {
       cur.head = b.dataset.head;
       saveSettings({ arrowHead: cur.head });
       const arrows = selEls().filter((z) => z.type === 'arrow');
-      if (arrows.length) { snapshot(); arrows.forEach((z) => { z.head = cur.head; }); scheduleSave(); }
+      if (arrows.length) { snapshot(); arrows.forEach((z) => { z.head = cur.head; }); markDirty(); }
       toolsSig = '';
       render();
     };
@@ -821,7 +961,7 @@ function paintTools() {
       if (lines.length) {
         snapshot();
         lines.forEach((z) => { z.width = Math.max(2, Math.round(wpx * scaleF())); });
-        scheduleSave();
+        markDirty();
       }
       toolsSig = '';
       render();
@@ -840,8 +980,8 @@ function paintTools() {
 
 function chooseSlot(i) {
   cur.color = slotColor(i);
-  const styled = selEls().filter((z) => 'color' in z);
-  if (styled.length) { snapshot(); styled.forEach((z) => { z.color = cur.color; }); scheduleSave(); }
+  const styled = selEls().filter((z) => 'color' in z && z.type !== 'text');
+  if (styled.length) { snapshot(); styled.forEach((z) => { z.color = cur.color; }); markDirty(); }
   toolsSig = '';
   render();
 }
@@ -894,7 +1034,37 @@ function onGestureChange(e) {
 
 // ------------------------------------------------------------- image ops
 
+// Mirror one element about the vertical line at `twoA / 2`. Pulled out of
+// flipH so a selection flip and a whole-diagram flip run identical maths: a
+// point px maps to (twoA - px).
+function mirrorEl(x, twoA) {
+  if (x.type === 'stamp') { x.x = twoA - x.x - x.w; x.flip = !x.flip; }
+  else if (x.type === 'pucks' || x.type === 'box' || x.type === 'circle') x.x = twoA - x.x - x.w;
+  else if (x.type === 'player') x.x = twoA - x.x;
+  else if (x.type === 'text') x.x = twoA - x.x - measureText(x);
+  else if (x.type === 'arrow') { x.x1 = twoA - x.x1; x.x2 = twoA - x.x2; x.mx = twoA - x.mx; }
+  else if (x.type === 'pen') x.pts = x.pts.map(([px, py]) => [twoA - px, py]);
+  if (x.rot) x.rot = -x.rot;
+}
+
 async function flipH() {
+  // WITH A SELECTION, FLIP ONLY THAT (Tony's call 2026-08-24), mirrored about
+  // the selection's own centre so it turns in place instead of jumping across
+  // the ice. The rink art is never touched on this path.
+  const sel = selEls();
+  if (sel.length) {
+    snapshot();
+    let x0 = Infinity; let x1 = -Infinity;
+    for (const z of sel) {
+      const b = elBounds(z);
+      x0 = Math.min(x0, b.x);
+      x1 = Math.max(x1, b.x + b.w);
+    }
+    for (const z of sel) mirrorEl(z, x0 + x1);
+    render();
+    markDirty();
+    return;
+  }
   snapshot();
   if (cur.bgKind === 'image') {
     const c = document.createElement('canvas');
@@ -905,18 +1075,28 @@ async function flipH() {
     ctx.drawImage(cur.bgImg, 0, 0);
     await setImageBackground(c.toDataURL('image/png'));
   }
-  const W = cur.w;
-  for (const x of cur.elements) {
-    if (x.type === 'stamp') { x.x = W - x.x - x.w; x.flip = !x.flip; }
-    else if (x.type === 'pucks' || x.type === 'box' || x.type === 'circle') x.x = W - x.x - x.w;
-    else if (x.type === 'player') x.x = W - x.x;
-    else if (x.type === 'text') x.x = W - x.x - measureText(x);
-    else if (x.type === 'arrow') { x.x1 = W - x.x1; x.x2 = W - x.x2; x.mx = W - x.mx; }
-    else if (x.type === 'pen') x.pts = x.pts.map(([px, py]) => [W - px, py]);
-    if (x.rot) x.rot = -x.rot;
-  }
+  for (const x of cur.elements) mirrorEl(x, cur.w);
   render();
-  scheduleSave();
+  markDirty();
+}
+
+// ------------------------------------------------------------- stacking
+//
+// Z-ORDER IS ARRAY ORDER. Both renderers walk cur.elements back to front, so
+// "bring to front" is simply "move to the end". Relative order inside the
+// selection is preserved, so sending a group forward twice is a no-op.
+function stackSel(toFront) {
+  if (!cur) return;
+  const ids = new Set(cur.selIds || []);
+  if (!ids.size) return;
+  const picked = cur.elements.filter((z) => ids.has(z.id));
+  const rest = cur.elements.filter((z) => !ids.has(z.id));
+  const next = toFront ? [...rest, ...picked] : [...picked, ...rest];
+  if (next.every((z, i) => z === cur.elements[i])) return; // already there
+  snapshot();
+  cur.elements = next;
+  render();
+  markDirty();
 }
 
 function rinkFurniture(yOff = 0) {
@@ -949,7 +1129,7 @@ function placeFaceoff() {
   for (const [dx, dy] of spots) {
     cur.elements.push({ id: uid(), type: 'player', color: 'blue', label: '', x: C - dx, y: yOff + MY + dy, r: d.playerR });
   }
-  scheduleSave();
+  markDirty();
   render();
   toast('5v5 Faceoff Placed - Black Left, Blue Right');
 }
@@ -976,7 +1156,7 @@ async function addRink() {
   });
   cur.elements.push(...(clones.length ? clones : rinkFurniture((n - 1) * shift)));
   render();
-  scheduleSave();
+  markDirty();
   toast(`Rink ${n} Of ${SEQ_MAX} Added - Double-Click Its Name Chip To Rename`);
 }
 
@@ -995,7 +1175,7 @@ function removeFrame(k) {
   setRinkBackground(cur.seq);
   setSel([]);
   render();
-  scheduleSave();
+  markDirty();
   toast(`Rink Removed - ${cur.seq} Left. Cmd+Z Brings It Back`);
 }
 
@@ -1017,7 +1197,7 @@ function moveFrame(k, dir) {
   }
   setSel([]);
   render();
-  scheduleSave();
+  markDirty();
   toast(`Rink Moved ${dir < 0 ? 'Up' : 'Down'}`);
 }
 
@@ -1063,7 +1243,7 @@ function copySel(cut = false) {
     const ids = new Set(list.map((z) => z.id));
     cur.elements = cur.elements.filter((z) => !ids.has(z.id));
     setSel([]);
-    scheduleSave();
+    markDirty();
     render();
   }
   return true;
@@ -1083,7 +1263,7 @@ function pasteEls(clones) {
     ids.push(x.id);
   }
   setSel(ids);
-  scheduleSave();
+  markDirty();
   render();
 }
 
@@ -1121,7 +1301,7 @@ function placeItem(kind, p, e) {
   }
   setSel([id]);
   if (!e?.metaKey && !e?.ctrlKey) { cur.tool = 'select'; cur.pendingLabel = null; }
-  scheduleSave();
+  markDirty();
   render();
 }
 
@@ -1143,7 +1323,7 @@ function handleDouble(e) {
       commit: (text) => {
         snapshot();
         x.label = text.trim().slice(0, 2).toUpperCase();
-        scheduleSave();
+        markDirty();
         render();
       },
     });
@@ -1160,7 +1340,7 @@ function handleDouble(e) {
       commit: (text) => {
         snapshot();
         x.label = text.trim();
-        scheduleSave();
+        markDirty();
         render();
       },
     });
@@ -1179,7 +1359,7 @@ function handleDouble(e) {
         snapshot();
         if (!text.trim()) cur.elements = cur.elements.filter((z) => z.id !== x.id);
         else x.text = text.trim();
-        scheduleSave();
+        markDirty();
       },
       onClose: () => { cur.hideId = null; render(); },
     });
@@ -1328,9 +1508,12 @@ function onDown(e) {
         if (!text.trim()) return;
         snapshot();
         const id = uid();
-        cur.elements.push({ id, type: 'text', x: p.x, y: p.y, text: text.trim(), size: d.text, color: cur.color });
+        // Text chips are ALWAYS black (Tony's call 2026-08-24). The `color`
+        // property stays on the element because it is part of the stored and
+        // Film Room interchange format - it is just never set to anything else.
+        cur.elements.push({ id, type: 'text', x: p.x, y: p.y, text: text.trim(), size: d.text, color: 'black' });
         setSel([id]);
-        scheduleSave();
+        markDirty();
       },
       onClose: () => { cur.tool = 'select'; render(); },
     });
@@ -1453,19 +1636,19 @@ function onUp(e) {
   } else if (drag.kind === 'newArrow' && x) {
     setSel([x.id]);
     cur.tool = 'select';
-    scheduleSave();
+    markDirty();
   } else if (drag.kind === 'newBox' && x && (!drag.moved || x.w < 12 * scaleF() || x.h < 12 * scaleF())) {
     cur.elements = cur.elements.filter((z) => z.id !== x.id);
     cur.undo.pop();
   } else if (drag.kind === 'newBox' && x) {
     setSel([x.id]);
     cur.tool = 'select';
-    scheduleSave();
+    markDirty();
   } else if ((drag.kind === 'move' || drag.kind.startsWith('h:')) && !drag.moved) {
     cur.undo.pop();
   } else {
     if (drag.kind === 'pen' && !e?.metaKey && !e?.ctrlKey) cur.tool = 'select';
-    scheduleSave();
+    markDirty();
   }
   drag = null;
   render();
@@ -1530,7 +1713,7 @@ function openFrameLabelInput(k) {
     snapshot();
     if (!cur.rinkNames) cur.rinkNames = [];
     cur.rinkNames[k] = text.trim();
-    scheduleSave();
+    markDirty();
   });
 }
 
@@ -1635,6 +1818,9 @@ function onKey(e) {
       return;
     }
     if (k === '0') { stop(); cur.view.zoom = 1; applyZoom(); return; }
+    // Cmd/Ctrl+S saves. The browser's own Save Page dialog is not something
+    // Tony ever wants here, so it is preventDefaulted whether dirty or not.
+    if (k === 's') { stop(); void saveNow(); return; }
     return;
   }
   if (e.key === 'Escape') {
@@ -1648,6 +1834,8 @@ function onKey(e) {
     document.dispatchEvent(new CustomEvent('cthd:shortcuts'));
     return;
   }
+  if (e.key === ']') { e.preventDefault(); stackSel(true); return; }
+  if (e.key === '[') { e.preventDefault(); stackSel(false); return; }
   if (e.key === '+' || e.key === '=') { e.preventDefault(); void addRink(); return; }
   if (e.key === '-' || e.key === '_') { e.preventDefault(); removeFrame((cur.seq || 1) - 1); return; }
   if ((e.key === 'Backspace' || e.key === 'Delete') && cur.sel) {
@@ -1656,7 +1844,7 @@ function onKey(e) {
     const ids = new Set(cur.selIds || []);
     cur.elements = cur.elements.filter((z) => !ids.has(z.id));
     setSel([]);
-    scheduleSave();
+    markDirty();
     render();
     return;
   }
@@ -1671,7 +1859,7 @@ function onKey(e) {
         const c = centerOf(x);
         moveElTo(x, c.x + nud[0] * step, c.y + nud[1] * step);
       }
-      scheduleSave();
+      markDirty();
       render();
     }
     return;
@@ -1692,14 +1880,16 @@ function onKey(e) {
 // ------------------------------------------------------------- open/close
 
 export function editorActions() {
-  return { flipH, undo, redo, renderFlat, currentState };
+  return { flipH, undo, redo, renderFlat, currentState, markDirty };
 }
 
 export async function closeEditor() {
   if (!cur) return;
   const c = cur;
   clearTimeout(c.timer);
-  await saveNow();
+  // NO implicit save here. Saving is manual, and app.js has already asked
+  // Tony what to do with unsaved work before routing away. Saving anyway
+  // would make "Discard" a lie.
   cur = null;
   hooks = {};
   pointers.clear();
@@ -1751,12 +1941,12 @@ export async function openEditor(drill, h = {}) {
     setRinkBackground(1);
     cur.elements = rinkFurniture(0);
     cur.dirty = true;
-    scheduleSave();
+    markDirty();
   }
   toolsSig = '';
   applyZoom();
   render();
-  status(cur.dirty ? 'Saving…' : 'Saved');
+  status(cur.dirty ? 'Unsaved' : 'Saved');
 }
 
 // Window-level listeners attach once; the svg and wrap are rebuilt on every
@@ -1771,6 +1961,7 @@ function wireOnce() {
   }
   const svg = el('edSvg');
   svg.addEventListener('pointerdown', onDown);
+  svg.addEventListener('contextmenu', onCanvasMenu);
   const wrap = el('edStageWrap');
   wrap.addEventListener('wheel', onWheel, { passive: false });
   wrap.addEventListener('gesturestart', onGestureStart);

@@ -27,7 +27,7 @@ https://tonysteege.github.io/cth-diagrammer/)
 - Snapping to rink landmarks and other objects with alignment guides (Cmd
   disables). Multi-select, group move, copy / cut / paste / duplicate,
   undo depth 60, customizable keyboard shortcuts (right-click any tool).
-- Diagram library with autosave, search, duplicate, delete, thumbnails.
+- Diagram library with manual save, search, duplicate, delete, thumbnails.
 - Export: PNG download, clipboard copy, print - the whole diagram or any
   chosen rinks of a sequence - plus one-file JSON backup and restore.
 

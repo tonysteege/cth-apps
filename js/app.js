@@ -2,7 +2,9 @@
 //   Library (#/)            - folder tree + saved diagrams as cards:
 //                             search, open, move, duplicate, delete,
 //                             import, back up.
-//   Editor  (#/drill/ID)    - the rink editor (editor.js) with autosave.
+//   Editor  (#/drill/ID)    - the rink editor (editor.js). Saving is MANUAL:
+//                             an edit only marks the diagram dirty, and the
+//                             leave guards below are what stop work being lost.
 // (The #/drill/ hash and the "drills" store name are frozen storage terms;
 // the interface says Diagram.)
 
@@ -11,11 +13,11 @@ import {
   listDrills, getDrill, putDrill, deleteDrill, uid, exportAll, importAll,
 } from './store.js';
 import {
-  openEditor, closeEditor, saveNow, renderFlat, currentState, editorActions,
+  openEditor, closeEditor, saveNow, isDirty, renderFlat, currentState, editorActions,
 } from './editor.js';
 import { renderStateFlat, sliceFrames } from './flat.js';
 import { pngReadDiagram, pngSetDiagram, dataUrlToBytes, bytesToBlob } from './png.js';
-import { toast, esc, confirmSheet, fmtDate } from './ui.js';
+import { toast, esc, confirmSheet, leaveSheet, fmtDate } from './ui.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -221,7 +223,7 @@ async function showLibrary() {
         <div class="lib-empty">
           <div class="lib-empty-rink"></div>
           <h2>Design Your First Diagram</h2>
-          <p>A full rink opens game-ready: nets in the creases, a goalie at each end. Players, arrows, text and rink items are one click away, and every diagram autosaves as you work.</p>
+          <p>A full rink opens game-ready: nets in the creases, a goalie at each end. Players, arrows, text and rink items are one click away. Press Save (or Cmd+S) when you want to keep your work.</p>
           <button class="btn btn-ink" id="libNew2">+ New Diagram</button>
         </div>`;
       $('#libNew2').onclick = newDrill;
@@ -397,7 +399,9 @@ async function showEditor(id) {
         <input id="edTitle" class="ed-title" value="${esc(drill.name || '')}" placeholder="Name This Diagram…" autocomplete="off" spellcheck="false">
         <span class="ed-status" id="edStatus">Saved</span>
         <div class="ed-head-actions">
-          <button class="btn" id="edFlip" title="Flip The Whole Picture Left-Right">Flip</button>
+          <button class="btn" id="edSave" title="Save This Diagram (Cmd+S)">Save</button>
+          <span class="ed-sep"></span>
+          <button class="btn" id="edFlip" title="Flip The Selected Objects - Or The Whole Picture When Nothing Is Selected">Flip</button>
           <button class="btn" id="edUndo" title="Undo (Cmd+Z)">Undo</button>
           <button class="btn" id="edRedo" title="Redo (Shift+Cmd+Z)">Redo</button>
           <span class="ed-sep"></span>
@@ -428,26 +432,37 @@ async function showEditor(id) {
       const b = $('#edRinks');
       if (b) b.hidden = info.seq < 2;
     },
+    // Saving is manual, so the Save button has to SHOW there is something to
+    // save. Without that the only cue would be the small status word, which
+    // is hidden entirely on narrow screens.
+    onDirty: (dirty) => {
+      const b = $('#edSave');
+      if (b) b.classList.toggle('btn-ink', dirty);
+    },
   });
 
   const acts = editorActions();
+  $('#edSave').onclick = () => void saveNow();
   $('#edBack').onclick = () => { location.hash = '#/'; };
   $('#edFlip').onclick = () => void acts.flipH();
   $('#edUndo').onclick = () => void acts.undo();
   $('#edRedo').onclick = () => void acts.redo();
 
   const title = $('#edTitle');
-  const commitTitle = async () => {
+  const commitTitle = () => {
+    if (drill.name === title.value.trim()) return;
     drill.name = title.value.trim();
     document.title = `${drill.name || 'Untitled Diagram'} - CTH Diagrammer`;
-    await putDrill(drill);
+    // Marked dirty rather than written straight through, so the name follows
+    // the same one Save rule as everything else on the diagram.
+    acts.markDirty();
   };
   title.addEventListener('keydown', (e) => {
     e.stopPropagation();
     if (e.key === 'Enter' || e.keyCode === 13) { e.preventDefault(); title.blur(); }
     if (e.key === 'Escape') { e.preventDefault(); title.blur(); }
   });
-  title.addEventListener('blur', () => void commitTitle());
+  title.addEventListener('blur', commitTitle);
   if (!drill.name) title.focus();
 
   $('#edPng').onclick = async () => {
@@ -590,8 +605,35 @@ function showShortcuts() {
 
 // --------------------------------------------------------------- boot
 
-window.addEventListener('hashchange', () => void go());
-window.addEventListener('beforeunload', () => { void saveNow(); });
+// LEAVING IS WHERE MANUAL SAVE CAN BITE. Two exits need guarding: the hash
+// route (the Back button and any in-app link) and the browser itself.
+let routeHash = location.hash;
+let restoringHash = false;
+
+window.addEventListener('hashchange', async () => {
+  if (restoringHash) { restoringHash = false; routeHash = location.hash; return; }
+  const from = routeHash;
+  if (from.startsWith('#/drill/') && isDirty()) {
+    const choice = await leaveSheet(document.querySelector('#edTitle')?.value?.trim());
+    if (choice === 'cancel') {
+      restoringHash = true;
+      location.hash = from;   // puts the address bar back; the editor never moved
+      return;
+    }
+    if (choice === 'save') await saveNow();
+  }
+  routeHash = location.hash;
+  await go();
+});
+
+// The browser's own prompt. It cannot be worded or given a Save button - the
+// spec only allows a generic dialog - so the in-app sheet above is the one
+// that does the real work. This is the backstop for closing the tab.
+window.addEventListener('beforeunload', (e) => {
+  if (!isDirty()) return;
+  e.preventDefault();
+  e.returnValue = '';
+});
 
 (async () => {
   try {
