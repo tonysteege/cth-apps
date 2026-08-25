@@ -88,15 +88,19 @@ input { font: inherit; color: inherit; }
   border-bottom: 1px solid var(--edge);
   background: var(--cloud);
 }
-.brand { display: flex; align-items: center; gap: 15px; }
-.brand-logo { height: 42px; width: auto; }
+.brand { display: flex; align-items: center; gap: 12px; }
+/* The square CTH icon mark (swapped in for the horizontal logo 2026-08-25,
+   subtitle removed with it). 30px sits a touch above the 23px title's cap
+   height so the pair reads as one lockup; 42px was drawn for the wide
+   horizontal logo and reads chunky on a 1:1 mark. */
+.brand-logo { height: 30px; width: auto; }
 .brand-word h1 {
   margin: 0;
-  font-size: 22px;
+  font-size: 23px;
   font-weight: 800;
   letter-spacing: -0.02em;
+  line-height: 1;
 }
-.brand-word p { margin: 2px 0 0; color: var(--mist); font-size: 12px; font-weight: 500; }
 .lib-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 #libSearch {
   height: 36px;
@@ -744,7 +748,7 @@ input { font: inherit; color: inherit; }
 }
 @media (max-width: 560px) {
   .lib-head { padding-top: 18px; }
-  .brand-logo { height: 34px; }
+  .brand-logo { height: 26px; }
   .lib-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
   .ed-head-actions { gap: 6px; }
   .ed-sep { display: none; }

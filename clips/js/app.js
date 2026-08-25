@@ -57,10 +57,9 @@ async function showLibrary() {
     <header class="lib-head">
       <div class="brand">
         <button class="btn btn-back" id="libHome" title="Back To CTH Apps">${BACK_ICON}</button>
-        <img src="../diagrams/assets/cth-logo-black.svg" alt="CTH" class="brand-logo">
+        <img src="../diagrams/assets/cth-icon-black.svg" alt="CTH" class="brand-logo">
         <div class="brand-word">
           <h1>CTH Clips</h1>
-          <p>Video Tagging For Coach Tony Hockey</p>
         </div>
       </div>
       <div class="lib-actions">

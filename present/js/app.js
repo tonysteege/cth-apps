@@ -55,10 +55,9 @@ function showHome() {
     <header class="lib-head">
       <div class="brand">
         <button class="btn btn-back" id="prHome" title="Back To CTH Apps">${BACK_ICON}</button>
-        <img src="cth-logo-black.svg" alt="CTH" class="brand-logo">
+        <img src="../diagrams/assets/cth-icon-black.svg" alt="CTH" class="brand-logo">
         <div class="brand-word">
           <h1>CTH Present</h1>
-          <p>Notion Pages As Film-Session Slides</p>
         </div>
       </div>
     </header>

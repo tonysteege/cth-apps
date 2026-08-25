@@ -26,13 +26,15 @@
       display: flex; flex-direction: column;
     }
     header {
-      display: flex; align-items: center; gap: 15px;
-      padding: 26px clamp(20px, 4vw, 48px) 20px;
+      display: flex; align-items: center; gap: 12px;
+      padding: 24px clamp(20px, 4vw, 48px) 20px;
       border-bottom: 1px solid var(--edge);
     }
-    header img { height: 42px; }
-    header h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
-    header p { margin: 2px 0 0; color: var(--mist); font-size: 12px; }
+    /* The square icon mark sits a touch above the title's cap height so the
+       two read as one lockup; the old 42px was drawn for the wide horizontal
+       logo and reads chunky on a 1:1 mark. */
+    header img { height: 30px; }
+    header h1 { margin: 0; font-size: 23px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; }
     main {
       flex: 1;
       display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -56,20 +58,16 @@
     .app-card .ic svg { width: 30px; height: 30px; }
     .app-card h2 { margin: 0 0 5px; font-size: 17px; font-weight: 800; letter-spacing: -0.01em; }
     .app-card p { margin: 0; color: var(--mist); font-size: 13px; line-height: 1.5; }
-    footer { padding: 18px; color: var(--soft); font-size: 12px; text-align: center; }
   </style>
 </head>
 <body>
   <header>
-    <img src="diagrams/assets/cth-logo-black.svg" alt="CTH">
-    <div>
-      <h1>CTH Apps</h1>
-      <p>Web Apps For Coach Tony Hockey</p>
-    </div>
+    <img src="diagrams/assets/cth-icon-black.svg" alt="CTH">
+    <h1>CTH Apps</h1>
   </header>
   <main>
     <a class="app-card" href="diagrams/">
-      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2.75" y="5" width="18.5" height="14" rx="6"/><path d="M12 5v14"/><circle cx="12" cy="12" r="2.4"/></svg></div>
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m4.6 14.9 4.6 4.6"/><path d="m9.2 14.9-4.6 4.6"/><circle cx="17.5" cy="17.2" r="2.6"/><path d="M5.5 9.5C6.5 5.5 10.5 3.6 14 4.9c3 1.1 4.6 4 4.2 7.2"/><path d="m16.5 10.5 1.7 1.7 1.7-1.8"/></svg></div>
       <h2>Diagrams</h2>
       <p>Design drills and plays on a full rink. Save, sequence, and export game-ready images.</p>
     </a>
@@ -84,6 +82,5 @@
       <p>Turn any Notion page into film-session slides with scrubbable video and live drawing.</p>
     </a>
   </main>
-  <footer>More Apps Coming - This Page Is Their Home.</footer>
 </body>
 </html>
