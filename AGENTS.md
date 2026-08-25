@@ -15,9 +15,14 @@ site, no build step: GitHub Pages serves the `main` branch as-is. **Merging
 to `main` IS the deploy** - the live site updates within about a minute.
 The interface says "Diagram"; the `#/drill/` hash and the `drills`
 IndexedDB store are frozen storage terms - do not rename them. Diagrams has
-NO library page: it opens straight into the last diagram and the sidebar
-file tree (folders, drag and drop, right-click menu) is the library. There
-is NO canvas zoom, on purpose - the stage sizes itself to the window.
+a HOME PAGE at `#/` again (2026-08-25, Tony's call, reversing 2026-08-24):
+a library landing page like Clips and Present - recent cards, a searchable
+folder-grouped list, Import, Back Up and + New Diagram. The editor keeps
+the sidebar file tree (folders, drag and drop, right-click menu); the
+editor's Back button goes to the home page, and the home page's Back goes
+to the hub. There is NO canvas zoom, on purpose - the stage sizes itself
+to the window. Folders show a folder glyph (`.fic`) in the tree and on the
+home page, matching the Clips tree.
 Diagram "Link" buttons upload a PNG to Dropbox at a stable overwrite path
 (/apps/diagrams/<id>-*.png via ../clips/js/dropbox.js) so a link pasted in
 Notion updates in place on every re-copy.
@@ -99,7 +104,46 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   the Diagrams manual-save rule here; they are different by design.
 - The game record shape `{ id, name, path, source, duration, clips,
   freezes }` and the clip shape `{ id, label, color, in, out, tags, note }`
-  are storage formats - additive changes only.
+  are storage formats - additive changes only. `videoTags` (2026-08-25) is
+  an optional array of strings on the game record: the VIDEO's own tags,
+  shown and edited in the library file tree, distinct from a clip's `tags`.
+  Settings gained optional `logH` (the clip log's height in px).
+- **The library file tree is full-width and tag-aware** (2026-08-25). Video
+  rows carry their `videoTags` as chips with a write-in box (Enter adds,
+  the chip's x removes, clicking a chip searches it); the search bar above
+  the tree has a scope select (Tags + Clips / Tags Only / Clips Only) that
+  matches file names, video tags, and the clips inside each game record,
+  plus a "Matches Elsewhere In Your Library" section for tagged games
+  outside the open folder (records only - it never walks Dropbox
+  recursively). New Folder creates a real Dropbox folder via
+  `files/create_folder_v2`. Exporting a clip also writes a library record
+  for the exported file carrying the clip's label and tags, so exports
+  arrive in the tree already tagged.
+- **The player layout** (2026-08-25): tag buttons live in a slim vertical
+  side panel on the right (a horizontal strip below 900px); the clip log
+  sits full-width UNDER the video, split from it by a drag bar (height
+  persists in `settings.logH`, double-click resets); the header Clips
+  button hides the log entirely for a full-height picture. Log rows are one
+  line with tag chips and a write-in tag box per clip.
+- **Upload lives on the library header** (2026-08-25, Tony's ask): a sheet
+  uploads a picked video into the folder open in the tree, either Original
+  (as-is) or Compressed. Compression is the CTH Compressor's recipe done
+  with browser parts (canvas + MediaRecorder at 1080p ~4 Mbps or 720p
+  ~2.5 Mbps, audio kept via a silent WebAudio route), so it plays the clip
+  through once in REAL TIME - right for clips, wrong for whole games; the
+  Mac droplet stays the tool for those. Uploads go through
+  `dbxUploadProgress` (XHR for real progress; upload sessions chunk
+  anything past 24MB, so big film works), always `autorename` - an upload
+  must never overwrite film already there.
+- **Scrubbing is batched, never per-event** (2026-08-25, ported from the
+  CTH Skills Academy film player where the feel was tuned). A gesture
+  accumulates into a target; at most one seek is in flight (fastSeek where
+  supported), one precise seek settles on gesture end, and the playhead and
+  clock read the TARGET while a gesture runs. The rate is
+  duration-proportional (a ~900px swipe crosses the file, bounded 0.004 to
+  0.25 s/px; Shift is 8x finer), and a gesture is claimed once and kept so
+  vertical finger drift cannot stutter it. The timeline drag rides the same
+  pipe. Do not go back to seeking per wheel or pointer event.
 - Freeze-frame drawings use the DIAGRAMS element model and renderer
   (`/diagrams/js/flat.js` is imported cross-app); keep that import working.
 - `clips/embed.html` is the Notion-embeddable single-clip player; its hash

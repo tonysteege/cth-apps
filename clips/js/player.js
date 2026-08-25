@@ -107,12 +107,69 @@ function pressTagButton(b) {
 
 export function seek(t, keepFreeze = false) {
   const v = video();
+  seekState.target = null;
   v.currentTime = Math.max(0, Math.min(cur?.duration || v.duration || 0, t));
   if (!keepFreeze) cancelFreezeHold();
   cur.prevTick = null;
   drawTimeline();
   paintClock();
 }
+
+// --- Batched seeking: the core of the QuickTime feel -----------------------
+//
+// A trackpad burst (or a fast timeline drag) emits events far faster than a
+// video element can seek, and the old code seeked on every one, reading
+// `currentTime` back between them. A read mid-seek returns the in-flight
+// landing, so each event fought the last and the picture stuttered while the
+// playhead barely moved. The fix is the CTH Skills Academy film player's
+// model, ported whole: a TARGET is the single authority while the gesture
+// runs, at most one seek is in the pipe at a time (applied on animation
+// frames, `fastSeek` where the browser has it for cheap keyframe landings),
+// and one precise `currentTime` seek settles the frame when the gesture ends.
+const seekState = { target: null, raf: 0, timer: 0 };
+
+function armApply() {
+  if (seekState.raf) return;
+  seekState.raf = requestAnimationFrame(applyQueuedSeek);
+  // rAF stops when the tab is hidden or occluded (same reason the freeze
+  // tick also rides timeupdate); the timer backstop keeps a queued seek
+  // from stranding there.
+  clearTimeout(seekState.timer);
+  seekState.timer = setTimeout(applyQueuedSeek, 64);
+}
+function queueSeek(t) {
+  if (!cur) return;
+  seekState.target = Math.max(0, Math.min(cur.duration || 0, t));
+  armApply();
+}
+function applyQueuedSeek() {
+  cancelAnimationFrame(seekState.raf);
+  clearTimeout(seekState.timer);
+  seekState.raf = 0;
+  seekState.timer = 0;
+  if (!cur || seekState.target == null) return;
+  const v = video();
+  // One seek in flight at a time: wait a beat rather than piling on.
+  if (v.seeking) { armApply(); return; }
+  if (typeof v.fastSeek === 'function') v.fastSeek(seekState.target);
+  else v.currentTime = seekState.target;
+  cur.prevTick = null;
+}
+function settleSeek() {
+  if (!cur || seekState.target == null) return;
+  const t = seekState.target;
+  cancelAnimationFrame(seekState.raf);
+  clearTimeout(seekState.timer);
+  seekState.raf = 0;
+  seekState.timer = 0;
+  seekState.target = null;
+  video().currentTime = t; // the one precise, non-fast seek
+  cur.prevTick = null;
+}
+// While a gesture runs the UI tracks the finger, not the decoder: the
+// playhead and clock read the target so they stay glued to the gesture even
+// when a between-keyframes landing is still decoding.
+function headTime() { return seekState.target ?? video().currentTime; }
 
 function togglePlay() {
   const v = video();
@@ -134,17 +191,54 @@ function setSpeed(s) {
   if (b) b.textContent = `${s}x`;
 }
 
-// QuickTime-style two-finger scrub on the stage: horizontal wheel motion
-// drags the playhead. The whole gesture pauses playback.
+// QuickTime-style two-finger scrub on the stage. Three rules, all from the
+// CTH Skills Academy film player where this feel was tuned and shipped:
+//
+// 1. The rate is proportional to the video, not a constant. A full ~900px
+//    swipe crosses the whole file, bounded at both ends (a 3s clip stays
+//    aimable, an hour of game film is not crossed by accident - the ceiling
+//    binds from about four minutes up). The old constant 0.012s/px was drawn
+//    for nothing in particular: on a 60-minute period a full swipe moved the
+//    playhead 11 seconds, which read as "hardly moves at all".
+// 2. A gesture is CLAIMED once and kept. The old per-event axis test dropped
+//    every event where the finger drifted a little vertical, so a swipe
+//    stuttered in and out of scrubbing - the "super jumpy" half of the bug.
+//    Vertical scrolls are still never stolen: only a clearly-horizontal
+//    motion starts a gesture (1.4 margin, because trackpads leak a little of
+//    the other axis on every gesture).
+// 3. Seeks batch through queueSeek above - never one per wheel event.
+//
+// Shift is the fine pass: eight times slower, for finding the frame where
+// stick meets puck rather than the shift it happened on.
+const SCRUB_TRAVEL_PX = 900;
+const MIN_SEC_PER_PX = 0.004;
+const MAX_SEC_PER_PX = 0.25;
+const FINE_DIVISOR = 8;
+const SCRUB_END_MS = 140;
+
+function secPerPx(duration) {
+  if (!isFinite(duration) || duration <= 0) return MIN_SEC_PER_PX;
+  return Math.min(Math.max(duration / SCRUB_TRAVEL_PX, MIN_SEC_PER_PX), MAX_SEC_PER_PX);
+}
+const isScrubGesture = (dx, dy) => Math.abs(dx) > Math.abs(dy) * 1.4 && Math.abs(dx) > 0.5;
+
+let scrub = null; // { endTimer } - target lives in seekState
 function onStageWheel(e) {
   if (!cur) return;
-  if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return; // vertical = page scroll
+  if (!scrub && !isScrubGesture(e.deltaX, e.deltaY)) return; // vertical = page scroll
   e.preventDefault();
   const v = video();
-  if (!v.paused) v.pause();
-  cancelFreezeHold();
+  if (!scrub) {
+    if (!v.paused) v.pause();
+    cancelFreezeHold();
+    scrub = { endTimer: 0 };
+    seekState.target = v.currentTime;
+  }
   const dir = cur.settings.scrubReverse ? -1 : 1;
-  seek(v.currentTime + dir * e.deltaX * 0.012);
+  const rate = secPerPx(cur.duration) / (e.shiftKey ? FINE_DIVISOR : 1);
+  queueSeek(seekState.target + dir * e.deltaX * rate);
+  clearTimeout(scrub.endTimer);
+  scrub.endTimer = setTimeout(() => { scrub = null; settleSeek(); }, SCRUB_END_MS);
 }
 
 // ------------------------------------------------------------- clip mode
@@ -315,8 +409,8 @@ function drawTimeline() {
     ctx.fill();
   }
 
-  // playhead
-  const x = px(video().currentTime);
+  // playhead (tracks the gesture target while a scrub or drag runs)
+  const x = px(headTime());
   ctx.fillStyle = '#1a1a1a';
   ctx.fillRect(x - 1, 0, 2, H);
   ctx.beginPath();
@@ -343,14 +437,18 @@ function onTlDown(e) {
     const hit = [...cur.game.clips].reverse().find((x) => t >= x.in && t <= x.out);
     if (hit && hit.id !== cur.sel) setSel(hit.id);
     tlDrag = { kind: 'seek' };
-    seek(t);
+    cancelFreezeHold();
+    queueSeek(t);
   }
   tlCanvas().setPointerCapture?.(e.pointerId);
 }
 function onTlMove(e) {
   if (!tlDrag || !cur) return;
   const t = tlPointT(e);
-  if (tlDrag.kind === 'seek') { seek(t); return; }
+  // Same batched pipe the trackpad scrub uses: a fast drag emits pointer
+  // events quicker than the video can seek, so per-event seeks stutter here
+  // for exactly the same reason they did on the stage.
+  if (tlDrag.kind === 'seek') { queueSeek(t); return; }
   const c = cur.game.clips.find((x) => x.id === tlDrag.id);
   if (!c) return;
   if (tlDrag.kind === 'in') c.in = Math.max(0, Math.min(c.out - 0.3, t));
@@ -359,7 +457,9 @@ function onTlMove(e) {
   paintLog();
 }
 function onTlUp() {
-  if (tlDrag && tlDrag.kind !== 'seek') scheduleSave();
+  if (!tlDrag) return;
+  if (tlDrag.kind === 'seek') settleSeek();
+  else scheduleSave();
   tlDrag = null;
 }
 
@@ -367,21 +467,30 @@ function onTlUp() {
 
 function keyBadge(k) { return k ? `<span class="tag-key">${esc(k.toUpperCase())}</span>` : ''; }
 
+// The tag buttons live in a slim vertical side panel (moved from a two-row
+// bar under the timeline, 2026-08-25, Tony's call): the rows were the widest
+// thing under the video and the height they took came straight out of the
+// picture. A narrow column costs the stage almost nothing and scrolls when
+// the button list grows.
 function paintBar() {
-  const bar = el('vpTagBar');
+  const bar = el('vpSide');
   if (!bar || !cur) return;
   const c = selClip();
   const t1 = panelButtons(1).map((b) => `
     <button class="tag-btn" data-clipbtn="${b.id}" style="--c:${b.color}" title="${esc(b.label)}: Clip ${b.lead}s Before To ${b.lag}s After The Playhead">
-      ${esc(b.label)}${keyBadge(b.key)}
+      <span class="tag-btn-word">${esc(b.label)}</span>${keyBadge(b.key)}
     </button>`).join('');
   const t2 = panelButtons(2).map((b) => `
     <button class="tag-btn tag-btn-tag${c?.tags.includes(b.label) ? ' on' : ''}" data-tagbtn="${b.id}" style="--c:${b.color}" title="Toggle #${esc(b.label)} On The Selected Clip">
-      #${esc(b.label)}${keyBadge(b.key)}
+      <span class="tag-btn-word">#${esc(b.label)}</span>${keyBadge(b.key)}
     </button>`).join('');
   bar.innerHTML = `
-    <div class="tag-row">${t1}<button class="tag-btn tag-edit" data-act="editPanel" title="Edit Buttons, Keys, Colors, Lead And Lag">Edit</button></div>
-    <div class="tag-row">${t2}${cur.clipMode ? `<button class="tag-btn tag-btn-mode on" data-act="exitClip">Playing Clip - Esc Exits</button>` : ''}</div>`;
+    <div class="side-label">Clip Buttons</div>
+    ${t1}
+    <div class="side-label">Tags</div>
+    ${t2}
+    ${cur.clipMode ? `<button class="tag-btn tag-btn-mode on" data-act="exitClip">Playing Clip - Esc Exits</button>` : ''}
+    <button class="tag-btn tag-edit" data-act="editPanel" title="Edit Buttons, Keys, Colors, Lead And Lag">Edit Buttons</button>`;
   bar.querySelectorAll('[data-clipbtn]').forEach((b) => {
     b.onclick = () => pressClipButton(cur.settings.panel.buttons.find((x) => x.id === b.dataset.clipbtn));
   });
@@ -410,37 +519,54 @@ function filteredClips() {
   return list;
 }
 
+// A write-in tag, normalized to the style the defaults use: no leading #,
+// no spaces (they become dashes), never empty.
+export const normTag = (raw) => (raw || '').trim().replace(/^#+/, '').replace(/\s+/g, '-').toLowerCase();
+
+// The log lives full-width under the video (moved from a 300px right rail,
+// 2026-08-25, Tony's call), so a row has real horizontal room: name and time
+// on the left, then the clip's tags as chips with a write-in box, actions on
+// the right. The rail's stacked two-line rows wasted the one thing tags
+// need, which is width.
 export function paintLog() {
   const log = el('vpLog');
   if (!log || !cur) return;
   const labels = [...new Set(cur.game.clips.map((c) => c.label))];
   const tags = [...new Set(cur.game.clips.flatMap((c) => c.tags))];
+  const tagOpts = [...new Set([...panelButtons(2).map((b) => b.label), ...tags])];
   const list = filteredClips();
-  const activeInput = document.activeElement === el('vpLogSearch') ? el('vpLogSearch').selectionStart : null;
+  // Keep the caret alive across a repaint, for the search box and for
+  // whichever row's write-in box is being typed in.
+  const ae = document.activeElement;
+  const keepSearch = ae === el('vpLogSearch') ? ae.selectionStart : null;
+  const keepTagRow = ae?.dataset?.tagrow || null;
+  const keepTagVal = keepTagRow ? ae.value : '';
   log.innerHTML = `
     <div class="log-head">
       <input id="vpLogSearch" type="search" placeholder="Search Clips…" value="${esc(view.search)}" autocomplete="off">
-      <div class="log-filters">
-        <select id="vpLogLabel" title="Filter By Clip Button">
-          <option value="">All Clips</option>
-          ${labels.map((l) => `<option${view.label === l ? ' selected' : ''}>${esc(l)}</option>`).join('')}
-        </select>
-        <select id="vpLogTag" title="Filter By Tag">
-          <option value="">All Tags</option>
-          ${tags.map((t) => `<option${view.tag === t ? ' selected' : ''}>${esc(t)}</option>`).join('')}
-        </select>
-        <button class="mini" id="vpLogSort" title="Flip Sort Order">${view.sort === 'timedesc' ? 'Newest' : 'Timeline'}</button>
-      </div>
+      <select id="vpLogLabel" title="Filter By Clip Button">
+        <option value="">All Clips</option>
+        ${labels.map((l) => `<option${view.label === l ? ' selected' : ''}>${esc(l)}</option>`).join('')}
+      </select>
+      <select id="vpLogTag" title="Filter By Tag">
+        <option value="">All Tags</option>
+        ${tags.map((t) => `<option${view.tag === t ? ' selected' : ''}>${esc(t)}</option>`).join('')}
+      </select>
+      <button class="mini" id="vpLogSort" title="Flip Sort Order">${view.sort === 'timedesc' ? 'Newest' : 'Timeline'}</button>
       <div class="log-count">${list.length} Of ${cur.game.clips.length} Clip${cur.game.clips.length === 1 ? '' : 's'}</div>
     </div>
+    <datalist id="vpTagOpts">${tagOpts.map((t) => `<option value="${esc(t)}">`).join('')}</datalist>
     <div class="log-list">
       ${list.map((c) => `
         <div class="log-row${c.id === cur.sel ? ' on' : ''}" data-id="${c.id}">
           <span class="log-dot" style="--c:${c.color || '#3b82f6'}"></span>
-          <div class="log-main">
-            <div class="log-name">${esc(c.name || c.label)}</div>
-            <div class="log-meta">${fmtTime(c.in)} - ${fmtTime(c.out)}${c.tags.length ? ` &middot; ${c.tags.map((t) => `#${esc(t)}`).join(' ')}` : ''}</div>
-          </div>
+          <span class="log-name" title="Double-Click To Rename">${esc(c.name || c.label)}</span>
+          <span class="log-time">${fmtTime(c.in)} - ${fmtTime(c.out)}</span>
+          <span class="log-tags">
+            ${c.tags.map((t) => `<span class="tag-chip">#${esc(t)}<button data-rmtag="${esc(t)}" title="Remove #${esc(t)}">&times;</button></span>`).join('')}
+            <input class="log-tagin" data-tagrow="${c.id}" list="vpTagOpts" placeholder="+ Tag" autocomplete="off"
+              title="Type A Tag And Press Enter - It Lands On This Clip">
+          </span>
           <span class="log-acts">
             <button class="mini" data-do="play" title="Play This Clip">Play</button>
             <button class="mini" data-do="share" title="Share, Export, Embed, Email">Share</button>
@@ -450,28 +576,48 @@ export function paintLog() {
     </div>`;
   el('vpLogSearch').addEventListener('input', (e) => { view.search = e.target.value; paintLog(); });
   el('vpLogSearch').addEventListener('keydown', (e) => e.stopPropagation());
-  if (activeInput != null) { const s = el('vpLogSearch'); s.focus(); s.setSelectionRange(activeInput, activeInput); }
+  if (keepSearch != null) { const s = el('vpLogSearch'); s.focus(); s.setSelectionRange(keepSearch, keepSearch); }
   el('vpLogLabel').onchange = (e) => { view.label = e.target.value; paintLog(); };
   el('vpLogTag').onchange = (e) => { view.tag = e.target.value; paintLog(); };
   el('vpLogSort').onclick = () => { view.sort = view.sort === 'timedesc' ? 'timeline' : 'timedesc'; paintLog(); };
   log.querySelectorAll('.log-row').forEach((row) => {
     const id = row.dataset.id;
+    const clip = () => cur.game.clips.find((x) => x.id === id);
     row.addEventListener('click', (e) => {
-      if (e.target.closest('.mini')) return;
-      const c = cur.game.clips.find((x) => x.id === id);
+      if (e.target.closest('.mini') || e.target.closest('.tag-chip') || e.target.closest('.log-tagin')) return;
+      const c = clip();
       setSel(id);
       seek(c.in);
     });
     row.addEventListener('dblclick', (e) => {
-      if (e.target.closest('.mini')) return;
-      const c = cur.game.clips.find((x) => x.id === id);
+      if (e.target.closest('.mini') || e.target.closest('.tag-chip') || e.target.closest('.log-tagin')) return;
+      const c = clip();
       const name = prompt('Clip Name', c.name || c.label);
       if (name != null) { c.name = name.trim(); scheduleSave(); paintLog(); }
     });
+    row.querySelectorAll('[data-rmtag]').forEach((x) => {
+      x.onclick = () => {
+        const c = clip();
+        c.tags = c.tags.filter((t) => t !== x.dataset.rmtag);
+        scheduleSave(); paintLog(); drawTimeline();
+      };
+    });
+    const tin = row.querySelector('.log-tagin');
+    tin.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key !== 'Enter' && e.key !== ',') return;
+      e.preventDefault();
+      const t = normTag(tin.value);
+      if (!t) return;
+      const c = clip();
+      if (!c.tags.includes(t)) c.tags = [...c.tags, t];
+      tin.value = '';
+      scheduleSave(); paintLog(); drawTimeline();
+    });
+    if (keepTagRow === id) { tin.focus(); tin.value = keepTagVal; }
     row.querySelector('[data-do="play"]').onclick = () => enterClipMode(id, { loop: false });
     row.querySelector('[data-do="share"]').onclick = (e) => {
-      const c = cur.game.clips.find((x) => x.id === id);
-      if (hooks.onShare) hooks.onShare(c, e.currentTarget);
+      if (hooks.onShare) hooks.onShare(clip(), e.currentTarget);
     };
     row.querySelector('[data-do="del"]').onclick = () => {
       cur.game.clips = cur.game.clips.filter((x) => x.id !== id);
@@ -594,7 +740,7 @@ function onKey(e) {
 
 function paintClock() {
   const c = el('vpClock');
-  if (c && cur) c.textContent = `${fmtTime(video().currentTime, true)} / ${fmtTime(cur.duration)}`;
+  if (c && cur) c.textContent = `${fmtTime(headTime(), true)} / ${fmtTime(cur.duration)}`;
 }
 
 function raf() {

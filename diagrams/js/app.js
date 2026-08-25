@@ -25,6 +25,7 @@ const safeName = (s) => (s || 'diagram').replace(/[^\w\- ]+/g, '').trim().replac
 
 const BACK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12H4"/><path d="m10 18-6-6 6-6"/></svg>';
 const TREE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9.5 4v16"/></svg>';
+const FOLDER_ICON = '<svg class="fic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
 
 // ------------------------------------------------------------- folders
 
@@ -41,12 +42,12 @@ function saveFolders(list) {
 function route() {
   const h = location.hash || '#/';
   const m = h.match(/^#\/drill\/([\w-]+)/);
-  return m ? { view: 'editor', id: m[1] } : { view: 'default' };
+  return m ? { view: 'editor', id: m[1] } : { view: 'home' };
 }
 
-// There is no library page: the app opens straight into a diagram - the
-// last one touched, else the newest, else a fresh blank rink. The sidebar
-// file tree is the library.
+// The home page is back (2026-08-25, Tony's call, reversing 2026-08-24):
+// `#/` is a library landing page like Clips and Present have. The editor
+// keeps its sidebar file tree; the home page is where the app OPENS.
 const LAST_KEY = 'cthd.lastdrill.v1';
 async function resolveDefaultDrill() {
   const last = localStorage.getItem(LAST_KEY);
@@ -66,10 +67,7 @@ async function go() {
   leaving = false;
   const r = route();
   if (r.view === 'editor') { await showEditor(r.id); return; }
-  const id = await resolveDefaultDrill();
-  history.replaceState(null, '', `#/drill/${id}`);
-  routeHash = location.hash;
-  await showEditor(id);
+  await showHome();
 }
 
 async function newDrill(folder = '') {
@@ -102,6 +100,116 @@ async function importPng(file) {
   await putDrill(drill);
   toast(`Imported "${name}"${state ? ' - Fully Editable' : ''}`);
   return drill.id;
+}
+
+// ------------------------------------------------------------- home view
+
+// Back up and import serve both the home page and the editor tree, so the
+// bodies live here once.
+async function backupAll() {
+  const payload = await exportAll();
+  if (!payload.drills.length) { toast('Nothing To Back Up Yet', true); return; }
+  payload.folders = folders();
+  downloadBlob(new Blob([JSON.stringify(payload)], { type: 'application/json' }),
+    `cth-diagrams-backup-${new Date().toISOString().slice(0, 10)}.json`);
+  toast(`Backed Up ${payload.drills.length} Diagram${payload.drills.length === 1 ? '' : 's'}`);
+}
+async function importFiles(files) {
+  for (const f of files) {
+    try {
+      if (/\.json$/i.test(f.name)) {
+        const payload = JSON.parse(await f.text());
+        const n = await importAll(payload);
+        if (Array.isArray(payload.folders)) saveFolders([...new Set([...folders(), ...payload.folders])]);
+        toast(`Imported ${n} Diagram${n === 1 ? '' : 's'} From Backup`);
+      } else {
+        const nid = await importPng(f);
+        if (nid && files.length === 1) { location.hash = `#/drill/${nid}`; return true; }
+      }
+    } catch (err2) {
+      console.error(err2);
+      toast(`${f.name}: ${err2.message || 'Could Not Import'}`, true);
+    }
+  }
+  return false;
+}
+
+async function showHome() {
+  document.title = 'CTH Diagrams';
+  const drills = await listDrills();
+  const known = new Set(folders());
+  for (const d of drills) if (d.folder && !known.has(d.folder)) known.add(d.folder);
+  const folderList = [...folders(), ...[...known].filter((f) => !folders().includes(f))];
+  const recent = drills.slice(0, 8); // listDrills sorts by updated desc
+  const row = (d) => `
+    <button class="dlib-row" data-open="${d.id}">
+      <span class="dlib-thumb">${d.thumb ? `<img src="${d.thumb}" alt="">` : ''}</span>
+      <span class="dlib-name">${esc(d.name || 'Untitled Diagram')}</span>
+      <span class="dlib-date">${fmtDate(d.updated || d.created)}</span>
+    </button>`;
+  const loose = drills.filter((d) => !(d.folder || ''));
+  $('#app').innerHTML = `
+    <header class="lib-head">
+      <div class="brand">
+        <button class="btn btn-back" id="dlibHome" title="Back To CTH Apps">${BACK_ICON}</button>
+        <img src="assets/cth-icon-black.svg" alt="CTH" class="brand-logo">
+        <div class="brand-word">
+          <h1>CTH Diagrams</h1>
+        </div>
+      </div>
+      <div class="lib-actions">
+        <button class="btn" id="dlibImport" title="Open A Diagram PNG Or Restore A Backup JSON">Import</button>
+        <button class="btn" id="dlibBackup" title="Download Every Diagram As One Backup JSON">Back Up</button>
+        <button class="btn btn-ink" id="dlibNew">+ New Diagram</button>
+      </div>
+    </header>
+    <main class="dlib">
+      ${recent.length ? `
+        <div class="dlib-title">Recent</div>
+        <div class="dlib-recents">
+          ${recent.map((d) => `
+            <button class="dlib-card" data-open="${d.id}">
+              <span class="dlib-card-thumb">${d.thumb ? `<img src="${d.thumb}" alt="">` : ''}</span>
+              <span class="dlib-card-name">${esc(d.name || 'Untitled Diagram')}</span>
+            </button>`).join('')}
+        </div>` : ''}
+      <div class="dlib-title">All Diagrams</div>
+      <input id="dlibSearch" type="search" placeholder="Search Diagrams…" autocomplete="off">
+      <div class="dlib-list">
+        <div data-sec>
+          ${loose.map(row).join('')}
+        </div>
+        ${folderList.map((f) => `
+          <div data-sec>
+            <div class="dlib-folder">${FOLDER_ICON}${esc(f)}<span class="eside-count">${drills.filter((d) => (d.folder || '') === f).length}</span></div>
+            ${drills.filter((d) => (d.folder || '') === f).map(row).join('') || '<div class="dlib-note">Empty</div>'}
+          </div>`).join('')}
+        ${!drills.length ? '<div class="dlib-note">No Diagrams Yet - Press + New Diagram To Draw Your First.</div>' : ''}
+      </div>
+    </main>
+    <input type="file" id="dlibFile" accept=".png,.json,application/json,image/png" hidden multiple>`;
+  $('#dlibHome').onclick = () => { location.href = '../'; };
+  $('#dlibNew').onclick = () => void newDrill('');
+  $('#dlibImport').onclick = () => $('#dlibFile').click();
+  $('#dlibBackup').onclick = () => void backupAll();
+  $('#dlibFile').onchange = async (e) => {
+    const files = [...e.target.files];
+    e.target.value = '';
+    const opened = await importFiles(files);
+    if (!opened) await showHome();
+  };
+  document.querySelectorAll('[data-open]').forEach((b) => {
+    b.addEventListener('click', () => { location.hash = `#/drill/${b.dataset.open}`; });
+  });
+  const search = $('#dlibSearch');
+  search.addEventListener('keydown', (e) => e.stopPropagation());
+  search.addEventListener('input', () => {
+    const q = search.value.trim().toLowerCase();
+    document.querySelectorAll('.dlib-row').forEach((r) => {
+      r.hidden = !!q && !r.querySelector('.dlib-name').textContent.toLowerCase().includes(q);
+    });
+    document.querySelectorAll('.dlib-folder').forEach((h) => { h.hidden = !!q; });
+  });
 }
 
 // ------------------------------------------------------------- editor view
@@ -212,7 +320,7 @@ async function paintEdSide(currentId) {
       ${folderList.map((f) => `
         <div class="eside-folder${closedSet.has(f) ? ' closed' : ''}" data-folder="${esc(f)}" draggable="true">
           <svg class="eside-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m9 6 6 6-6 6"/></svg>
-          ${esc(f)}<span class="eside-count">${drills.filter((d) => (d.folder || '') === f).length}</span>
+          ${FOLDER_ICON}${esc(f)}<span class="eside-count">${drills.filter((d) => (d.folder || '') === f).length}</span>
         </div>
         <div data-rows="${esc(f)}"${closedSet.has(f) ? ' hidden' : ''}>
           ${drills.filter((d) => (d.folder || '') === f).map(row).join('') || '<div class="eside-empty">Empty - Drag Diagrams Here</div>'}
@@ -355,34 +463,12 @@ async function paintEdSide(currentId) {
     });
   };
   $('#esideImport').onclick = () => $('#esideFile').click();
-  $('#esideBackup').onclick = async () => {
-    const payload = await exportAll();
-    if (!payload.drills.length) { toast('Nothing To Back Up Yet', true); return; }
-    payload.folders = folders();
-    downloadBlob(new Blob([JSON.stringify(payload)], { type: 'application/json' }),
-      `cth-diagrams-backup-${new Date().toISOString().slice(0, 10)}.json`);
-    toast(`Backed Up ${payload.drills.length} Diagram${payload.drills.length === 1 ? '' : 's'}`);
-  };
+  $('#esideBackup').onclick = () => void backupAll();
   $('#esideFile').onchange = async (e) => {
     const files = [...e.target.files];
     e.target.value = '';
-    for (const f of files) {
-      try {
-        if (/\.json$/i.test(f.name)) {
-          const payload = JSON.parse(await f.text());
-          const n = await importAll(payload);
-          if (Array.isArray(payload.folders)) saveFolders([...new Set([...folders(), ...payload.folders])]);
-          toast(`Imported ${n} Diagram${n === 1 ? '' : 's'} From Backup`);
-        } else {
-          const nid = await importPng(f);
-          if (nid && files.length === 1) { location.hash = `#/drill/${nid}`; return; }
-        }
-      } catch (err2) {
-        console.error(err2);
-        toast(`${f.name}: ${err2.message || 'Could Not Import'}`, true);
-      }
-    }
-    refresh();
+    const opened = await importFiles(files);
+    if (!opened) refresh();
   };
   $('#esideSearch').addEventListener('keydown', (e) => e.stopPropagation());
   $('#esideSearch').addEventListener('input', (e) => {
@@ -403,7 +489,7 @@ async function showEditor(id) {
   app.innerHTML = `
     <div class="ed">
       <header class="ed-head">
-        <button class="btn btn-back" id="edBack" title="Back To CTH Apps" aria-label="Back To CTH Apps">${BACK_ICON}</button>
+        <button class="btn btn-back" id="edBack" title="Back To Your Diagrams" aria-label="Back To Your Diagrams">${BACK_ICON}</button>
         <button class="btn btn-back" id="edTree" title="Show Or Hide Your Diagrams" aria-label="Diagrams Sidebar">${TREE_ICON}</button>
         <input id="edTitle" class="ed-title" value="${esc(drill.name || '')}" placeholder="Name This Diagram…" autocomplete="off" spellcheck="false">
         <span class="ed-status" id="edStatus">Saved</span>
@@ -476,7 +562,9 @@ async function showEditor(id) {
 
   const acts = editorActions();
   $('#edSave').onclick = async () => { await saveNow(); void paintEdSide(id); };
-  $('#edBack').onclick = () => { location.href = '../'; };
+  // Back goes to the app's own home page now, not the hub; the hashchange
+  // guard still runs, so unsaved work still gets the leave sheet.
+  $('#edBack').onclick = () => { location.hash = '#/'; };
   $('#edFlip').onclick = () => void acts.flipH();
   $('#edUndo').onclick = () => void acts.undo();
   $('#edRedo').onclick = () => void acts.redo();

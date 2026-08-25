@@ -145,6 +145,18 @@ export async function dbxListFolder(path = VIDEO_ROOT) {
   return { folders, files };
 }
 
+// Create a real Dropbox folder (the library's New Folder button). Conflict
+// on an existing name is surfaced as a plain-words error, not swallowed:
+// the user asked for a folder and has to know they already have it.
+export async function dbxCreateFolder(path) {
+  try {
+    return await rpc('files/create_folder_v2', { path, autorename: false });
+  } catch (e) {
+    if (/conflict/.test(e.body || '')) throw new Error('A Folder With That Name Already Exists');
+    throw e;
+  }
+}
+
 // A direct, range-request-capable URL for <video src> - valid about 4 hours.
 export async function dbxTempLink(path) {
   const j = await rpc('files/get_temporary_link', { path });
@@ -168,6 +180,56 @@ export async function dbxStreamLink(path) {
   u.hostname = 'dl.dropboxusercontent.com';
   u.searchParams.delete('dl');
   return u.toString();
+}
+
+// Upload with real progress, chunking big files through an upload session
+// (the single-call endpoint tops out at 150MB and game film sails past it).
+// XHR rather than fetch because fetch has no upload progress events.
+const SESSION_CHUNK = 24 * 1024 * 1024;
+
+function xhrPost(url, headers, body, onProgress) {
+  return new Promise((res, rej) => {
+    const x = new XMLHttpRequest();
+    x.open('POST', url);
+    for (const [k, v] of Object.entries(headers)) x.setRequestHeader(k, v);
+    if (onProgress) x.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded, e.total); };
+    x.onload = () => {
+      if (x.status >= 200 && x.status < 300) { try { res(JSON.parse(x.responseText)); } catch (_) { res({}); } }
+      else rej(new Error(`Dropbox Upload Failed: ${String(x.responseText).slice(0, 160)}`));
+    };
+    x.onerror = () => rej(new Error('Dropbox Upload Failed - Check Your Connection'));
+    x.send(body);
+  });
+}
+
+// onProgress gets 0..1 across the WHOLE blob, chunked or not. autorename is
+// on: an upload must never overwrite film that is already there.
+export async function dbxUploadProgress(path, blob, onProgress = () => {}) {
+  const tok = await accessToken();
+  const arg = JSON.stringify;
+  const H = (extra) => ({ Authorization: `Bearer ${tok}`, 'Content-Type': 'application/octet-stream', ...extra });
+  if (blob.size <= SESSION_CHUNK) {
+    return xhrPost('https://content.dropboxapi.com/2/files/upload',
+      H({ 'Dropbox-API-Arg': arg({ path, mode: 'add', autorename: true, mute: true }) }),
+      blob, (l, t) => onProgress(l / t));
+  }
+  const first = blob.slice(0, SESSION_CHUNK);
+  const start = await xhrPost('https://content.dropboxapi.com/2/files/upload_session/start',
+    H({ 'Dropbox-API-Arg': arg({ close: false }) }),
+    first, (l) => onProgress(l / blob.size));
+  let off = first.size;
+  while (blob.size - off > SESSION_CHUNK) {
+    const part = blob.slice(off, off + SESSION_CHUNK);
+    const base = off;
+    await xhrPost('https://content.dropboxapi.com/2/files/upload_session/append_v2',
+      H({ 'Dropbox-API-Arg': arg({ cursor: { session_id: start.session_id, offset: base }, close: false }) }),
+      part, (l) => onProgress((base + l) / blob.size));
+    off += part.size;
+  }
+  const base = off;
+  return xhrPost('https://content.dropboxapi.com/2/files/upload_session/finish',
+    H({ 'Dropbox-API-Arg': arg({ cursor: { session_id: start.session_id, offset: base }, commit: { path, mode: 'add', autorename: true, mute: true } }) }),
+    blob.slice(off), (l) => onProgress((base + l) / blob.size));
 }
 
 // Upload a Blob (exports, annotated frames). 150MB single-call limit is far

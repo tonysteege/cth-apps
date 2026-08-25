@@ -757,6 +757,54 @@ input { font: inherit; color: inherit; }
   .tb { gap: 3px; padding: 7px 8px; border-radius: 15px; }
 }
 
+/* ---------------------------------------------- home page (2026-08-25) */
+.dlib { flex: 1; padding: 22px clamp(16px, 3vw, 40px); background: var(--cloud); overflow-y: auto; }
+.dlib-title {
+  font-size: 10.5px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.09em; color: var(--soft); margin: 18px 4px 10px;
+}
+.dlib-title:first-child { margin-top: 0; }
+.dlib-note { color: var(--mist); padding: 8px 6px; font-size: 13px; }
+.dlib-recents { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 6px; }
+.dlib-card {
+  flex-shrink: 0; width: 172px; text-align: left;
+  border: 1px solid var(--edge); border-radius: var(--r-md);
+  background: var(--cloud); padding: 9px;
+  box-shadow: var(--shadow-1); transition: box-shadow .15s, border-color .15s;
+}
+.dlib-card:hover { box-shadow: var(--shadow-2); border-color: #cfcfcf; }
+.dlib-card-thumb {
+  display: block; width: 100%; aspect-ratio: 2 / 1; border-radius: 7px;
+  background: var(--sunken); overflow: hidden; margin-bottom: 7px;
+}
+.dlib-card-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.dlib-card-name { display: block; font-weight: 800; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#dlibSearch {
+  height: 36px; width: min(320px, 60vw); padding: 0 12px; font: inherit; font-size: 13px;
+  border: 1px solid var(--edge); border-radius: var(--r-sm); background: var(--cloud);
+  outline: none; margin-bottom: 10px;
+}
+#dlibSearch:focus { border-color: var(--soft); }
+.dlib-list { display: flex; flex-direction: column; }
+.dlib-folder {
+  display: flex; align-items: center; gap: 7px;
+  font-weight: 800; font-size: 13px; color: var(--graphite); padding: 12px 8px 4px;
+}
+.dlib-folder .eside-count { margin-left: 0; }
+.dlib-row {
+  display: flex; align-items: center; gap: 11px; text-align: left; cursor: pointer;
+  border: none; background: none; border-radius: var(--r-sm);
+  padding: 7px 8px; color: var(--graphite); font-size: 14px;
+}
+.dlib-row:hover { background: var(--sunken); color: var(--ink); }
+.dlib-thumb { width: 52px; height: 26px; flex-shrink: 0; border-radius: 5px; background: var(--sunken); overflow: hidden; }
+.dlib-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.dlib-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.dlib-date { color: var(--soft); font-size: 12px; flex-shrink: 0; }
+
+/* The folder glyph, one drawing for the tree and the home page. */
+.fic { width: 15px; height: 15px; flex-shrink: 0; color: var(--soft); }
+
 /* ---------------------------------------------- file tree extras */
 .eside-actions { display: flex; gap: 6px; margin-bottom: 10px; }
 .eside-actions .eside-new { margin-bottom: 0; flex: 1; white-space: nowrap; }
