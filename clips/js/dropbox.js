@@ -172,14 +172,16 @@ export async function dbxStreamLink(path) {
 
 // Upload a Blob (exports, annotated frames). 150MB single-call limit is far
 // beyond a PNG or a clip recording; session-chunking can come when needed.
-export async function dbxUpload(path, blob) {
+// mode 'overwrite' keeps a STABLE path - the Diagrams embed links rely on
+// that so a re-copied link updates the image already pasted in Notion.
+export async function dbxUpload(path, blob, { mode = 'add' } = {}) {
   const tok = await accessToken();
   const r = await fetch('https://content.dropboxapi.com/2/files/upload', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${tok}`,
       'Content-Type': 'application/octet-stream',
-      'Dropbox-API-Arg': JSON.stringify({ path, mode: 'add', autorename: true, mute: true }),
+      'Dropbox-API-Arg': JSON.stringify({ path, mode, autorename: mode === 'add', mute: true }),
     },
     body: blob,
   });

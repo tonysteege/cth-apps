@@ -96,7 +96,7 @@ const defaults = () => {
   };
 };
 
-const hasVGaps = () => onRink() && (cur.seq || 1) > 1;
+const hasVGaps = () => onRink(); // single rinks get the strip too
 const vTop = () => (hasVGaps() ? VTOP : 0);
 const vShiftOf = (k) => (hasVGaps() ? k * VGAP : 0);
 const frameOfLY = (ly) => Math.max(0, Math.min((cur.seq || 1) - 1, Math.floor(ly / (RINK_H + SEQ_GAP))));
@@ -364,7 +364,7 @@ export function currentState() {
     seq: cur.seq,
     elements: cur.elements,
   };
-  if (onRink() && (cur.seq || 1) > 1 && cur.rinkNames?.some((n) => n && n.trim())) st.rinkNames = cur.rinkNames;
+  if (onRink() && cur.rinkNames?.some((n) => n && n.trim())) st.rinkNames = cur.rinkNames;
   return st;
 }
 
@@ -504,28 +504,35 @@ function svgEl(x) {
 const RCTL_GLYPHS = {
   up: '<path d="M48 70V28M30 46 48 28l18 18"/>',
   down: '<path d="M48 26v42M30 50l18 18 18-18"/>',
-  copy: '<rect x="37" y="37" width="31" height="31" rx="8"/><path d="M27 59h-1a6 6 0 0 1-6-6V27a6 6 0 0 1 6-6h26a6 6 0 0 1 6 6v1"/>',
+  copy: '<rect x="36" y="36" width="32" height="32" rx="8"/><rect x="24" y="24" width="32" height="32" rx="8"/>',
+  link: '<path d="M41 55a11 11 0 0 0 15.6.9l7-7a11 11 0 0 0-15.6-15.5l-3.5 3.4M55 41a11 11 0 0 0-15.6-.9l-7 7a11 11 0 0 0 15.6 15.5l3.5-3.4"/>',
   dl: '<path d="M48 26v26M35 41l13 13 13-13M28 70h40"/>',
   del: '<path d="M33 33l30 30M63 33 33 63"/>',
 };
 const RCTL_TIPS = {
   up: 'Move This Rink Up', down: 'Move This Rink Down', copy: 'Copy This Rink To The Clipboard',
-  dl: 'Download This Rink As PNG', del: 'Remove This Rink',
+  dl: 'Download This Rink As PNG', link: 'Copy A Notion Embed Link For This Rink',
+  del: 'Remove This Rink',
 };
 const FLABEL = { size: 46, x: 24, gapAbove: 56 };
 function frameStripsSvg() {
   if (!hasVGaps()) return '';
   const out = [];
   const B = 68; const GAP = 14;
-  for (let k = 0; k < cur.seq; k++) {
+  for (let k = 0; k < (cur.seq || 1); k++) {
     const topV = k * (RINK_H + SEQ_GAP) + vShiftOf(k); // visual frame top
     const baseline = topV - FLABEL.gapAbove + FLABEL.size * 0.85;
     const name = (cur.rinkNames?.[k] || '').trim() || `Rink ${k + 1}`;
-    out.push(`<text class="ed-flabel" data-rframe="${k}" x="${FLABEL.x}" y="${baseline}" font-family="Inter, sans-serif" font-weight="800" font-size="${FLABEL.size}">${esc(name)}<title>Click To Rename This Rink</title></text>`);
+    // While the label is being renamed the SVG text stands down, so the
+    // input is the only thing on screen - no doubled letters.
+    if (cur.editLabel !== k) {
+      out.push(`<g class="ed-flabelwrap" data-rframe="${k}"><rect x="${FLABEL.x - 10}" y="${topV - FLABEL.gapAbove - 14}" width="${Math.max(320, name.length * FLABEL.size * 0.62) + 40}" height="${FLABEL.size + 34}" fill="transparent"></rect><text class="ed-flabel" x="${FLABEL.x}" y="${baseline}" font-family="Inter, sans-serif" font-weight="800" font-size="${FLABEL.size}">${esc(name)}<title>Click To Rename This Rink</title></text></g>`);
+    }
     const acts = [];
     if (k > 0) acts.push('up');
-    if (k < cur.seq - 1) acts.push('down');
-    acts.push('copy', 'dl', 'del');
+    if (k < (cur.seq || 1) - 1) acts.push('down');
+    acts.push('copy', 'dl', 'link');
+    if ((cur.seq || 1) > 1) acts.push('del');
     let x0 = RINK_W - acts.length * (B + GAP);
     const by = topV - FLABEL.gapAbove - (B - FLABEL.size) / 2 - 4;
     for (const a of acts) {
@@ -620,8 +627,8 @@ export function render() {
 
 const ICON = {
   select: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M4.04 4.69a.5.5 0 0 1 .65-.65l16 6.5a.5.5 0 0 1-.06.94l-6.13 1.58a2 2 0 0 0-1.43 1.44l-1.58 6.12a.5.5 0 0 1-.95.07z"/></svg>',
-  arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 19.5C6.5 12 10.5 8.2 16.5 6.4"/><path d="M13.6 4.1 19.5 5.5 17 11" stroke-linejoin="round"/></svg>',
-  dasharrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 19.5C6.5 12 10.5 8.2 16.5 6.4" stroke-dasharray="3.4 3"/><path d="M13.6 4.1 19.5 5.5 17 11" stroke-linejoin="round"/></svg>',
+  arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M5 19 19 5"/><path d="M10 5h9v9"/></svg>',
+  dasharrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M5 19 19 5" stroke-dasharray="3.4 3"/><path d="M10 5h9v9"/></svg>',
   box: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4.25" y="5.25" width="15.5" height="13.5" rx="2.75"/></svg>',
   circle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="7.75"/></svg>',
   text: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M4 7V5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5V7"/><path d="M12 4v16"/><path d="M9 20h6"/></svg>',
@@ -971,10 +978,11 @@ function paintTools() {
   act('faceoff', () => placeFaceoff());
   // The "+ Add Rink" bar sits under the bottom rink, not in the toolbar.
   const ab = el('edAddBar');
-  if (ab) {
-    ab.hidden = !(onRink() && (cur.seq || 1) < SEQ_MAX);
-    ab.onclick = () => void addRink();
-  }
+  const db2 = el('edDupBar');
+  const canAdd = onRink() && (cur.seq || 1) < SEQ_MAX;
+  if (ab) { ab.hidden = !canAdd; ab.onclick = () => void addRink(false); }
+  if (db2) { db2.hidden = !canAdd; db2.onclick = () => void addRink(true); }
+  sizeStage();
   if (hooks.onFrames) hooks.onFrames(frameInfo());
 }
 
@@ -993,43 +1001,18 @@ function setTool(t) {
 
 // ------------------------------------------------------------ zoom / pan
 
-function applyZoom() {
-  const z = el('edZoom');
-  if (z) z.style.width = `${cur.view.zoom * 100}%`;
-}
-
-function zoomAt(clientX, clientY, factor) {
+// No zoom, on purpose (Tony 2026-08-24): the canvas sits at one optimal
+// size per window so a whole rink and its controls are always visible.
+// Sequences scroll vertically; nothing pans or scales under the trackpad.
+function sizeStage() {
   const wrap = el('edStageWrap');
-  const st = el('edStage');
-  if (!wrap || !st) return;
-  const zoom0 = cur.view.zoom;
-  const zoom = Math.min(8, Math.max(0.35, zoom0 * factor));
-  if (zoom === zoom0) return;
-  const r = st.getBoundingClientRect();
-  const px = (clientX - r.left) / r.width;
-  const py = (clientY - r.top) / r.height;
-  cur.view.zoom = zoom;
-  applyZoom();
-  const r2 = st.getBoundingClientRect();
-  wrap.scrollLeft += (px * r2.width + r2.left) - clientX;
-  wrap.scrollTop += (py * r2.height + r2.top) - clientY;
-}
-
-function onWheel(e) {
-  if (!cur) return;
-  if (e.ctrlKey || e.metaKey) {
-    e.preventDefault();
-    zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.012));
-  }
-}
-
-let gestureZoom0 = 1;
-function onGestureStart(e) { if (!cur) return; e.preventDefault(); gestureZoom0 = cur.view.zoom; }
-function onGestureChange(e) {
-  if (!cur) return;
-  e.preventDefault();
-  const factor = (gestureZoom0 * e.scale) / cur.view.zoom;
-  zoomAt(e.clientX, e.clientY, factor);
+  const z = el('edZoom');
+  if (!wrap || !z || !cur) return;
+  const availW = Math.max(320, wrap.clientWidth - 40);
+  const availH = Math.max(300, wrap.clientHeight - 110);
+  const unit = onRink() ? VTOP + RINK_H + 70 : totalVH();
+  const w = Math.min(availW, (availH / unit) * cur.w);
+  z.style.width = `${Math.round(Math.max(360, w))}px`;
 }
 
 // ------------------------------------------------------------- image ops
@@ -1138,7 +1121,7 @@ function frameOf(x) {
   return Math.max(0, Math.floor(centerOf(x).y / (RINK_H + SEQ_GAP)));
 }
 
-async function addRink() {
+async function addRink(duplicate = false) {
   if (!onRink() || (cur.seq || 1) >= SEQ_MAX) return;
   snapshot();
   const n = (cur.seq || 1) + 1;
@@ -1147,17 +1130,22 @@ async function addRink() {
   cur.seq = n;
   setRinkBackground(n);
   const shift = RINK_H + SEQ_GAP;
-  const above = cur.elements.filter((x) => frameOf(x) === n - 2);
-  const clones = above.map((x) => {
-    const z = structuredClone(x);
-    z.id = uid();
-    moveElTo(z, centerOf(z).x, centerOf(z).y + shift);
-    return z;
-  });
-  cur.elements.push(...(clones.length ? clones : rinkFurniture((n - 1) * shift)));
+  if (duplicate) {
+    const above = cur.elements.filter((x) => frameOf(x) === n - 2);
+    const clones = above.map((x) => {
+      const z = structuredClone(x);
+      z.id = uid();
+      moveElTo(z, centerOf(z).x, centerOf(z).y + shift);
+      return z;
+    });
+    cur.elements.push(...(clones.length ? clones : rinkFurniture((n - 1) * shift)));
+  } else {
+    cur.elements.push(...rinkFurniture((n - 1) * shift));
+  }
   render();
+  sizeStage();
   markDirty();
-  toast(`Rink ${n} Of ${SEQ_MAX} Added - Double-Click Its Name Chip To Rename`);
+  toast(duplicate ? `Rink ${n} Added - A Copy Of The One Above` : `Rink ${n} Added - Blank And Game-Ready`);
 }
 
 // Remove ANY rink of a sequence; the ones below slide up.
@@ -1378,16 +1366,9 @@ function onDown(e) {
   }
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (pointers.size === 2) {
+    // A second finger cancels the drag; two-finger motion just scrolls.
     if (drag) { onUp(e); }
-    const [a, b] = [...pointers.values()];
-    const wrap = el('edStageWrap');
-    gesture = {
-      d0: Math.hypot(a.x - b.x, a.y - b.y),
-      mid0: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
-      zoom0: cur.view.zoom,
-    };
-    e.preventDefault();
-    void wrap;
+    gesture = true;
     return;
   }
   if (gesture) return;
@@ -1403,6 +1384,7 @@ function onDown(e) {
     else if (a === 'down') moveFrame(k, 1);
     else if (a === 'copy') void copyFrame(k);
     else if (a === 'dl') void downloadFrame(k);
+    else if (a === 'link') hooks.onRinkLink?.(k);
     else if (a === 'del') removeFrame(k);
     return;
   }
@@ -1533,18 +1515,7 @@ function onDown(e) {
 function onMove(e) {
   if (!cur) return;
   if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  if (gesture && pointers.size >= 2) {
-    const [a, b] = [...pointers.values()];
-    const d = Math.hypot(a.x - b.x, a.y - b.y);
-    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-    const factor = (gesture.zoom0 * (d / gesture.d0)) / cur.view.zoom;
-    zoomAt(mid.x, mid.y, factor);
-    const wrap = el('edStageWrap');
-    wrap.scrollLeft -= mid.x - gesture.mid0.x;
-    wrap.scrollTop -= mid.y - gesture.mid0.y;
-    gesture.mid0 = mid;
-    return;
-  }
+  if (gesture && pointers.size >= 2) return;
   if (!drag) return;
   if (e.pointerType === 'mouse' && !(e.buttons & 1)) { onUp(e); return; }
   const p = pt(e);
@@ -1697,6 +1668,8 @@ function openTextInput({ p, initial, size, commit, maxLen = 0, centered = false,
 // Rename a rink from its frame label (single click, Figma-style).
 function openFrameLabelInput(k) {
   document.getElementById('edInput')?.remove();
+  cur.editLabel = k;
+  render();
   const body = el('edStageWrap');
   const topV = k * (RINK_H + SEQ_GAP) + vShiftOf(k);
   const pos = screenPos({ x: FLABEL.x, y: topV - FLABEL.gapAbove }, true);
@@ -1714,7 +1687,7 @@ function openFrameLabelInput(k) {
     if (!cur.rinkNames) cur.rinkNames = [];
     cur.rinkNames[k] = text.trim();
     markDirty();
-  });
+  }, () => { if (cur) cur.editLabel = null; });
 }
 
 // The WYSIWYG Title-chip field: identical styling to the committed chip, so
@@ -1817,7 +1790,6 @@ function onKey(e) {
       pasteEls(selEls());
       return;
     }
-    if (k === '0') { stop(); cur.view.zoom = 1; applyZoom(); return; }
     // Cmd/Ctrl+S saves. The browser's own Save Page dialog is not something
     // Tony ever wants here, so it is preventDefaulted whether dirty or not.
     if (k === 's') { stop(); void saveNow(); return; }
@@ -1836,7 +1808,7 @@ function onKey(e) {
   }
   if (e.key === ']') { e.preventDefault(); stackSel(true); return; }
   if (e.key === '[') { e.preventDefault(); stackSel(false); return; }
-  if (e.key === '+' || e.key === '=') { e.preventDefault(); void addRink(); return; }
+  if (e.key === '+' || e.key === '=') { e.preventDefault(); void addRink(false); return; }
   if (e.key === '-' || e.key === '_') { e.preventDefault(); removeFrame((cur.seq || 1) - 1); return; }
   if ((e.key === 'Backspace' || e.key === 'Delete') && cur.sel) {
     e.preventDefault();
@@ -1918,7 +1890,7 @@ export async function openEditor(drill, h = {}) {
     guides: [],
     seq: 1,
     rinkNames: [],
-    view: { zoom: 1 },
+    editLabel: null,
     undo: [],
     redoStack: [],
     dirty: false,
@@ -1944,8 +1916,8 @@ export async function openEditor(drill, h = {}) {
     markDirty();
   }
   toolsSig = '';
-  applyZoom();
   render();
+  sizeStage();
   status(cur.dirty ? 'Unsaved' : 'Saved');
 }
 
@@ -1962,8 +1934,9 @@ function wireOnce() {
   const svg = el('edSvg');
   svg.addEventListener('pointerdown', onDown);
   svg.addEventListener('contextmenu', onCanvasMenu);
-  const wrap = el('edStageWrap');
-  wrap.addEventListener('wheel', onWheel, { passive: false });
-  wrap.addEventListener('gesturestart', onGestureStart);
-  wrap.addEventListener('gesturechange', onGestureChange);
+  if (!sizeWired) {
+    sizeWired = true;
+    window.addEventListener('resize', () => sizeStage());
+  }
 }
+let sizeWired = false;

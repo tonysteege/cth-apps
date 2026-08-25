@@ -14,7 +14,13 @@ are three apps: **Diagrams** at `/diagrams/` (the hockey diagram editor),
 site, no build step: GitHub Pages serves the `main` branch as-is. **Merging
 to `main` IS the deploy** - the live site updates within about a minute.
 The interface says "Diagram"; the `#/drill/` hash and the `drills`
-IndexedDB store are frozen storage terms - do not rename them.
+IndexedDB store are frozen storage terms - do not rename them. Diagrams has
+NO library page: it opens straight into the last diagram and the sidebar
+file tree (folders, drag and drop, right-click menu) is the library. There
+is NO canvas zoom, on purpose - the stage sizes itself to the window.
+Diagram "Link" buttons upload a PNG to Dropbox at a stable overwrite path
+(/apps/diagrams/<id>-*.png via ../clips/js/dropbox.js) so a link pasted in
+Notion updates in place on every re-copy.
 
 The old address diagrammer.coachtonyhockey.com is a Cloudflare Worker
 (`redirect-worker/`, deployed with wrangler, not part of the Pages site):

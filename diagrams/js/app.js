@@ -35,14 +35,27 @@ function folders() {
 function saveFolders(list) {
   localStorage.setItem(FOLDERS_KEY, JSON.stringify(list));
 }
-let libView = ''; // '' = All Diagrams, else a folder name
 
 // ------------------------------------------------------------- routing
 
 function route() {
   const h = location.hash || '#/';
   const m = h.match(/^#\/drill\/([\w-]+)/);
-  return m ? { view: 'editor', id: m[1] } : { view: 'library' };
+  return m ? { view: 'editor', id: m[1] } : { view: 'default' };
+}
+
+// There is no library page: the app opens straight into a diagram - the
+// last one touched, else the newest, else a fresh blank rink. The sidebar
+// file tree is the library.
+const LAST_KEY = 'cthd.lastdrill.v1';
+async function resolveDefaultDrill() {
+  const last = localStorage.getItem(LAST_KEY);
+  if (last && await getDrill(last)) return last;
+  const all = await listDrills();
+  if (all.length) return all[0].id;
+  const d = { id: uid(), name: '', notes: '', folder: '', created: Date.now(), state: null, thumb: null };
+  await putDrill(d);
+  return d.id;
 }
 
 let leaving = false;
@@ -52,310 +65,15 @@ async function go() {
   await closeEditor();
   leaving = false;
   const r = route();
-  if (r.view === 'editor') await showEditor(r.id);
-  else await showLibrary();
+  if (r.view === 'editor') { await showEditor(r.id); return; }
+  const id = await resolveDefaultDrill();
+  history.replaceState(null, '', `#/drill/${id}`);
+  routeHash = location.hash;
+  await showEditor(id);
 }
 
-// ------------------------------------------------------------- library
-
-async function showLibrary() {
-  document.title = 'CTH Diagrammer';
-  const drills = await listDrills();
-  // A folder that vanished from the list still shows if diagrams point at
-  // it - nothing silently disappears.
-  const known = new Set(folders());
-  for (const d of drills) if (d.folder && !known.has(d.folder)) { known.add(d.folder); }
-  const folderList = [...folders(), ...[...known].filter((f) => !folders().includes(f))];
-  if (libView && !folderList.includes(libView)) libView = '';
-
-  const app = $('#app');
-  app.innerHTML = `
-    <header class="lib-head">
-      <div class="brand">
-        <button class="btn btn-back" id="libHome" title="Back To CTH Apps" aria-label="Back To CTH Apps">${BACK_ICON}</button>
-        <img src="assets/cth-logo-black.svg" alt="CTH" class="brand-logo">
-        <div class="brand-word">
-          <h1>CTH Diagrammer</h1>
-          <p>Diagram Design For Coach Tony Hockey</p>
-        </div>
-      </div>
-      <div class="lib-actions">
-        <input id="libSearch" type="search" placeholder="Search Diagrams…" autocomplete="off">
-        <button class="btn" id="libImport" title="Open A Diagram PNG From CTH Diagrammer Or CTH Film Room, Or Restore A Backup JSON">Import</button>
-        <button class="btn" id="libExport" title="Download Every Diagram As One Backup JSON File">Back Up</button>
-        <button class="btn btn-ink" id="libNew">+ New Diagram</button>
-      </div>
-    </header>
-    <div class="lib-body">
-      <aside class="lib-side" id="libSide"></aside>
-      <main class="lib-grid" id="libGrid"></main>
-    </div>
-    <footer class="lib-foot">Diagrams Are Saved In This Browser. Use <strong>Back Up</strong> For A File You Can Restore Anywhere. An Exported PNG Reopens Fully Editable Here And In CTH Film Room.</footer>
-    <input type="file" id="libFile" accept=".png,.json,application/json,image/png" hidden multiple>`;
-
-  const side = $('#libSide');
-  const grid = $('#libGrid');
-
-  const countIn = (f) => drills.filter((d) => (f === '' ? true : (d.folder || '') === f)).length;
-
-  const paintSide = () => {
-    side.innerHTML = `
-      <div class="side-title">Folders</div>
-      <button class="side-row${libView === '' ? ' on' : ''}" data-folder="">
-        <span class="side-name">All Diagrams</span><span class="side-count">${countIn('')}</span>
-      </button>
-      ${folderList.map((f) => `
-        <button class="side-row${libView === f ? ' on' : ''}" data-folder="${esc(f)}">
-          <svg class="side-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-          <span class="side-name">${esc(f)}</span><span class="side-count">${countIn(f)}</span>
-          <span class="side-tools">
-            <span class="side-act" data-ren="${esc(f)}" title="Rename Folder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg></span>
-            <span class="side-act" data-delf="${esc(f)}" title="Delete Folder (Diagrams Move To All)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 6 6 18M6 6l12 12"/></svg></span>
-          </span>
-        </button>`).join('')}
-      <button class="side-new" id="sideNew">+ New Folder</button>`;
-
-    side.querySelectorAll('[data-folder]').forEach((b) => {
-      b.addEventListener('click', (e) => {
-        if (e.target.closest('.side-act')) return;
-        libView = b.dataset.folder;
-        paintSide();
-        paintGrid($('#libSearch').value.trim().toLowerCase());
-      });
-      // Drop a diagram card onto a folder (or onto All to unfile it).
-      b.addEventListener('dragover', (e) => {
-        if (![...e.dataTransfer.types].includes('text/x-cthd-drill')) return;
-        e.preventDefault();
-        b.classList.add('side-drop');
-      });
-      b.addEventListener('dragleave', () => b.classList.remove('side-drop'));
-      b.addEventListener('drop', async (e) => {
-        e.preventDefault();
-        b.classList.remove('side-drop');
-        const id = e.dataTransfer.getData('text/x-cthd-drill');
-        if (!id) return;
-        const d = await getDrill(id);
-        if (!d) return;
-        d.folder = b.dataset.folder;
-        await putDrill(d);
-        await showLibrary();
-        toast(b.dataset.folder ? `Moved To "${b.dataset.folder}"` : 'Moved To All Diagrams');
-      });
-    });
-    side.querySelectorAll('[data-ren]').forEach((s) => {
-      s.onclick = () => renameFolder(s.dataset.ren);
-    });
-    side.querySelectorAll('[data-delf]').forEach((s) => {
-      s.onclick = async () => {
-        const f = s.dataset.delf;
-        const n = countIn(f);
-        const ok = await confirmSheet({
-          title: `Delete Folder "${f}"?`,
-          body: n ? `Its ${n} diagram${n === 1 ? '' : 's'} move to All Diagrams - nothing is deleted.` : 'The folder is empty.',
-          action: 'Delete Folder',
-        });
-        if (!ok) return;
-        saveFolders(folders().filter((x) => x !== f));
-        for (const d of drills) {
-          if ((d.folder || '') === f) { d.folder = ''; await putDrill(d); }
-        }
-        if (libView === f) libView = '';
-        await showLibrary();
-      };
-    });
-    $('#sideNew').onclick = () => {
-      const row = document.createElement('div');
-      row.className = 'side-row side-editing';
-      row.innerHTML = '<input class="side-input" placeholder="Folder Name…" maxlength="40">';
-      side.insertBefore(row, $('#sideNew'));
-      const input = row.querySelector('input');
-      const commit = () => {
-        const name = input.value.trim();
-        row.remove();
-        if (!name || folders().includes(name)) { if (name) toast('That Folder Already Exists', true); return; }
-        saveFolders([...folders(), name]);
-        libView = name;
-        void showLibrary();
-      };
-      input.onkeydown = (e) => {
-        e.stopPropagation();
-        if (e.key === 'Enter' || e.keyCode === 13) { e.preventDefault(); commit(); }
-        if (e.key === 'Escape') { e.preventDefault(); row.remove(); }
-      };
-      input.onblur = commit;
-      input.focus();
-    };
-  };
-
-  const renameFolder = (f) => {
-    const row = side.querySelector(`[data-folder="${CSS.escape(f)}"]`);
-    if (!row) return;
-    const name = row.querySelector('.side-name');
-    const input = document.createElement('input');
-    input.className = 'side-input';
-    input.value = f;
-    input.maxLength = 40;
-    name.replaceWith(input);
-    const commit = async () => {
-      const to = input.value.trim();
-      if (!to || to === f) { paintSide(); return; }
-      if (folders().includes(to)) { toast('That Folder Already Exists', true); paintSide(); return; }
-      saveFolders(folders().map((x) => (x === f ? to : x)));
-      for (const d of drills) {
-        if ((d.folder || '') === f) { d.folder = to; await putDrill(d); }
-      }
-      if (libView === f) libView = to;
-      await showLibrary();
-    };
-    input.onkeydown = (e) => {
-      e.stopPropagation();
-      if (e.key === 'Enter' || e.keyCode === 13) { e.preventDefault(); void commit(); }
-      if (e.key === 'Escape') { e.preventDefault(); paintSide(); }
-    };
-    input.onblur = () => void commit();
-    input.focus();
-    input.select();
-  };
-
-  const paintGrid = (q = '') => {
-    const inView = drills.filter((d) => (libView === '' ? true : (d.folder || '') === libView));
-    const list = inView.filter((d) => !q || (d.name || '').toLowerCase().includes(q) || (d.notes || '').toLowerCase().includes(q));
-    if (!drills.length) {
-      grid.innerHTML = `
-        <div class="lib-empty">
-          <div class="lib-empty-rink"></div>
-          <h2>Design Your First Diagram</h2>
-          <p>A full rink opens game-ready: nets in the creases, a goalie at each end. Players, arrows, text and rink items are one click away. Press Save (or Cmd+S) when you want to keep your work.</p>
-          <button class="btn btn-ink" id="libNew2">+ New Diagram</button>
-        </div>`;
-      $('#libNew2').onclick = newDrill;
-      return;
-    }
-    if (!list.length) {
-      grid.innerHTML = `<div class="lib-none">${q ? 'No Diagrams Match That Search.' : 'This Folder Is Empty - Drag A Diagram Onto It, Or Use Move On A Card.'}</div>`;
-      return;
-    }
-    grid.innerHTML = list.map((d) => `
-      <article class="card" data-id="${d.id}" tabindex="0" draggable="true">
-        <div class="card-thumb">${d.thumb ? `<img src="${d.thumb}" alt="" loading="lazy">` : '<div class="card-thumb-blank"></div>'}</div>
-        <div class="card-meta">
-          <h3>${esc(d.name || 'Untitled Diagram')}</h3>
-          <span>${fmtDate(d.updated)}</span>
-        </div>
-        <div class="card-tools">
-          <button class="mini" data-do="move" title="Move To A Folder">Move</button>
-          <button class="mini" data-do="dup" title="Duplicate This Diagram">Duplicate</button>
-          <button class="mini" data-do="png" title="Download This Diagram As A PNG (Reopens Editable)">PNG</button>
-          <button class="mini mini-danger" data-do="del" title="Delete This Diagram">Delete</button>
-        </div>
-      </article>`).join('');
-    grid.querySelectorAll('.card').forEach((c) => {
-      const id = c.dataset.id;
-      const open = () => { location.hash = `#/drill/${id}`; };
-      c.addEventListener('click', (e) => { if (!e.target.closest('.mini')) open(); });
-      c.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.target.closest('.mini')) open(); });
-      c.addEventListener('dragstart', (e) => {
-        e.dataTransfer.setData('text/x-cthd-drill', id);
-        e.dataTransfer.effectAllowed = 'move';
-      });
-      c.querySelector('[data-do="move"]').onclick = (e) => showMoveMenu(e.currentTarget, id);
-      c.querySelector('[data-do="dup"]').onclick = async () => {
-        const d = await getDrill(id);
-        const copy = { ...structuredClone(d), id: uid(), name: `${d.name || 'Untitled Diagram'} Copy`, created: Date.now() };
-        await putDrill(copy);
-        location.hash = `#/drill/${copy.id}`;
-      };
-      c.querySelector('[data-do="png"]').onclick = async () => {
-        const d = await getDrill(id);
-        if (!d.state) { toast('Open The Diagram Once Before Exporting', true); return; }
-        const canvas = await renderStateFlat(d.state);
-        const bytes = await dataUrlToBytes(canvas.toDataURL('image/png'));
-        downloadBlob(bytesToBlob(pngSetDiagram(bytes, d.state)), `${safeName(d.name)}.png`);
-        toast('PNG Downloaded - That File Reopens Fully Editable');
-      };
-      c.querySelector('[data-do="del"]').onclick = async () => {
-        const d = drills.find((z) => z.id === id);
-        const ok = await confirmSheet({
-          title: `Delete "${d?.name || 'Untitled Diagram'}"?`,
-          body: 'This removes the diagram from this browser. A PNG or backup export is the only way back.',
-        });
-        if (!ok) return;
-        await deleteDrill(id);
-        toast('Diagram Deleted');
-        await showLibrary();
-      };
-    });
-  };
-
-  const showMoveMenu = (btn, id) => {
-    document.querySelector('.move-menu')?.remove();
-    const menu = document.createElement('div');
-    menu.className = 'move-menu';
-    menu.innerHTML = `
-      <button data-f="">All Diagrams (No Folder)</button>
-      ${folderList.map((f) => `<button data-f="${esc(f)}">${esc(f)}</button>`).join('')}`;
-    document.body.appendChild(menu);
-    const r = btn.getBoundingClientRect();
-    menu.style.left = `${Math.min(window.innerWidth - menu.offsetWidth - 8, r.left)}px`;
-    menu.style.top = `${r.bottom + 6}px`;
-    const close = () => { menu.remove(); window.removeEventListener('pointerdown', onAway, true); };
-    const onAway = (e) => { if (!menu.contains(e.target)) close(); };
-    window.addEventListener('pointerdown', onAway, true);
-    menu.querySelectorAll('[data-f]').forEach((b) => {
-      b.onclick = async () => {
-        close();
-        const d = await getDrill(id);
-        d.folder = b.dataset.f;
-        await putDrill(d);
-        await showLibrary();
-        toast(b.dataset.f ? `Moved To "${b.dataset.f}"` : 'Moved To All Diagrams');
-      };
-    });
-  };
-
-  paintSide();
-  paintGrid();
-
-  $('#libHome').onclick = () => { location.href = '../'; };
-  $('#libSearch').addEventListener('input', (e) => paintGrid(e.target.value.trim().toLowerCase()));
-  $('#libNew').onclick = newDrill;
-  $('#libExport').onclick = async () => {
-    const payload = await exportAll();
-    if (!payload.drills.length) { toast('Nothing To Back Up Yet', true); return; }
-    payload.folders = folders();
-    downloadBlob(new Blob([JSON.stringify(payload)], { type: 'application/json' }),
-      `cth-diagrams-backup-${new Date().toISOString().slice(0, 10)}.json`);
-    toast(`Backed Up ${payload.drills.length} Diagram${payload.drills.length === 1 ? '' : 's'}`);
-  };
-  $('#libImport').onclick = () => $('#libFile').click();
-  $('#libFile').onchange = async (e) => {
-    const files = [...e.target.files];
-    e.target.value = '';
-    let opened = false;
-    for (const f of files) {
-      try {
-        if (/\.json$/i.test(f.name)) {
-          const payload = JSON.parse(await f.text());
-          const n = await importAll(payload);
-          if (Array.isArray(payload.folders)) {
-            saveFolders([...new Set([...folders(), ...payload.folders])]);
-          }
-          toast(`Imported ${n} Diagram${n === 1 ? '' : 's'} From Backup`);
-        } else {
-          const id = await importPng(f);
-          if (id && files.length === 1) { location.hash = `#/drill/${id}`; opened = true; }
-        }
-      } catch (err2) {
-        console.error(err2);
-        toast(`${f.name}: ${err2.message || 'Could Not Import'}`, true);
-      }
-    }
-    if (!opened) await showLibrary();
-  };
-}
-
-async function newDrill() {
-  const drill = { id: uid(), name: '', notes: '', folder: libView || '', created: Date.now(), state: null, thumb: null };
+async function newDrill(folder = '') {
+  const drill = { id: uid(), name: '', notes: '', folder, created: Date.now(), state: null, thumb: null };
   await putDrill(drill);
   location.hash = `#/drill/${drill.id}`;
 }
@@ -380,7 +98,7 @@ async function importPng(file) {
   } else {
     st = { v: 1, w: 0, h: 0, bg: dataUrl, seq: 1, elements: [] };
   }
-  const drill = { id: uid(), name, notes: '', folder: libView || '', created: Date.now(), state: st, thumb: null };
+  const drill = { id: uid(), name, notes: '', folder: '', created: Date.now(), state: st, thumb: null };
   await putDrill(drill);
   toast(`Imported "${name}"${state ? ' - Fully Editable' : ''}`);
   return drill.id;
@@ -391,8 +109,83 @@ async function importPng(file) {
 let curFrames = { seq: 1, names: [] };
 const EDSIDE_KEY = 'cthd.edside.v1';
 
-// The diagram tree inside the editor: folders and diagrams, current one
-// highlighted, one click to switch (the unsaved-work guard still runs).
+// The file tree: the app's whole library, living beside the canvas.
+// Folders collapse, rows drag into folders, and a right-click menu covers
+// rename, duplicate, move, and delete for both files and folders.
+const COLLAPSE_KEY = 'cthd.sidecollapse.v1';
+const collapsed = () => { try { return new Set(JSON.parse(localStorage.getItem(COLLAPSE_KEY)) || []); } catch (_) { return new Set(); } };
+const saveCollapsed = (set) => localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...set]));
+
+function ctxMenu(x, y, items) {
+  document.querySelector('.move-menu')?.remove();
+  const m = document.createElement('div');
+  m.className = 'move-menu';
+  m.innerHTML = items.map(([label, , danger], i) => `<button data-i="${i}"${danger ? ' class="ctx-danger"' : ''}>${label}</button>`).join('');
+  document.body.appendChild(m);
+  m.style.left = `${Math.max(8, Math.min(window.innerWidth - m.offsetWidth - 8, x))}px`;
+  m.style.top = `${Math.max(8, Math.min(window.innerHeight - m.offsetHeight - 8, y))}px`;
+  const close = () => { m.remove(); window.removeEventListener('pointerdown', away, true); };
+  const away = (e) => { if (!m.contains(e.target)) close(); };
+  window.addEventListener('pointerdown', away, true);
+  m.querySelectorAll('[data-i]').forEach((b) => { b.onclick = () => { close(); items[Number(b.dataset.i)][1](); }; });
+}
+
+// Inline rename: swap a row's name for an input, commit on Enter or blur.
+function inlineRename(nameEl, initial, commit) {
+  const input = document.createElement('input');
+  input.className = 'side-input';
+  input.value = initial;
+  input.maxLength = 60;
+  nameEl.replaceWith(input);
+  let done = false;
+  const finish = (keep) => {
+    if (done) return;
+    done = true;
+    const v = input.value.trim();
+    commit(keep && v ? v : null);
+  };
+  input.onkeydown = (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter' || e.keyCode === 13) { e.preventDefault(); finish(true); }
+    if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  };
+  input.onblur = () => finish(true);
+  requestAnimationFrame(() => { input.focus(); input.select(); });
+}
+
+async function moveDrillTo(id, folder) {
+  const d = await getDrill(id);
+  if (!d) return;
+  d.folder = folder;
+  await putDrill(d);
+}
+
+async function duplicateDrill(id) {
+  const d = await getDrill(id);
+  if (!d) return null;
+  const copy = { ...structuredClone(d), id: uid(), name: `${d.name || 'Untitled Diagram'} Copy`, created: Date.now() };
+  await putDrill(copy);
+  return copy.id;
+}
+
+async function deleteDrillAndReroute(id, currentId) {
+  const d = await getDrill(id);
+  const ok = await confirmSheet({
+    title: `Delete "${d?.name || 'Untitled Diagram'}"?`,
+    body: 'This removes the diagram from this browser. A PNG or backup export is the only way back.',
+  });
+  if (!ok) return;
+  await deleteDrill(id);
+  if (id === currentId) {
+    localStorage.removeItem(LAST_KEY);
+    const next = await resolveDefaultDrill();
+    location.hash = `#/drill/${next}`;
+  } else {
+    await paintEdSide(currentId);
+  }
+  toast('Diagram Deleted');
+}
+
 async function paintEdSide(currentId) {
   const side = $('#edSide');
   if (!side) return;
@@ -400,43 +193,206 @@ async function paintEdSide(currentId) {
   const known = new Set(folders());
   for (const d of drills) if (d.folder && !known.has(d.folder)) known.add(d.folder);
   const folderList = [...folders(), ...[...known].filter((f) => !folders().includes(f))];
+  const closedSet = collapsed();
+
   const row = (d) => `
-    <button class="eside-row${d.id === currentId ? ' on' : ''}" data-open="${d.id}">
+    <div class="eside-row${d.id === currentId ? ' on' : ''}" data-open="${d.id}" draggable="true" tabindex="0">
       <span class="eside-name">${esc(d.name || 'Untitled Diagram')}</span>
-    </button>`;
+    </div>`;
   const loose = drills.filter((d) => !(d.folder || ''));
   side.innerHTML = `
-    <input id="esideSearch" type="search" placeholder="Search…" autocomplete="off">
-    <button class="eside-new" id="esideNew">+ New Diagram</button>
+    <input id="esideSearch" type="search" placeholder="Search Diagrams…" autocomplete="off">
+    <div class="eside-actions">
+      <button class="eside-new" id="esideNew">+ New Diagram</button>
+      <button class="eside-new" id="esideNewF" title="Folders Organize The Tree - Drag Diagrams Onto Them">+ Folder</button>
+    </div>
     <div class="eside-list" id="esideList">
-      ${loose.map(row).join('')}
-      ${folderList.map((f) => {
-    const inF = drills.filter((d) => (d.folder || '') === f);
-    return inF.length || true ? `
-        <div class="eside-folder">${esc(f)}</div>
-        ${inF.map(row).join('') || '<div class="eside-empty">Empty</div>'}` : '';
-  }).join('')}
-    </div>`;
-  const wire = () => {
-    side.querySelectorAll('[data-open]').forEach((b) => {
-      b.onclick = () => {
-        const id = b.dataset.open;
-        if (id === currentId) return;
-        location.hash = `#/drill/${id}`;
-      };
+      <div class="eside-folder eside-root" data-root>Diagrams</div>
+      <div data-rootrows>${loose.map(row).join('') || '<div class="eside-empty">None Yet</div>'}</div>
+      ${folderList.map((f) => `
+        <div class="eside-folder${closedSet.has(f) ? ' closed' : ''}" data-folder="${esc(f)}" draggable="true">
+          <svg class="eside-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m9 6 6 6-6 6"/></svg>
+          ${esc(f)}<span class="eside-count">${drills.filter((d) => (d.folder || '') === f).length}</span>
+        </div>
+        <div data-rows="${esc(f)}"${closedSet.has(f) ? ' hidden' : ''}>
+          ${drills.filter((d) => (d.folder || '') === f).map(row).join('') || '<div class="eside-empty">Empty - Drag Diagrams Here</div>'}
+        </div>`).join('')}
+    </div>
+    <div class="eside-foot">
+      <button class="mini" id="esideImport" title="Open A Diagram PNG Or Restore A Backup JSON">Import</button>
+      <button class="mini" id="esideBackup" title="Download Every Diagram As One Backup JSON">Back Up</button>
+    </div>
+    <input type="file" id="esideFile" accept=".png,.json,application/json,image/png" hidden multiple>`;
+
+  const refresh = () => paintEdSide(currentId);
+
+  // Rows: open, drag, rename, context menu.
+  side.querySelectorAll('[data-open]').forEach((r) => {
+    const id = r.dataset.open;
+    const open = () => { if (id !== currentId) location.hash = `#/drill/${id}`; };
+    r.addEventListener('click', open);
+    r.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(); });
+    r.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/x-cthd-drill', id);
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    r.addEventListener('dblclick', () => startRename(r, id));
+    r.addEventListener('contextmenu', async (e) => {
+      e.preventDefault();
+      const moveItems = [['Move To: Diagrams', async () => { await moveDrillTo(id, ''); refresh(); }],
+        ...folderList.map((f) => [`Move To: ${esc(f)}`, async () => { await moveDrillTo(id, f); refresh(); }])];
+      ctxMenu(e.clientX, e.clientY, [
+        ['Open', open],
+        ['Rename', () => startRename(r, id)],
+        ['Duplicate', async () => { const nid = await duplicateDrill(id); if (nid) location.hash = `#/drill/${nid}`; }],
+        ...moveItems,
+        ['Delete', () => void deleteDrillAndReroute(id, currentId), true],
+      ]);
+    });
+  });
+
+  function startRename(r, id) {
+    inlineRename(r.querySelector('.eside-name'), r.textContent.trim(), async (v) => {
+      if (v != null) {
+        const d = await getDrill(id);
+        d.name = v === 'Untitled Diagram' ? d.name : v;
+        await putDrill(d);
+        if (id === currentId) {
+          const t = $('#edTitle');
+          if (t) t.value = d.name;
+          document.title = `${d.name || 'Untitled Diagram'} - CTH Diagrammer`;
+        }
+      }
+      refresh();
+    });
+  }
+
+  // Folder headers: collapse, drop target, reorder, context menu.
+  const wireDrop = (elm, folder) => {
+    elm.addEventListener('dragover', (e) => {
+      if (![...e.dataTransfer.types].includes('text/x-cthd-drill')) return;
+      e.preventDefault();
+      elm.classList.add('side-drop');
+    });
+    elm.addEventListener('dragleave', () => elm.classList.remove('side-drop'));
+    elm.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      elm.classList.remove('side-drop');
+      const id = e.dataTransfer.getData('text/x-cthd-drill');
+      if (!id) return;
+      await moveDrillTo(id, folder);
+      refresh();
+      toast(folder ? `Moved To "${folder}"` : 'Moved To Diagrams');
     });
   };
-  wire();
-  $('#esideNew').onclick = () => void newDrill();
+  wireDrop(side.querySelector('[data-root]'), '');
+  side.querySelectorAll('[data-folder]').forEach((h) => {
+    const f = h.dataset.folder;
+    wireDrop(h, f);
+    h.addEventListener('click', () => {
+      const set = collapsed();
+      if (set.has(f)) set.delete(f); else set.add(f);
+      saveCollapsed(set);
+      refresh();
+    });
+    h.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/x-cthd-folder', f);
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    // Dropping a folder on a folder reorders the folder list.
+    h.addEventListener('drop', (e) => {
+      const from = e.dataTransfer.getData('text/x-cthd-folder');
+      if (!from || from === f) return;
+      const list = folders().filter((x) => x !== from);
+      list.splice(list.indexOf(f) + 1, 0, from);
+      saveFolders(list);
+      refresh();
+    });
+    h.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      ctxMenu(e.clientX, e.clientY, [
+        ['New Diagram Here', () => void newDrill(f)],
+        ['Rename Folder', () => {
+          inlineRename(h, f, async (v) => {
+            if (v && v !== f && !folders().includes(v)) {
+              saveFolders(folders().map((x) => (x === f ? v : x)));
+              for (const d of drills) if ((d.folder || '') === f) { d.folder = v; await putDrill(d); }
+            }
+            refresh();
+          });
+        }],
+        ['Delete Folder (Keeps Diagrams)', async () => {
+          saveFolders(folders().filter((x) => x !== f));
+          for (const d of drills) if ((d.folder || '') === f) { d.folder = ''; await putDrill(d); }
+          refresh();
+        }, true],
+      ]);
+    });
+  });
+
+  // Blank-space context menu.
+  side.querySelector('#esideList').addEventListener('contextmenu', (e) => {
+    if (e.target.closest('[data-open], [data-folder]')) return;
+    e.preventDefault();
+    ctxMenu(e.clientX, e.clientY, [
+      ['New Diagram', () => void newDrill('')],
+      ['New Folder', () => $('#esideNewF').click()],
+      ['Import', () => $('#esideFile').click()],
+      ['Back Up All', () => $('#esideBackup').click()],
+    ]);
+  });
+
+  $('#esideNew').onclick = () => void newDrill('');
+  $('#esideNewF').onclick = () => {
+    const list = side.querySelector('#esideList');
+    const rowEl = document.createElement('div');
+    rowEl.className = 'eside-folder';
+    list.appendChild(rowEl);
+    inlineRename(rowEl, '', (v) => {
+      if (v && !folders().includes(v)) saveFolders([...folders(), v]);
+      refresh();
+    });
+  };
+  $('#esideImport').onclick = () => $('#esideFile').click();
+  $('#esideBackup').onclick = async () => {
+    const payload = await exportAll();
+    if (!payload.drills.length) { toast('Nothing To Back Up Yet', true); return; }
+    payload.folders = folders();
+    downloadBlob(new Blob([JSON.stringify(payload)], { type: 'application/json' }),
+      `cth-diagrams-backup-${new Date().toISOString().slice(0, 10)}.json`);
+    toast(`Backed Up ${payload.drills.length} Diagram${payload.drills.length === 1 ? '' : 's'}`);
+  };
+  $('#esideFile').onchange = async (e) => {
+    const files = [...e.target.files];
+    e.target.value = '';
+    for (const f of files) {
+      try {
+        if (/\.json$/i.test(f.name)) {
+          const payload = JSON.parse(await f.text());
+          const n = await importAll(payload);
+          if (Array.isArray(payload.folders)) saveFolders([...new Set([...folders(), ...payload.folders])]);
+          toast(`Imported ${n} Diagram${n === 1 ? '' : 's'} From Backup`);
+        } else {
+          const nid = await importPng(f);
+          if (nid && files.length === 1) { location.hash = `#/drill/${nid}`; return; }
+        }
+      } catch (err2) {
+        console.error(err2);
+        toast(`${f.name}: ${err2.message || 'Could Not Import'}`, true);
+      }
+    }
+    refresh();
+  };
+  $('#esideSearch').addEventListener('keydown', (e) => e.stopPropagation());
   $('#esideSearch').addEventListener('input', (e) => {
     const q = e.target.value.trim().toLowerCase();
-    const list = $('#esideList');
-    list.innerHTML = drills
-      .filter((d) => !q || (d.name || 'untitled diagram').toLowerCase().includes(q))
-      .map(row).join('') || '<div class="eside-empty">No Matches</div>';
-    wire();
+    side.querySelectorAll('[data-open]').forEach((r) => {
+      r.hidden = !!q && !r.textContent.toLowerCase().includes(q);
+    });
+    side.querySelectorAll('.eside-folder:not(.eside-root)').forEach((h) => { h.hidden = !!q; });
+    side.querySelectorAll('[data-rows]').forEach((g) => { if (q) g.hidden = false; });
   });
-  $('#esideSearch').addEventListener('keydown', (e) => e.stopPropagation());
 }
 
 async function showEditor(id) {
@@ -447,7 +403,7 @@ async function showEditor(id) {
   app.innerHTML = `
     <div class="ed">
       <header class="ed-head">
-        <button class="btn btn-back" id="edBack" title="Back To Your Diagrams" aria-label="Back To Your Diagrams">${BACK_ICON}</button>
+        <button class="btn btn-back" id="edBack" title="Back To CTH Apps" aria-label="Back To CTH Apps">${BACK_ICON}</button>
         <button class="btn btn-back" id="edTree" title="Show Or Hide Your Diagrams" aria-label="Diagrams Sidebar">${TREE_ICON}</button>
         <input id="edTitle" class="ed-title" value="${esc(drill.name || '')}" placeholder="Name This Diagram…" autocomplete="off" spellcheck="false">
         <span class="ed-status" id="edStatus">Saved</span>
@@ -459,6 +415,7 @@ async function showEditor(id) {
           <button class="btn" id="edRedo" title="Redo (Shift+Cmd+Z)">Redo</button>
           <span class="ed-sep"></span>
           <button class="btn" id="edRinks" hidden title="Copy, Print Or Export Chosen Rinks From This Sequence">Rinks</button>
+          <button class="btn" id="edLink" title="Copy A Notion Embed Link For The Whole Diagram - Paste It Into Any Notion Page">Link</button>
           <button class="btn" id="edCopy" title="Copy The Finished Picture To The Clipboard">Copy</button>
           <button class="btn" id="edPrint" title="Print This Diagram">Print</button>
           <button class="btn btn-ink" id="edPng" title="Download As PNG - The File Reopens Fully Editable Here And In CTH Film Room">Download PNG</button>
@@ -475,7 +432,10 @@ async function showEditor(id) {
                 <g id="edUi"></g>
               </svg>
             </div>
-            <button class="ed-addbar" id="edAddBar" hidden>+ Add Rink</button>
+            <div class="ed-addrow">
+              <button class="ed-addbar" id="edAddBar" hidden>+ Add Rink</button>
+              <button class="ed-addbar" id="edDupBar" hidden title="Add A New Rink That Copies The One Above And Everything On It">Duplicate Rink</button>
+            </div>
           </div>
         </div>
       </div>
@@ -488,7 +448,8 @@ async function showEditor(id) {
     sideEl.hidden = localStorage.getItem(EDSIDE_KEY) !== 'open';
   };
   if (localStorage.getItem(EDSIDE_KEY) == null) {
-    localStorage.setItem(EDSIDE_KEY, window.innerWidth >= 1100 ? 'open' : 'closed');
+    // Open by default everywhere except phones.
+    localStorage.setItem(EDSIDE_KEY, window.innerWidth >= 700 ? 'open' : 'closed');
   }
   applySideState();
   $('#edTree').onclick = () => {
@@ -496,12 +457,14 @@ async function showEditor(id) {
     applySideState();
   };
 
+  localStorage.setItem(LAST_KEY, id);
   await openEditor(drill, {
     onFrames: (info) => {
       curFrames = info;
       const b = $('#edRinks');
       if (b) b.hidden = info.seq < 2;
     },
+    onRinkLink: (k) => void copyEmbedLink(drill, k),
     // Saving is manual, so the Save button has to SHOW there is something to
     // save. Without that the only cue would be the small status word, which
     // is hidden entirely on narrow screens.
@@ -512,8 +475,8 @@ async function showEditor(id) {
   });
 
   const acts = editorActions();
-  $('#edSave').onclick = () => void saveNow();
-  $('#edBack').onclick = () => { location.hash = '#/'; };
+  $('#edSave').onclick = async () => { await saveNow(); void paintEdSide(id); };
+  $('#edBack').onclick = () => { location.href = '../'; };
   $('#edFlip').onclick = () => void acts.flipH();
   $('#edUndo').onclick = () => void acts.undo();
   $('#edRedo').onclick = () => void acts.redo();
@@ -548,6 +511,7 @@ async function showEditor(id) {
     printCanvas(await renderFlat(), drill.name);
   };
   $('#edRinks').onclick = () => showRinksSheet(drill);
+  $('#edLink').onclick = () => void copyEmbedLink(drill, null);
 
   document.addEventListener('cthd:shortcuts', showShortcuts);
 }
@@ -570,6 +534,36 @@ function printCanvas(canvas, name) {
     <style>body{margin:0;display:grid;place-items:center;}img{max-width:100%;max-height:100vh;}@media print{img{width:100%;}}</style>
     <img src="${canvas.toDataURL('image/png')}" onload="setTimeout(()=>{print();},80)">`);
   w.document.close();
+}
+
+// A Notion embed link: the diagram (or one rink) rendered to PNG, pushed
+// to Dropbox at a STABLE path, and its permanent direct link copied. Repeat
+// copies overwrite the same file, so a link already pasted in Notion shows
+// the latest version. Needs the Dropbox connection made in the Clips app.
+async function copyEmbedLink(drill, k) {
+  let dbx;
+  try {
+    dbx = await import('../../clips/js/dropbox.js');
+  } catch (e) { toast('Could Not Load The Dropbox Module', true); return; }
+  if (!dbx.dbxConnected()) {
+    toast('Connect Dropbox In The Clips App First - The Link Needs A Home For The Image', true);
+    return;
+  }
+  try {
+    await saveNow();
+    const full = await renderFlat();
+    const canvas = k == null ? full : sliceFrames(full, [k]);
+    const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
+    const tag = k == null ? 'full' : `rink-${k + 1}`;
+    const path = `/apps/diagrams/${drill.id}-${tag}.png`;
+    await dbx.dbxUpload(path, blob, { mode: 'overwrite' });
+    const url = await dbx.dbxStreamLink(path);
+    await navigator.clipboard.writeText(url);
+    toast('Link Copied - Paste It In Notion And Choose Embed Or Image. Re-Copying Updates The Same Link');
+  } catch (e) {
+    console.error(e);
+    toast(`Could Not Make The Link (${e.message || 'Error'})`, true);
+  }
 }
 
 // Pick one, several, or all rinks of a sequence, then copy / print /
@@ -652,7 +646,6 @@ function showShortcuts() {
     ['Cmd+D', 'Duplicate Selection'], ['Delete', 'Remove Selection'],
     ['Arrows', 'Nudge (Shift = Larger Step)'], ['Cmd While Dragging', 'Snapping Off'],
     ['Cmd While Placing', 'Place Several In A Row'], ['Shift-Click', 'Add To Selection'],
-    ['Pinch / Cmd+Scroll', 'Zoom (Cmd+0 Resets)'], ['Two-Finger Scroll', 'Pan The Canvas'],
     ['Round Handle', 'Rotate The Selected Item (Snaps To 15 Degrees, Cmd = Free)'],
     ['Double-Click', 'Edit Text, Letter A Player, Label A Shape, Rename A Rink'],
     ['Right-Click A Tool', 'Set Your Own Shortcut Key'],
