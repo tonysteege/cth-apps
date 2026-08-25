@@ -9,6 +9,11 @@ lives in a subfolder and serves at its own path.
 - **Diagrams** (`/diagrams/`) - hockey diagram design: drills and plays on
   a full rink, saved in the browser, exported as game-ready images that
   stay editable.
+- **Clips** (`/clips/`) - video tagging and clipping: game film streamed
+  from Dropbox /videos, two-tier tag buttons with hotkeys and lead/lag,
+  trackpad scrubbing, a filterable clip log, live freeze-frames with
+  diagram-style annotation, per-clip Notion embeds and parent email, and
+  real video exports back to Dropbox. Local files work without Dropbox.
 
 ## What It Does
 

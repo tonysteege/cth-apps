@@ -7,8 +7,9 @@ GitHub-connected agents). Read this fully before changing anything.
 
 CTH Apps - Tony's web app hub, live at https://apps.coachtonyhockey.com/.
 The repo root `index.html` is the hub (a launcher page listing every app);
-each app lives in its own subfolder and serves at its path. Today there is
-one app: **Diagrams** at `/diagrams/` (the hockey diagram editor). Static
+each app lives in its own subfolder and serves at its path. Today there
+are two apps: **Diagrams** at `/diagrams/` (the hockey diagram editor) and
+**Clips** at `/clips/` (video tagging and clipping over Dropbox). Static
 site, no build step: GitHub Pages serves the `main` branch as-is. **Merging
 to `main` IS the deploy** - the live site updates within about a minute.
 The interface says "Diagram"; the `#/drill/` hash and the `drills`
@@ -71,6 +72,25 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
    error. Without that, one closed connection makes every later save fail with
    `InvalidStateError: The database connection is closing.` - which is exactly
    the bug that made manual save necessary in the first place.
+
+## Clips (/clips/) rules
+
+- Clips reads game film from the user's Dropbox `/videos` folder and writes
+  exports to `/videos/exports`, straight from the browser via OAuth PKCE
+  (`clips/js/dropbox.js`). There is no server. The Dropbox app key is a
+  public identifier; tokens live only in the user's localStorage.
+- Marks (clips, tags, freezes) AUTOSAVE to the `cth-clips` IndexedDB - a
+  coach tagging at game speed cannot stop for a Save button. Do not copy
+  the Diagrams manual-save rule here; they are different by design.
+- The game record shape `{ id, name, path, source, duration, clips,
+  freezes }` and the clip shape `{ id, label, color, in, out, tags, note }`
+  are storage formats - additive changes only.
+- Freeze-frame drawings use the DIAGRAMS element model and renderer
+  (`/diagrams/js/flat.js` is imported cross-app); keep that import working.
+- `clips/embed.html` is the Notion-embeddable single-clip player; its hash
+  parameters (v, in, out, t) are a public URL format - never break them.
+- IndexedDB helpers in both apps' store.js: a `get` on a missing key must
+  return undefined, never the raw IDBRequest (that bug shipped once).
 
 ## Verifying a change
 

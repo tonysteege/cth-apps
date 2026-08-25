@@ -67,7 +67,7 @@ function runTx(mode, fn) {
     try {
       const t = d.transaction(STORE, mode);
       const out = fn(t.objectStore(STORE));
-      t.oncomplete = () => res(out && out.result !== undefined ? out.result : out);
+      t.oncomplete = () => res(out && typeof out === 'object' && 'result' in out ? out.result : out);
       t.onerror = () => rej(t.error);
       t.onabort = () => rej(t.error || new DOMException('Transaction aborted', 'AbortError'));
     } catch (e) {
