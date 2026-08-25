@@ -378,14 +378,82 @@ input { font: inherit; color: inherit; }
 .ed-rctl:hover rect:first-of-type { fill: var(--sunken); }
 .ed-rctl:hover g path, .ed-rctl:hover g rect { stroke: var(--ink); }
 
+/* Renaming a rink is seamless: the field sits exactly on the label, same
+   font, no box - just a thin editing underline. */
 .ed-input-flabel {
-  transform: translate(-2px, -0.15em);
+  transform: translate(-2px, -0.12em);
   text-align: left;
   font-weight: 800;
   color: var(--ink);
-  border-width: 1.5px;
-  min-width: 120px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid var(--select);
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0 2px 1px;
+  min-width: 200px;
 }
+
+/* ---------------------------------------------- in-editor diagram tree */
+.ed-main { flex: 1; display: flex; min-height: 0; }
+.ed-side {
+  width: 220px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  padding: 14px 10px 90px;
+  background: var(--cloud);
+  border-right: 1px solid var(--edge-soft);
+}
+#esideSearch {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--edge);
+  border-radius: var(--r-sm);
+  background: var(--cloud);
+  outline: none;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+#esideSearch:focus { border-color: var(--soft); }
+.eside-new {
+  width: 100%;
+  text-align: left;
+  border: 1px dashed var(--edge);
+  background: none;
+  border-radius: var(--r-sm);
+  padding: 7px 10px;
+  color: var(--mist);
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+.eside-new:hover { border-color: var(--soft); color: var(--ink); }
+.eside-folder {
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--soft);
+  margin: 12px 8px 4px;
+}
+.eside-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  padding: 7px 10px;
+  color: var(--graphite);
+  font-size: 13px;
+}
+.eside-row:hover { background: var(--sunken); color: var(--ink); }
+.eside-row.on { background: var(--ink); color: var(--cloud); font-weight: 800; }
+.eside-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eside-empty { color: var(--soft); font-size: 12px; padding: 4px 10px; }
+
+/* the cone art reads oversized next to the flat glyphs - pull it in */
+.tb-btn img.ic-cone { width: 19px; height: 19px; }
 
 /* The + Add Rink bar under the bottom rink */
 .ed-addbar {

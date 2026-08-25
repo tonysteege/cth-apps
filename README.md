@@ -1,11 +1,14 @@
-# CTH Diagrammer
+# CTH Apps
 
-Hockey diagram design for Coach Tony Hockey. A standalone web app: design
-drills and plays on a full rink, save them in the browser, and export
-game-ready images that stay editable.
+The home for Coach Tony Hockey's web apps, live at
+https://apps.coachtonyhockey.com/. The repo root is the hub page; each app
+lives in a subfolder and serves at its own path.
 
-**Live app:** https://diagrammer.coachtonyhockey.com/ (also at
-https://tonysteege.github.io/cth-diagrammer/)
+## Apps
+
+- **Diagrams** (`/diagrams/`) - hockey diagram design: drills and plays on
+  a full rink, saved in the browser, exported as game-ready images that
+  stay editable.
 
 ## What It Does
 

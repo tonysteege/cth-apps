@@ -504,7 +504,7 @@ function svgEl(x) {
 const RCTL_GLYPHS = {
   up: '<path d="M48 70V28M30 46 48 28l18 18"/>',
   down: '<path d="M48 26v42M30 50l18 18 18-18"/>',
-  copy: '<rect x="36" y="36" width="34" height="34" rx="7"/><path d="M62 28H34a6 6 0 0 0-6 6v28"/>',
+  copy: '<rect x="37" y="37" width="31" height="31" rx="8"/><path d="M27 59h-1a6 6 0 0 1-6-6V27a6 6 0 0 1 6-6h26a6 6 0 0 1 6 6v1"/>',
   dl: '<path d="M48 26v26M35 41l13 13 13-13M28 70h40"/>',
   del: '<path d="M33 33l30 30M63 33 33 63"/>',
 };
@@ -619,13 +619,13 @@ export function render() {
 // ---------------------------------------------------------------- toolbar
 
 const ICON = {
-  select: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 3l7 18 2.5-7.5L21 11z" stroke-linejoin="round"/></svg>',
-  arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 20 C 8 10, 14 8, 19 6"/><path d="M14.5 5.2 20 5.5l-1.4 5.3" stroke-linejoin="round"/></svg>',
-  dasharrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 20 C 8 10, 14 8, 19 6" stroke-dasharray="3.2 3"/><path d="M14.5 5.2 20 5.5l-1.4 5.3" stroke-linejoin="round"/></svg>',
-  box: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4" y="6" width="16" height="12" rx="2" fill="currentColor" fill-opacity="0.22"/></svg>',
-  circle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><ellipse cx="12" cy="12" rx="8.5" ry="6.5" fill="currentColor" fill-opacity="0.22"/></svg>',
-  text: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 6V4h14v2"/><path d="M12 4v16"/><path d="M9 20h6"/></svg>',
-  pen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>',
+  select: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M4.04 4.69a.5.5 0 0 1 .65-.65l16 6.5a.5.5 0 0 1-.06.94l-6.13 1.58a2 2 0 0 0-1.43 1.44l-1.58 6.12a.5.5 0 0 1-.95.07z"/></svg>',
+  arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 19.5C6.5 12 10.5 8.2 16.5 6.4"/><path d="M13.6 4.1 19.5 5.5 17 11" stroke-linejoin="round"/></svg>',
+  dasharrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 19.5C6.5 12 10.5 8.2 16.5 6.4" stroke-dasharray="3.4 3"/><path d="M13.6 4.1 19.5 5.5 17 11" stroke-linejoin="round"/></svg>',
+  box: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4.25" y="5.25" width="15.5" height="13.5" rx="2.75"/></svg>',
+  circle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="7.75"/></svg>',
+  text: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M4 7V5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5V7"/><path d="M12 4v16"/><path d="M9 20h6"/></svg>',
+  pen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M21.17 6.81a2.82 2.82 0 0 0-3.98-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.63l4.36-1.32a2 2 0 0 0 .83-.5z"/><path d="m14.5 5.5 4 4"/></svg>',
   pucks: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="8" cy="16" r="3.4"/><circle cx="16" cy="16" r="3.4"/><circle cx="12" cy="8.5" r="3.4"/></svg>',
   puck: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="12" r="3.2"/></svg>',
 };
@@ -702,7 +702,7 @@ function itemIcon(key) {
   if (key === 'pucks') return ICON.pucks;
   if (key === 'puck') return ICON.puck;
   const u = shapeUrl(ITEMS[key].file);
-  return u ? `<img src="${u}" alt="">` : ITEMS[key].label;
+  return u ? `<img class="ic-${key}" src="${u}" alt="">` : ITEMS[key].label;
 }
 
 const sep = '<span class="tb-sep"></span>';

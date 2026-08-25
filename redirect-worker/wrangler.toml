@@ -1,0 +1,8 @@
+name = "cth-diagrammer-redirect"
+main = "worker.js"
+compatibility_date = "2026-08-24"
+workers_dev = false
+
+routes = [
+  { pattern = "diagrammer.coachtonyhockey.com/*", zone_name = "coachtonyhockey.com" },
+]

@@ -3,18 +3,77 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CTH Diagrammer</title>
-  <meta name="description" content="Hockey drill diagramming by Coach Tony Hockey. Design drills on a full rink, save them, and export game-ready images.">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%231a1a1a'/><circle cx='50' cy='50' r='16' fill='%23ffffff'/><circle cx='50' cy='50' r='7' fill='%231a1a1a'/></svg>">
+  <title>CTH Apps</title>
+  <meta name="description" content="The home for Coach Tony Hockey's web apps.">
+  <link rel="icon" type="image/png" href="diagrams/assets/favicon.png">
+  <link rel="apple-touch-icon" href="diagrams/assets/apple-touch-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css">
+  <style>
+    :root {
+      --ink: #1a1a1a; --graphite: #3a3a3a; --mist: #626262; --soft: #969696;
+      --edge: #e3e3e3; --edge-soft: #ededed; --sunken: #f2f2f2; --cloud: #ffffff;
+      --shadow-1: 0 1px 2px rgba(11,11,11,.05), 0 1px 1px rgba(11,11,11,.03);
+      --shadow-3: 0 12px 32px rgba(11,11,11,.12), 0 2px 8px rgba(11,11,11,.06);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh;
+      font-family: 'Inter', -apple-system, 'Helvetica Neue', sans-serif;
+      font-weight: 500; color: var(--ink); background: var(--cloud);
+      -webkit-font-smoothing: antialiased;
+      display: flex; flex-direction: column;
+    }
+    header {
+      display: flex; align-items: center; gap: 15px;
+      padding: 26px clamp(20px, 4vw, 48px) 20px;
+      border-bottom: 1px solid var(--edge);
+    }
+    header img { height: 42px; }
+    header h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
+    header p { margin: 2px 0 0; color: var(--mist); font-size: 12px; }
+    main {
+      flex: 1;
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 20px; align-content: start;
+      padding: 28px clamp(20px, 4vw, 48px);
+      width: 100%; max-width: 1200px; margin: 0 auto;
+    }
+    .app-card {
+      display: block; text-decoration: none; color: inherit;
+      background: var(--cloud); border: 1px solid var(--edge);
+      border-radius: 16px; padding: 22px;
+      box-shadow: var(--shadow-1);
+      transition: box-shadow .15s, transform .15s, border-color .15s;
+    }
+    .app-card:hover { box-shadow: var(--shadow-3); transform: translateY(-2px); border-color: #d6d6d6; }
+    .app-card .ic {
+      width: 52px; height: 52px; border-radius: 13px; margin-bottom: 16px;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--sunken); color: var(--graphite);
+    }
+    .app-card .ic svg { width: 30px; height: 30px; }
+    .app-card h2 { margin: 0 0 5px; font-size: 17px; font-weight: 800; letter-spacing: -0.01em; }
+    .app-card p { margin: 0; color: var(--mist); font-size: 13px; line-height: 1.5; }
+    footer { padding: 18px; color: var(--soft); font-size: 12px; text-align: center; }
+  </style>
 </head>
 <body>
-  <div id="app" class="app">
-    <div class="boot">Loading the rink…</div>
-  </div>
-  <script type="module" src="js/app.js"></script>
+  <header>
+    <img src="diagrams/assets/cth-logo-black.svg" alt="CTH">
+    <div>
+      <h1>CTH Apps</h1>
+      <p>Web Apps For Coach Tony Hockey</p>
+    </div>
+  </header>
+  <main>
+    <a class="app-card" href="diagrams/">
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2.75" y="5" width="18.5" height="14" rx="6"/><path d="M12 5v14"/><circle cx="12" cy="12" r="2.4"/></svg></div>
+      <h2>Diagrams</h2>
+      <p>Design drills and plays on a full rink. Save, sequence, and export game-ready images.</p>
+    </a>
+  </main>
+  <footer>More Apps Coming - This Page Is Their Home.</footer>
 </body>
 </html>

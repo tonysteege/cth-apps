@@ -24,6 +24,7 @@ const $ = (sel) => document.querySelector(sel);
 const safeName = (s) => (s || 'diagram').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase() || 'diagram';
 
 const BACK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12H4"/><path d="m10 18-6-6 6-6"/></svg>';
+const TREE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9.5 4v16"/></svg>';
 
 // ------------------------------------------------------------- folders
 
@@ -71,6 +72,7 @@ async function showLibrary() {
   app.innerHTML = `
     <header class="lib-head">
       <div class="brand">
+        <button class="btn btn-back" id="libHome" title="Back To CTH Apps" aria-label="Back To CTH Apps">${BACK_ICON}</button>
         <img src="assets/cth-logo-black.svg" alt="CTH" class="brand-logo">
         <div class="brand-word">
           <h1>CTH Diagrammer</h1>
@@ -314,6 +316,7 @@ async function showLibrary() {
   paintSide();
   paintGrid();
 
+  $('#libHome').onclick = () => { location.href = '../'; };
   $('#libSearch').addEventListener('input', (e) => paintGrid(e.target.value.trim().toLowerCase()));
   $('#libNew').onclick = newDrill;
   $('#libExport').onclick = async () => {
@@ -386,6 +389,55 @@ async function importPng(file) {
 // ------------------------------------------------------------- editor view
 
 let curFrames = { seq: 1, names: [] };
+const EDSIDE_KEY = 'cthd.edside.v1';
+
+// The diagram tree inside the editor: folders and diagrams, current one
+// highlighted, one click to switch (the unsaved-work guard still runs).
+async function paintEdSide(currentId) {
+  const side = $('#edSide');
+  if (!side) return;
+  const drills = await listDrills();
+  const known = new Set(folders());
+  for (const d of drills) if (d.folder && !known.has(d.folder)) known.add(d.folder);
+  const folderList = [...folders(), ...[...known].filter((f) => !folders().includes(f))];
+  const row = (d) => `
+    <button class="eside-row${d.id === currentId ? ' on' : ''}" data-open="${d.id}">
+      <span class="eside-name">${esc(d.name || 'Untitled Diagram')}</span>
+    </button>`;
+  const loose = drills.filter((d) => !(d.folder || ''));
+  side.innerHTML = `
+    <input id="esideSearch" type="search" placeholder="Search…" autocomplete="off">
+    <button class="eside-new" id="esideNew">+ New Diagram</button>
+    <div class="eside-list" id="esideList">
+      ${loose.map(row).join('')}
+      ${folderList.map((f) => {
+    const inF = drills.filter((d) => (d.folder || '') === f);
+    return inF.length || true ? `
+        <div class="eside-folder">${esc(f)}</div>
+        ${inF.map(row).join('') || '<div class="eside-empty">Empty</div>'}` : '';
+  }).join('')}
+    </div>`;
+  const wire = () => {
+    side.querySelectorAll('[data-open]').forEach((b) => {
+      b.onclick = () => {
+        const id = b.dataset.open;
+        if (id === currentId) return;
+        location.hash = `#/drill/${id}`;
+      };
+    });
+  };
+  wire();
+  $('#esideNew').onclick = () => void newDrill();
+  $('#esideSearch').addEventListener('input', (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    const list = $('#esideList');
+    list.innerHTML = drills
+      .filter((d) => !q || (d.name || 'untitled diagram').toLowerCase().includes(q))
+      .map(row).join('') || '<div class="eside-empty">No Matches</div>';
+    wire();
+  });
+  $('#esideSearch').addEventListener('keydown', (e) => e.stopPropagation());
+}
 
 async function showEditor(id) {
   const drill = await getDrill(id);
@@ -396,6 +448,7 @@ async function showEditor(id) {
     <div class="ed">
       <header class="ed-head">
         <button class="btn btn-back" id="edBack" title="Back To Your Diagrams" aria-label="Back To Your Diagrams">${BACK_ICON}</button>
+        <button class="btn btn-back" id="edTree" title="Show Or Hide Your Diagrams" aria-label="Diagrams Sidebar">${TREE_ICON}</button>
         <input id="edTitle" class="ed-title" value="${esc(drill.name || '')}" placeholder="Name This Diagram…" autocomplete="off" spellcheck="false">
         <span class="ed-status" id="edStatus">Saved</span>
         <div class="ed-head-actions">
@@ -411,20 +464,37 @@ async function showEditor(id) {
           <button class="btn btn-ink" id="edPng" title="Download As PNG - The File Reopens Fully Editable Here And In CTH Film Room">Download PNG</button>
         </div>
       </header>
-      <div class="ed-stagewrap" id="edStageWrap">
-        <div class="ed-zoom" id="edZoom">
-          <div class="ed-stage" id="edStage">
-            <svg id="edSvg" xmlns="http://www.w3.org/2000/svg">
-              <g id="edBgG"></g>
-              <g id="edEls"></g>
-              <g id="edUi"></g>
-            </svg>
+      <div class="ed-main">
+        <aside class="ed-side" id="edSide" hidden></aside>
+        <div class="ed-stagewrap" id="edStageWrap">
+          <div class="ed-zoom" id="edZoom">
+            <div class="ed-stage" id="edStage">
+              <svg id="edSvg" xmlns="http://www.w3.org/2000/svg">
+                <g id="edBgG"></g>
+                <g id="edEls"></g>
+                <g id="edUi"></g>
+              </svg>
+            </div>
+            <button class="ed-addbar" id="edAddBar" hidden>+ Add Rink</button>
           </div>
-          <button class="ed-addbar" id="edAddBar" hidden>+ Add Rink</button>
         </div>
       </div>
       <div class="tb" id="edBar"></div>
     </div>`;
+
+  await paintEdSide(id);
+  const sideEl = $('#edSide');
+  const applySideState = () => {
+    sideEl.hidden = localStorage.getItem(EDSIDE_KEY) !== 'open';
+  };
+  if (localStorage.getItem(EDSIDE_KEY) == null) {
+    localStorage.setItem(EDSIDE_KEY, window.innerWidth >= 1100 ? 'open' : 'closed');
+  }
+  applySideState();
+  $('#edTree').onclick = () => {
+    localStorage.setItem(EDSIDE_KEY, sideEl.hidden ? 'open' : 'closed');
+    applySideState();
+  };
 
   await openEditor(drill, {
     onFrames: (info) => {
@@ -603,6 +673,56 @@ function showShortcuts() {
   document.body.appendChild(wrap);
 }
 
+// ------------------------------------------------- one-time migration
+// The app used to live at diagrammer.coachtonyhockey.com, and browser
+// storage is per-origin - so on first load at the new address, pull
+// whatever the old origin still holds through its /export bridge (a tiny
+// Cloudflare Worker page that posts the data over).
+
+const MIG_KEY = 'cthd.migrated.v1';
+const OLD_ORIGIN = 'https://diagrammer.coachtonyhockey.com';
+
+async function migrateFromOldOrigin() {
+  if (location.hostname !== 'apps.coachtonyhockey.com') return;
+  if (localStorage.getItem(MIG_KEY)) return;
+  await new Promise((done) => {
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = `${OLD_ORIGIN}/export`;
+    const cleanup = () => {
+      clearTimeout(timer);
+      window.removeEventListener('message', onMsg);
+      iframe.remove();
+      done();
+    };
+    const timer = setTimeout(cleanup, 8000);
+    const onMsg = async (e) => {
+      if (e.origin !== OLD_ORIGIN) return;
+      const d = e.data;
+      if (!d || d.app !== 'cthd-migrate') return;
+      try {
+        let n = 0;
+        if (Array.isArray(d.drills) && d.drills.length) {
+          n = await importAll({ drills: d.drills }, { replaceIds: true });
+        }
+        if (Array.isArray(d.folders) && d.folders.length) {
+          saveFolders([...new Set([...folders(), ...d.folders])]);
+        }
+        for (const [k, v] of Object.entries(d.locals || {})) {
+          if (k.startsWith('cthd.') && localStorage.getItem(k) == null) localStorage.setItem(k, v);
+        }
+        localStorage.setItem(MIG_KEY, '1');
+        if (n) toast(`Moved ${n} Diagram${n === 1 ? '' : 's'} Over From The Old Address`);
+      } catch (err) {
+        console.error('migration failed', err);
+      }
+      cleanup();
+    };
+    window.addEventListener('message', onMsg);
+    document.body.appendChild(iframe);
+  });
+}
+
 // --------------------------------------------------------------- boot
 
 // LEAVING IS WHERE MANUAL SAVE CAN BITE. Two exits need guarding: the hash
@@ -636,6 +756,7 @@ window.addEventListener('beforeunload', (e) => {
 });
 
 (async () => {
+  await migrateFromOldOrigin().catch(() => {});
   try {
     await loadAssets();
   } catch (e) {

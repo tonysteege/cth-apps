@@ -5,13 +5,20 @@ GitHub-connected agents). Read this fully before changing anything.
 
 ## What this is
 
-CTH Diagrammer, Tony's hockey diagram design web app, live at
-https://diagrammer.coachtonyhockey.com/ (GitHub Pages custom domain; also
-https://tonysteege.github.io/cth-diagrammer/). Static site, no build step:
-GitHub Pages serves the `main` branch as-is. **Merging to `main` IS the
-deploy** - the live app updates within about a minute. The interface says
-"Diagram"; the `#/drill/` hash and the `drills` IndexedDB store are frozen
-storage terms - do not rename them.
+CTH Apps - Tony's web app hub, live at https://apps.coachtonyhockey.com/.
+The repo root `index.html` is the hub (a launcher page listing every app);
+each app lives in its own subfolder and serves at its path. Today there is
+one app: **Diagrams** at `/diagrams/` (the hockey diagram editor). Static
+site, no build step: GitHub Pages serves the `main` branch as-is. **Merging
+to `main` IS the deploy** - the live site updates within about a minute.
+The interface says "Diagram"; the `#/drill/` hash and the `drills`
+IndexedDB store are frozen storage terms - do not rename them.
+
+The old address diagrammer.coachtonyhockey.com is a Cloudflare Worker
+(`redirect-worker/`, deployed with wrangler, not part of the Pages site):
+it 301-redirects everything to the new home and serves `/export`, the
+one-time storage-migration bridge the app calls on first load at the new
+origin. Its DNS record must stay proxied or the Worker route never runs.
 
 ## How to work here
 
