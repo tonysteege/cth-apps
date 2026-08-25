@@ -33,6 +33,14 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
 - Plain HTML, CSS, and ES-module JavaScript only. No frameworks, no npm, no
   build tooling, no TypeScript. Keep it that way - zero-build is what lets
   any AI edit this app safely.
+- **Keep this file current in the same commit.** Any change that adds an
+  app, or alters a storage format, URL, Worker, rule, or workflow, must
+  update this AGENTS.md in the same change. Every AI session (including the
+  cth-apps skill) reads this file as the live source of truth for the whole
+  hub - a stale line here misleads every future edit. A brand new app also
+  gets: its own subfolder, a hub card on the root index.html, a unique black
+  line-icon favicon matching its hub card icon, and its own rules section in
+  this file.
 - Working from GitHub only (Notion AI or similar): branch, commit, open a
   pull request, merge. Small, focused changes; say in the PR exactly what
   the user asked for and what changed.
