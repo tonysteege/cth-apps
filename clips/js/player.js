@@ -68,8 +68,14 @@ function setSel(id) {
 
 // ------------------------------------------------------------- tagging
 
-function panelButtons(tier) {
+// Everything in a tier, dividers included, in stored order (the order IS
+// the display order, both here and in the editor).
+function panelItems(tier) {
   return (cur?.settings.panel.buttons || []).filter((b) => b.tier === tier);
+}
+// Only the pressable ones - hotkeys and tag toggles skip dividers.
+function panelButtons(tier) {
+  return panelItems(tier).filter((b) => !b.divider);
 }
 
 function pressClipButton(b) {
@@ -151,7 +157,14 @@ function applyQueuedSeek() {
   const v = video();
   // One seek in flight at a time: wait a beat rather than piling on.
   if (v.seeking) { armApply(); return; }
-  if (typeof v.fastSeek === 'function') v.fastSeek(seekState.target);
+  // Small steps seek PRECISELY so a slow scrub steps through real frames
+  // the way QuickTime does; fastSeek would snap them all to the nearest
+  // keyframe, which on sparse-keyframe game film reads as the picture
+  // sticking then teleporting. Big jumps (a flick, a timeline drag across
+  // minutes) take the cheap keyframe landing first, and settleSeek's
+  // precise seek finishes the job when the gesture ends.
+  const step = Math.abs(seekState.target - v.currentTime);
+  if (step > 1.5 && typeof v.fastSeek === 'function') v.fastSeek(seekState.target);
   else v.currentTime = seekState.target;
   cur.prevTick = null;
 }
@@ -191,35 +204,39 @@ function setSpeed(s) {
   if (b) b.textContent = `${s}x`;
 }
 
-// QuickTime-style two-finger scrub on the stage. Three rules, all from the
-// CTH Skills Academy film player where this feel was tuned and shipped:
+// QuickTime-style two-finger scrub on the stage. The rate is CALIBRATED TO
+// QUICKTIME ITSELF, measured frame-by-frame off Tony's own screen recordings
+// of both apps scrubbing the same 30:00 game file (2026-08-25): QuickTime
+// moves 2-4 seconds of video per second of swiping at every finger speed,
+// and it does NOT scale with the length of the file. The first cut here
+// scaled the rate to duration (a 900px swipe crossed the file), which on
+// game film hit its ceiling and ran 7-50 s/sec - five to fifteen times
+// QuickTime, with the picture teleporting whole seconds per painted frame.
+// Duration scaling is gone; crossing a long file is the timeline's job.
 //
-// 1. The rate is proportional to the video, not a constant. A full ~900px
-//    swipe crosses the whole file, bounded at both ends (a 3s clip stays
-//    aimable, an hour of game film is not crossed by accident - the ceiling
-//    binds from about four minutes up). The old constant 0.012s/px was drawn
-//    for nothing in particular: on a 60-minute period a full swipe moved the
-//    playhead 11 seconds, which read as "hardly moves at all".
-// 2. A gesture is CLAIMED once and kept. The old per-event axis test dropped
-//    every event where the finger drifted a little vertical, so a swipe
-//    stuttered in and out of scrubbing - the "super jumpy" half of the bug.
-//    Vertical scrolls are still never stolen: only a clearly-horizontal
-//    motion starts a gesture (1.4 margin, because trackpads leak a little of
-//    the other axis on every gesture).
-// 3. Seeks batch through queueSeek above - never one per wheel event.
+// So: a fixed ~0.006 s/px base (a normal ~500px/s swipe = ~3 s/sec, right in
+// QuickTime's band), with a MILD per-event acceleration so a hard flick
+// travels rather than crawls, capped low enough that the picture never
+// teleports. Shift is the fine pass, eight times slower, for finding the
+// frame where stick meets puck.
 //
-// Shift is the fine pass: eight times slower, for finding the frame where
-// stick meets puck rather than the shift it happened on.
-const SCRUB_TRAVEL_PX = 900;
-const MIN_SEC_PER_PX = 0.004;
-const MAX_SEC_PER_PX = 0.25;
+// A gesture is CLAIMED once and kept, so finger drift cannot stutter it;
+// vertical scrolls are never stolen (1.4 margin - trackpads leak a little of
+// the other axis on every gesture). Seeks batch through queueSeek, never one
+// per wheel event.
+// Measured off the recordings: a trackpad emits ~60 wheel events a second,
+// and QuickTime moved ~3 seconds of video per second of swiping. At 0.005
+// s/px a normal ~8px-per-event swipe lands on 2.4 s/sec and a gentle 3px
+// one on 0.9 - QuickTime's band. Acceleration is deliberately WEAK (1.4x,
+// and it only starts on a genuine flick) because Tony's recording shows
+// QuickTime barely accelerating at all: he swiped at several speeds and the
+// playhead kept about the same pace.
+const SCRUB_SEC_PER_PX = 0.005;
+const SCRUB_ACCEL_START = 20; // px per event before a swipe counts as a flick
+const SCRUB_ACCEL_MAX = 1.4;  // flick multiplier ceiling
 const FINE_DIVISOR = 8;
 const SCRUB_END_MS = 140;
 
-function secPerPx(duration) {
-  if (!isFinite(duration) || duration <= 0) return MIN_SEC_PER_PX;
-  return Math.min(Math.max(duration / SCRUB_TRAVEL_PX, MIN_SEC_PER_PX), MAX_SEC_PER_PX);
-}
 const isScrubGesture = (dx, dy) => Math.abs(dx) > Math.abs(dy) * 1.4 && Math.abs(dx) > 0.5;
 
 let scrub = null; // { endTimer } - target lives in seekState
@@ -234,8 +251,13 @@ function onStageWheel(e) {
     scrub = { endTimer: 0 };
     seekState.target = v.currentTime;
   }
-  const dir = cur.settings.scrubReverse ? -1 : 1;
-  const rate = secPerPx(cur.duration) / (e.shiftKey ? FINE_DIVISOR : 1);
+  // Swiping RIGHT moves FORWARD (2026-08-25, Tony's report: it was
+  // backwards). macOS natural scrolling reports a rightward two-finger
+  // swipe as NEGATIVE deltaX, so the default direction negates the delta;
+  // scrubReverse stays as the escape hatch for flipped scroll settings.
+  const dir = cur.settings.scrubReverse ? 1 : -1;
+  const accel = Math.min(SCRUB_ACCEL_MAX, Math.max(1, Math.abs(e.deltaX) / SCRUB_ACCEL_START));
+  const rate = (SCRUB_SEC_PER_PX * accel) / (e.shiftKey ? FINE_DIVISOR : 1);
   queueSeek(seekState.target + dir * e.deltaX * rate);
   clearTimeout(scrub.endTimer);
   scrub.endTimer = setTimeout(() => { scrub = null; settleSeek(); }, SCRUB_END_MS);
@@ -351,7 +373,12 @@ export function removeFreeze(id) {
 
 // ------------------------------------------------------------- timeline
 
-const TL = { h: 66, top: 8, lane: 26, freezeY: 46 };
+// SLIM TIMELINE (2026-08-25, Tony's call, mChapters as the reference): the
+// old 66px canvas plus a separate 40px transport row spent ~106px of height
+// on chrome. This is 30px: the clip lane IS the scrub bar, freeze marks ride
+// its bottom edge, and the two timecodes sit on top of the ends rather than
+// on a row of their own.
+const TL = { h: 30, top: 5, lane: 17, freezeY: 24 };
 
 function tlCanvas() { return el('vpTimeline'); }
 function tlScale() {
@@ -396,15 +423,14 @@ function drawTimeline() {
     }
   }
 
-  // freezes
+  // freezes - small triangles tucked under the lane
   for (const f of activeFreezes()) {
     const x = px(f.t);
     ctx.fillStyle = '#0ea5e9';
     ctx.beginPath();
-    ctx.moveTo(x, TL.freezeY);
-    ctx.lineTo(x + 5, TL.freezeY + 6);
-    ctx.lineTo(x, TL.freezeY + 12);
-    ctx.lineTo(x - 5, TL.freezeY + 6);
+    ctx.moveTo(x - 4, TL.freezeY + 5);
+    ctx.lineTo(x + 4, TL.freezeY + 5);
+    ctx.lineTo(x, TL.freezeY);
     ctx.closePath();
     ctx.fill();
   }
@@ -412,10 +438,9 @@ function drawTimeline() {
   // playhead (tracks the gesture target while a scrub or drag runs)
   const x = px(headTime());
   ctx.fillStyle = '#1a1a1a';
-  ctx.fillRect(x - 1, 0, 2, H);
+  ctx.fillRect(x - 1, TL.top - 3, 2, TL.lane + 6);
   ctx.beginPath();
-  ctx.moveTo(x - 6, 0); ctx.lineTo(x + 6, 0); ctx.lineTo(x, 7);
-  ctx.closePath();
+  ctx.arc(x, TL.top - 3, 3.4, 0, Math.PI * 2);
   ctx.fill();
 }
 
@@ -471,24 +496,28 @@ function keyBadge(k) { return k ? `<span class="tag-key">${esc(k.toUpperCase())}
 // bar under the timeline, 2026-08-25, Tony's call): the rows were the widest
 // thing under the video and the height they took came straight out of the
 // picture. A narrow column costs the stage almost nothing and scrolls when
-// the button list grows.
+// the button list grows. The panel resizes by its own drag bar, collapses
+// from the header Tags button, and its buttons drag to reorder (within
+// their own section - a clip button and a tag button are different things).
 function paintBar() {
   const bar = el('vpSide');
   if (!bar || !cur) return;
   const c = selClip();
-  const t1 = panelButtons(1).map((b) => `
-    <button class="tag-btn" data-clipbtn="${b.id}" style="--c:${b.color}" title="${esc(b.label)}: Clip ${b.lead}s Before To ${b.lag}s After The Playhead">
+  const item = (b) => {
+    if (b.divider) return `<div class="side-div" data-drag="${b.id}" draggable="true" title="Divider - Drag To Move"><span></span></div>`;
+    return b.tier === 1 ? `
+    <button class="tag-btn" draggable="true" data-drag="${b.id}" data-clipbtn="${b.id}" style="--c:${b.color}" title="${esc(b.label)}: Clip ${b.lead}s Before To ${b.lag}s After The Playhead. Drag To Reorder">
       <span class="tag-btn-word">${esc(b.label)}</span>${keyBadge(b.key)}
-    </button>`).join('');
-  const t2 = panelButtons(2).map((b) => `
-    <button class="tag-btn tag-btn-tag${c?.tags.includes(b.label) ? ' on' : ''}" data-tagbtn="${b.id}" style="--c:${b.color}" title="Toggle #${esc(b.label)} On The Selected Clip">
+    </button>` : `
+    <button class="tag-btn tag-btn-tag${c?.tags.includes(b.label) ? ' on' : ''}" draggable="true" data-drag="${b.id}" data-tagbtn="${b.id}" style="--c:${b.color}" title="Toggle #${esc(b.label)} On The Selected Clip. Drag To Reorder">
       <span class="tag-btn-word">#${esc(b.label)}</span>${keyBadge(b.key)}
-    </button>`).join('');
+    </button>`;
+  };
   bar.innerHTML = `
     <div class="side-label">Clip Buttons</div>
-    ${t1}
+    ${panelItems(1).map(item).join('')}
     <div class="side-label">Tags</div>
-    ${t2}
+    ${panelItems(2).map(item).join('')}
     ${cur.clipMode ? `<button class="tag-btn tag-btn-mode on" data-act="exitClip">Playing Clip - Esc Exits</button>` : ''}
     <button class="tag-btn tag-edit" data-act="editPanel" title="Edit Buttons, Keys, Colors, Lead And Lag">Edit Buttons</button>`;
   bar.querySelectorAll('[data-clipbtn]').forEach((b) => {
@@ -496,6 +525,35 @@ function paintBar() {
   });
   bar.querySelectorAll('[data-tagbtn]').forEach((b) => {
     b.onclick = () => pressTagButton(cur.settings.panel.buttons.find((x) => x.id === b.dataset.tagbtn));
+  });
+  // Reorder by drag, same tier only: dropping on an item inserts before it.
+  let dragId = null;
+  const reorder = async (fromId, toId) => {
+    if (!fromId || !toId || fromId === toId) return;
+    const list = cur.settings.panel.buttons;
+    const from = list.find((x) => x.id === fromId);
+    const to = list.find((x) => x.id === toId);
+    if (!from || !to || from.tier !== to.tier) return;
+    const without = list.filter((x) => x.id !== fromId);
+    without.splice(without.indexOf(to), 0, from);
+    cur.settings.panel.buttons = without;
+    await putSettings(cur.settings);
+    paintBar();
+  };
+  bar.querySelectorAll('[data-drag]').forEach((elm) => {
+    elm.addEventListener('dragstart', (e) => {
+      dragId = elm.dataset.drag;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', dragId);
+    });
+    elm.addEventListener('dragover', (e) => { e.preventDefault(); elm.classList.add('drag-over'); });
+    elm.addEventListener('dragleave', () => elm.classList.remove('drag-over'));
+    elm.addEventListener('drop', (e) => {
+      e.preventDefault();
+      elm.classList.remove('drag-over');
+      void reorder(dragId, elm.dataset.drag);
+      dragId = null;
+    });
   });
   const ep = bar.querySelector('[data-act="editPanel"]');
   if (ep) ep.onclick = () => openPanelEditor();
@@ -632,49 +690,131 @@ export function paintLog() {
 
 // ------------------------------------------------------------- panel editor
 
+// The preset swatches in the editor. Light grey is deliberately in the set
+// (Tony's ask): a neutral button is how a tag stays quiet beside the loud
+// ones. Any other colour is still reachable from the colour well beside them.
+const NEW_BTN_COLOR = '#d9d9d9';
+const PRESET_COLORS = [
+  ['#1a1a1a', 'Ink'], ['#d9d9d9', 'Light Grey'], ['#78716c', 'Stone'],
+  ['#16a34a', 'Green'], ['#dc2626', 'Red'], ['#3b82f6', 'Blue'],
+  ['#0ea5e9', 'Sky'], ['#eab308', 'Yellow'], ['#f97316', 'Orange'],
+  ['#7c3aed', 'Violet'], ['#d946ef', 'Magenta'], ['#6366f1', 'Indigo'],
+];
+
 function openPanelEditor() {
   document.querySelector('.sheet-veil')?.remove();
   const wrap = document.createElement('div');
   wrap.className = 'sheet-veil';
-  const row = (b) => `
-    <div class="pe-row" data-id="${b.id}">
-      <input class="pe-color" type="color" value="${b.color}" title="Button Color">
+  // A row is either a button or a divider; both drag to reorder within
+  // their own section, and both carry the same delete and duplicate.
+  const row = (b) => (b.divider ? `
+    <div class="pe-row pe-row--div" data-id="${b.id}" data-divider="1" draggable="true">
+      <span class="pe-grip" title="Drag To Reorder">⠿</span>
+      <span class="pe-divword">Divider</span>
+      <button class="mini" data-dup title="Duplicate">Copy</button>
+      <button class="mini mini-danger" data-del title="Remove">&times;</button>
+    </div>` : `
+    <div class="pe-row" data-id="${b.id}" draggable="true">
+      <span class="pe-grip" title="Drag To Reorder">⠿</span>
+      <span class="pe-swatches">
+        ${PRESET_COLORS.map(([hex, name]) => `<button type="button" class="pe-sw${b.color?.toLowerCase() === hex ? ' on' : ''}" data-sw="${hex}" style="--c:${hex}" title="${name}"></button>`).join('')}
+      </span>
+      <input class="pe-color" type="color" value="${b.color}" title="Any Other Color">
       <input class="pe-label" value="${esc(b.label)}" placeholder="Label">
       <input class="pe-key" value="${esc(b.key || '')}" maxlength="1" placeholder="Key" title="Hotkey">
       ${b.tier === 1 ? `
         <input class="pe-num" type="number" value="${b.lead ?? 8}" min="0" max="120" title="Seconds Before The Playhead">
         <input class="pe-num" type="number" value="${b.lag ?? 4}" min="0" max="120" title="Seconds After The Playhead">` : '<span class="pe-spacer"></span>'}
+      <button class="mini" data-dup title="Duplicate This Button">Copy</button>
       <button class="mini mini-danger" data-del title="Remove">&times;</button>
-    </div>`;
+    </div>`);
   wrap.innerHTML = `
     <div class="sheet sheet-wide" role="dialog" aria-modal="true">
       <h3>Tag Buttons</h3>
-      <p>Clip Buttons mark a clip at the playhead (lead seconds before, lag after). Tag Buttons toggle a #tag on the selected clip. Keys are one letter.</p>
+      <p>Clip Buttons mark a clip at the playhead (lead seconds before, lag after). Tag Buttons toggle a #tag on the selected clip. Keys are one letter. Drag the grip to reorder; dividers group buttons in the side panel.</p>
       <div class="pe-title">Clip Buttons <span class="pe-cols">Color &middot; Label &middot; Key &middot; Lead &middot; Lag</span></div>
-      <div id="peT1">${panelButtons(1).map(row).join('')}</div>
-      <button class="mini" id="peAdd1">+ Clip Button</button>
+      <div id="peT1" class="pe-list">${panelItems(1).map(row).join('')}</div>
+      <div class="pe-adds">
+        <button class="mini" id="peAdd1">+ Clip Button</button>
+        <button class="mini" id="peDiv1">+ Divider</button>
+      </div>
       <div class="pe-title">Tag Buttons</div>
-      <div id="peT2">${panelButtons(2).map(row).join('')}</div>
-      <button class="mini" id="peAdd2">+ Tag Button</button>
+      <div id="peT2" class="pe-list">${panelItems(2).map(row).join('')}</div>
+      <div class="pe-adds">
+        <button class="mini" id="peAdd2">+ Tag Button</button>
+        <button class="mini" id="peDiv2">+ Divider</button>
+      </div>
       <div class="sheet-row">
         <button class="btn" data-x="cancel">Cancel</button>
         <button class="btn btn-ink" data-x="save">Save Buttons</button>
       </div>
     </div>`;
   document.body.appendChild(wrap);
-  wrap.querySelector('#peAdd1').onclick = () => {
-    wrap.querySelector('#peT1').insertAdjacentHTML('beforeend', row({ id: uid(), tier: 1, label: 'New', key: '', color: '#3b82f6', lead: 8, lag: 4 }));
+
+  const wireRow = (r) => {
+    r.addEventListener('dragstart', (e) => {
+      r.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', r.dataset.id);
+    });
+    r.addEventListener('dragend', () => r.classList.remove('dragging'));
+    r.addEventListener('dragover', (e) => {
+      const src = wrap.querySelector('.pe-row.dragging');
+      if (!src || src === r || src.parentElement !== r.parentElement) return;
+      e.preventDefault();
+      const box = r.getBoundingClientRect();
+      r.parentElement.insertBefore(src, e.clientY < box.top + box.height / 2 ? r : r.nextSibling);
+    });
+    r.querySelectorAll('[data-sw]').forEach((sw) => {
+      sw.onclick = () => {
+        r.querySelector('.pe-color').value = sw.dataset.sw;
+        r.querySelectorAll('[data-sw]').forEach((o) => o.classList.toggle('on', o === sw));
+      };
+    });
+    const col = r.querySelector('.pe-color');
+    if (col) col.oninput = () => r.querySelectorAll('[data-sw]').forEach((o) => o.classList.toggle('on', o.dataset.sw === col.value));
   };
-  wrap.querySelector('#peAdd2').onclick = () => {
-    wrap.querySelector('#peT2').insertAdjacentHTML('beforeend', row({ id: uid(), tier: 2, label: 'new-tag', key: '', color: '#0ea5e9' }));
+  wrap.querySelectorAll('.pe-row').forEach(wireRow);
+
+  const add = (listId, b) => {
+    const list = wrap.querySelector(listId);
+    list.insertAdjacentHTML('beforeend', row(b));
+    wireRow(list.lastElementChild);
   };
+  // New buttons start LIGHT GREY (Tony's call): a new button is unassigned
+  // until he colours it, and grey is what unassigned looks like.
+  wrap.querySelector('#peAdd1').onclick = () => add('#peT1', { id: uid(), tier: 1, label: 'New', key: '', color: NEW_BTN_COLOR, lead: 8, lag: 4 });
+  wrap.querySelector('#peAdd2').onclick = () => add('#peT2', { id: uid(), tier: 2, label: 'new-tag', key: '', color: NEW_BTN_COLOR });
+  wrap.querySelector('#peDiv1').onclick = () => add('#peT1', { id: uid(), tier: 1, divider: true });
+  wrap.querySelector('#peDiv2').onclick = () => add('#peT2', { id: uid(), tier: 2, divider: true });
+
   wrap.addEventListener('click', (e) => {
+    const dup = e.target.closest('[data-dup]');
+    if (dup) {
+      const r = dup.closest('.pe-row');
+      const isDiv = !!r.dataset.divider;
+      const copy = isDiv
+        ? { id: uid(), divider: true }
+        : {
+          id: uid(),
+          tier: r.parentElement.id === 'peT1' ? 1 : 2,
+          label: r.querySelector('.pe-label').value,
+          key: '', // a duplicate must not steal the original's hotkey
+          color: r.querySelector('.pe-color').value,
+          lead: Number(r.querySelectorAll('.pe-num')[0]?.value ?? 8),
+          lag: Number(r.querySelectorAll('.pe-num')[1]?.value ?? 4),
+        };
+      r.insertAdjacentHTML('afterend', row(copy));
+      wireRow(r.nextElementSibling);
+      return;
+    }
     if (e.target.closest('[data-del]')) e.target.closest('.pe-row').remove();
     if (e.target === wrap) wrap.remove();
   });
   wrap.querySelector('[data-x="cancel"]').onclick = () => wrap.remove();
   wrap.querySelector('[data-x="save"]').onclick = async () => {
     const read = (root, tier) => [...root.querySelectorAll('.pe-row')].map((r) => {
+      if (r.dataset.divider) return { id: r.dataset.id, tier, divider: true };
       const nums = r.querySelectorAll('.pe-num');
       return {
         id: r.dataset.id,
@@ -738,9 +878,14 @@ function onKey(e) {
 
 // ------------------------------------------------------------- clock/loop
 
+// Two timecodes now, sitting on the ends of the slim timeline instead of on
+// a row of their own: current on the left, total on the right.
 function paintClock() {
+  if (!cur) return;
   const c = el('vpClock');
-  if (c && cur) c.textContent = `${fmtTime(headTime(), true)} / ${fmtTime(cur.duration)}`;
+  if (c) c.textContent = fmtTime(headTime(), true);
+  const t = el('vpTotal');
+  if (t) t.textContent = fmtTime(cur.duration);
 }
 
 function raf() {

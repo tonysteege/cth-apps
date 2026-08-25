@@ -107,7 +107,8 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   are storage formats - additive changes only. `videoTags` (2026-08-25) is
   an optional array of strings on the game record: the VIDEO's own tags,
   shown and edited in the library file tree, distinct from a clip's `tags`.
-  Settings gained optional `logH` (the clip log's height in px).
+  Settings gained optional `logH` (the clip log's height in px) and
+  `sideW` (the tag panel's width in px).
 - **The library file tree is full-width and tag-aware** (2026-08-25). Video
   rows carry their `videoTags` as chips with a write-in box (Enter adds,
   the chip's x removes, clicking a chip searches it); the search bar above
@@ -135,15 +136,42 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   `dbxUploadProgress` (XHR for real progress; upload sessions chunk
   anything past 24MB, so big film works), always `autorename` - an upload
   must never overwrite film already there.
-- **Scrubbing is batched, never per-event** (2026-08-25, ported from the
-  CTH Skills Academy film player where the feel was tuned). A gesture
-  accumulates into a target; at most one seek is in flight (fastSeek where
-  supported), one precise seek settles on gesture end, and the playhead and
-  clock read the TARGET while a gesture runs. The rate is
-  duration-proportional (a ~900px swipe crosses the file, bounded 0.004 to
-  0.25 s/px; Shift is 8x finer), and a gesture is claimed once and kept so
-  vertical finger drift cannot stutter it. The timeline drag rides the same
-  pipe. Do not go back to seeking per wheel or pointer event.
+- **Scrubbing is batched, never per-event, and CALIBRATED TO QUICKTIME**
+  (2026-08-25). A gesture accumulates into a target; at most one seek is in
+  flight, one precise seek settles on gesture end, and the playhead and
+  clock read the TARGET while a gesture runs. Steps under 1.5s seek
+  PRECISELY (fastSeek would snap them to keyframes, which reads as sticking
+  then teleporting on sparse-keyframe game film); bigger jumps take the
+  cheap keyframe landing and the settle seek finishes them.
+  **The rate is a FIXED 0.005 s/px, NOT duration-proportional.** The first
+  cut scaled it to duration and ran 7-50 s of video per second of swiping
+  on a 30-minute file; measured frame-by-frame off Tony's own screen
+  recordings of QuickTime scrubbing the same file, QuickTime moves 2-4 s
+  per second of swiping and barely accelerates. So: 0.005 s/px, a weak 1.4x
+  flick multiplier that only starts past 20px per event, Shift 8x finer.
+  Crossing a long file is the TIMELINE's job, not the swipe's.
+  **Swiping right moves forward**: macOS natural scrolling reports that as
+  negative deltaX, so the delta is negated (`scrubReverse` flips it back).
+  A gesture is claimed once and kept so vertical finger drift cannot
+  stutter it. The timeline drag rides the same pipe. Do not go back to
+  seeking per wheel or pointer event, and do not reintroduce
+  duration-scaling.
+- **The timeline is SLIM and carries its own timecodes** (2026-08-25,
+  mChapters as the reference): a 30px canvas where the clip lane is the
+  scrub bar, freeze marks tuck under it, and the current/total codes sit on
+  its ends instead of on a row of their own. With the tightened transport
+  row that returned ~76px of height to the picture.
+- **The tag panel resizes, collapses, and reorders** (2026-08-25): its own
+  vertical drag handle (width persists in `settings.sideW`, double-click
+  resets, 96px minimum where a container query switches the buttons to a
+  compact drawing), a header Tags button to collapse it, and drag-to-
+  reorder within a tier. Buttons wear their assigned colour as a 12%
+  `color-mix` wash. The panel editor has preset swatches (light grey
+  included, and it is the DEFAULT for a new button), a colour well for
+  anything else, Copy to duplicate a button (never its hotkey), dividers,
+  and drag-to-reorder. A divider is `{id, tier, divider: true}` in the same
+  `panel.buttons` array - anything reading that array must skip dividers
+  (`panelButtons` does; `panelItems` keeps them for rendering).
 - Freeze-frame drawings use the DIAGRAMS element model and renderer
   (`/diagrams/js/flat.js` is imported cross-app); keep that import working.
 - `clips/embed.html` is the Notion-embeddable single-clip player; its hash

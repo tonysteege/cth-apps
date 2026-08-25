@@ -365,6 +365,7 @@ async function showPlayer(id) {
           <button class="btn" id="vpFreeze" title="Freeze This Frame And Draw On It (F)">Freeze</button>
           <button class="btn" id="vpEmail" title="Email Clips To A Group">Email</button>
           <button class="btn" id="vpLogBtn" title="Show Or Hide The Clip Log">Clips</button>
+          <button class="btn" id="vpSideBtn" title="Show Or Hide The Tag Panel">Tags</button>
         </div>
       </header>
       <div class="vp-main">
@@ -378,6 +379,11 @@ async function showPlayer(id) {
               <div class="tb an-tb" id="anBar"></div>
             </div>
           </div>
+          <div class="vp-tlwrap">
+            <canvas id="vpTimeline" class="vp-timeline"></canvas>
+            <span class="vp-tc vp-tc--l" id="vpClock">0:00.0</span>
+            <span class="vp-tc vp-tc--r" id="vpTotal">0:00</span>
+          </div>
           <div class="vp-transport">
             <button class="tbtn" id="vpBack5" title="Back 5s (Left Arrow)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 17l-5-5 5-5"/><path d="M18 17l-5-5 5-5"/></svg></button>
             <button class="tbtn" id="vpFrameB" title="Previous Frame (,)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 17l-5-5 5-5"/><path d="M6 6v12"/></svg></button>
@@ -385,21 +391,22 @@ async function showPlayer(id) {
             <button class="tbtn" id="vpFrameF" title="Next Frame (.)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 17l5-5-5-5"/><path d="M18 6v12"/></svg></button>
             <button class="tbtn" id="vpFwd5" title="Forward 5s (Right Arrow)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 17l5-5-5-5"/><path d="M6 17l5-5-5-5"/></svg></button>
             <button class="tbtn tbtn-word" id="vpSpeed" title="Playback Speed (J Slower / L Faster)">1x</button>
-            <span class="vp-clock" id="vpClock">0:00 / 0:00</span>
             <span class="vp-hintkeys">Two-Finger Swipe Scrubs (Shift = Fine) &middot; I/O Trim &middot; F Freeze</span>
           </div>
-          <canvas id="vpTimeline" class="vp-timeline"></canvas>
           <div class="vp-split" id="vpSplit" title="Drag To Resize The Clip Log - Double-Click Resets"><span></span></div>
           <section class="vp-log" id="vpLog"></section>
         </div>
+        <div class="vp-vsplit" id="vpSplitV" title="Drag To Resize The Tag Panel - Double-Click Resets"><span></span></div>
         <aside class="vp-side" id="vpSide"></aside>
       </div>
     </div>`;
 
   $('#vpBack').onclick = () => { location.hash = '#/'; };
   $('#vpLogBtn').onclick = () => { document.querySelector('.vp').classList.toggle('log-hidden'); };
+  $('#vpSideBtn').onclick = () => { document.querySelector('.vp').classList.toggle('side-hidden'); };
   $('#vpEmail').onclick = () => openEmailSheet(game);
   wireLogSplit();
+  wireSidePanel();
 
   await openPlayer(game, src, {
     onShare: (clip, anchor) => openShareMenu(game, clip, anchor),
@@ -410,6 +417,50 @@ async function showPlayer(id) {
         onSend: (canvas) => void sendFrameToDiagrams(game, canvas),
       });
     },
+  });
+}
+
+// The tag panel's own drag handle, the same idiom as the log's: drag to
+// resize, double-click resets, width persists in settings. It goes narrow
+// enough (96px) that the buttons read as compact chips rather than rows.
+const SIDE_W_DEFAULT = 172;
+const SIDE_W_MIN = 96;
+function wireSidePanel() {
+  const split = $('#vpSplitV');
+  const side = $('#vpSide');
+  const main = document.querySelector('.vp-main');
+  if (!split || !side) return;
+  const clampW = (w) => Math.max(SIDE_W_MIN, Math.min(Math.min(420, main.clientWidth - 320), w));
+  void (async () => {
+    const s = await getSettings();
+    side.style.width = `${clampW(s.sideW || SIDE_W_DEFAULT)}px`;
+  })();
+  let drag = null;
+  split.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    drag = { startX: e.clientX, startW: side.getBoundingClientRect().width };
+    // A pointer id can vanish between down and capture (and a synthetic
+    // event has none); capture is an optimization, never a requirement.
+    try { split.setPointerCapture?.(e.pointerId); } catch (_) { /* fine */ }
+  });
+  split.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    side.style.width = `${clampW(drag.startW + (drag.startX - e.clientX))}px`;
+  });
+  const done = async () => {
+    if (!drag) return;
+    drag = null;
+    const s = await getSettings();
+    s.sideW = Math.round(side.getBoundingClientRect().width);
+    await putSettings(s);
+  };
+  split.addEventListener('pointerup', done);
+  split.addEventListener('pointercancel', done);
+  split.addEventListener('dblclick', async () => {
+    side.style.width = `${SIDE_W_DEFAULT}px`;
+    const s = await getSettings();
+    s.sideW = SIDE_W_DEFAULT;
+    await putSettings(s);
   });
 }
 
@@ -576,7 +627,9 @@ function wireLogSplit() {
   split.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     drag = { startY: e.clientY, startH: log.getBoundingClientRect().height };
-    split.setPointerCapture?.(e.pointerId);
+    // A pointer id can vanish between down and capture (and a synthetic
+    // event has none); capture is an optimization, never a requirement.
+    try { split.setPointerCapture?.(e.pointerId); } catch (_) { /* fine */ }
   });
   split.addEventListener('pointermove', (e) => {
     if (!drag) return;
