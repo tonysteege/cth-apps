@@ -1,4 +1,4 @@
-// CTH Present - turn any Notion page into a film-session slideshow.
+// CTH Slides - turn any Notion page into a film-session slideshow.
 //   Home (#/)          - paste a Notion link, recent decks, setup help.
 //   Deck (#p=<id>&s=n) - the presentation: dark title slide, light content
 //                        slides cut at every h2 and divider, scrubbable
@@ -19,7 +19,7 @@ import { toast, esc, fmtClock } from './ui.js';
 const API = 'https://apps-api.coachtonyhockey.com';
 const $ = (s) => document.querySelector(s);
 const BACK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12H4"/><path d="m10 18-6-6 6-6"/></svg>';
-const FORMULA = '"https://apps.coachtonyhockey.com/present/#p=" + id()';
+const FORMULA = '"https://apps.coachtonyhockey.com/slides/#p=" + id()';
 
 const RECENT_KEY = 'cthp.recent.v1';
 const recents = () => { try { return JSON.parse(localStorage.getItem(RECENT_KEY)) || []; } catch (_) { return []; } };
@@ -49,7 +49,7 @@ async function go() {
 // ------------------------------------------------------------- home
 
 function showHome() {
-  document.title = 'CTH Present';
+  document.title = 'CTH Slides';
   document.body.classList.remove('dark');
   $('#app').innerHTML = `
     <header class="lib-head">
@@ -57,23 +57,23 @@ function showHome() {
         <button class="btn btn-back" id="prHome" title="Back To CTH Apps">${BACK_ICON}</button>
         <img src="../diagrams/assets/cth-icon-black.svg" alt="CTH" class="brand-logo">
         <div class="brand-word">
-          <h1>CTH Present</h1>
+          <h1>CTH Slides</h1>
         </div>
       </div>
     </header>
     <main class="ph">
       <div class="ph-open">
-        <input id="phUrl" placeholder="Paste A Notion Page Link (Or Its Presentation URL)…" autocomplete="off">
-        <button class="btn btn-ink" id="phGo">Present</button>
+        <input id="phUrl" placeholder="Paste A Notion Page Link (Or Its Slides URL)…" autocomplete="off">
+        <button class="btn btn-ink" id="phGo">Open Slides</button>
       </div>
       ${recents().length ? `
         <div class="ph-title">Recent</div>
         <div class="ph-recents">
           ${recents().map((r) => `<button class="recent-card" data-open="${r.id}"><span class="recent-name">${esc(r.title || 'Untitled')}</span><span class="recent-meta">${new Date(r.when).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span></button>`).join('')}
         </div>` : ''}
-      <div class="ph-title">Give A Database Presentation Links</div>
+      <div class="ph-title">Give A Database Slide Links</div>
       <div class="ph-card">
-        <p>Add one formula property (name it <strong>Presentation</strong>) to any database, and every row gets its own always-current presentation link - new rows included, nothing to sync or update:</p>
+        <p>Add one formula property (name it <strong>Slides</strong>) to any database, and every row gets its own always-current slide link - new rows included, nothing to sync or update:</p>
         <div class="ph-formula"><code>${esc(FORMULA)}</code><button class="mini" id="phCopy">Copy</button></div>
         <p>Slides come straight from the page: the title makes the dark cover slide, every <strong>H2 heading</strong> starts a slide, and every <strong>divider</strong> cuts a new one. Videos on the page (Clips embeds, Dropbox links, or uploaded files) become scrubbable players, and you can draw on any slide while presenting.</p>
         <p class="ph-note">If a page will not open, share its database with the CTH Notion integration (page menu &rarr; Connections).</p>
@@ -99,24 +99,24 @@ async function fetchPage(id, fresh = false) {
   if (!r.ok) {
     const msg = j.error === 'no_access'
       ? 'The CTH Notion Integration Cannot See This Page - Share It Via The Page Menu &rarr; Connections'
-      : j.error === 'setup' ? 'The Present API Is Not Set Up Yet' : `Could Not Load The Page (${esc(j.error || r.status)})`;
+      : j.error === 'setup' ? 'The Slides API Is Not Set Up Yet' : `Could Not Load The Page (${esc(j.error || r.status)})`;
     throw new Error(msg);
   }
   return j;
 }
 
 async function openDeck(id, startAt = 0) {
-  document.title = 'Loading… - CTH Present';
-  $('#app').innerHTML = '<div class="boot">Opening The Presentation…</div>';
+  document.title = 'Loading… - CTH Slides';
+  $('#app').innerHTML = '<div class="boot">Opening Slides…</div>';
   let page;
   try {
     page = await fetchPage(id);
   } catch (e) {
     $('#app').innerHTML = `
       <div class="reopen">
-        <h2>Cannot Open This Presentation</h2>
+        <h2>Cannot Open These Slides</h2>
         <p>${e.message}</p>
-        <button class="btn btn-ink" id="prBackHome">Back To Present</button>
+        <button class="btn btn-ink" id="prBackHome">Back To Slides</button>
       </div>`;
     $('#prBackHome').onclick = () => { location.hash = ''; };
     return;
@@ -126,13 +126,13 @@ async function openDeck(id, startAt = 0) {
 
 function buildDeck(page, startAt) {
   const slides = buildSlides(page);
-  document.title = `${page.title} - CTH Present`;
+  document.title = `${page.title} - CTH Slides`;
   remember(page.id, page.title);
   document.body.classList.add('dark');
   $('#app').innerHTML = `
     <div class="pr" id="pr">
       <div class="pr-chrome" id="prChrome">
-        <button class="btn btn-back" id="prBack" title="Leave The Presentation">${BACK_ICON}</button>
+        <button class="btn btn-back" id="prBack" title="Leave Slides">${BACK_ICON}</button>
         <span class="pr-title">${esc(page.title)}</span>
         <span class="pr-flex"></span>
         <button class="btn" id="prRefresh" title="Pull The Latest Content From Notion">Refresh</button>
@@ -351,7 +351,7 @@ async function toggleRecord() {
     deck.rec = { rec, parts, display, mic, ac, mime, recording: true };
     $('#prRec').textContent = 'Stop';
     $('#prRec').classList.add('btn-rec');
-    toast('Recording - Present Away. R Or Stop Ends It');
+    toast('Recording Slides. R Or Stop Ends It');
   } catch (e) {
     console.error(e);
     toast('Recording Did Not Start - Allow Screen Sharing And Try Again', true);
@@ -368,7 +368,7 @@ function stopRecord() {
     r.ac?.close();
     const blob = new Blob(r.parts, { type: r.mime });
     const ext = r.mime.includes('mp4') ? 'mp4' : 'webm';
-    const name = `${(deck.page.title || 'presentation').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.${ext}`;
+    const name = `${(deck.page.title || 'slides').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.${ext}`;
     await offerRecording(blob, name);
     deck.rec = null;
   };
