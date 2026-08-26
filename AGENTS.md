@@ -50,10 +50,19 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
 - Working from GitHub only (Notion AI or similar): branch, commit, open a
   pull request, merge. Small, focused changes; say in the PR exactly what
   the user asked for and what changed.
-- File map is in README.md. Styling lives in `css/app.css` on the CTH
-  greyscale system (ink `#1a1a1a` on white, hairline `#e3e3e3` borders,
-  no color accents, no emojis, no em dashes in UI copy). Do not invent new
-  colors. The four toolbar presets default to black / blue `#75d8ff` /
+- File map is in README.md. Styling lives in `css/app.css` on the BoardUI
+  design system (2026-08-26, Tony's call, replacing the greyscale-only
+  system): a neutral ramp (`--n-50`..`--n-950`, white surfaces, `#f7f7f7`
+  page background, `#ebebeb` hairlines) plus ONE accent, the BoardUI blue
+  ramp (`--a-50`..`--a-800`, CTA gradient 500->600). Inter 400 body / 500
+  labels / 600 headings for chrome; the accent is for primary buttons,
+  focus rings, and selected states only. DIAGRAM CONTENT rendering
+  (on-ice text at weight 800, the PALETTE colors, exported PNGs) is a
+  storage/interchange contract and did NOT change with the retheme - the
+  `.ed-input*` fields mirror committed content and keep weight 800. The
+  hub `index.html` carries a copy of the same tokens inline. No emojis,
+  no em dashes in UI copy. Do not invent colors outside the two ramps.
+  The four toolbar presets default to black / blue `#75d8ff` /
   grey `#d9d9d9` / green `#16a34a` (green replaced red as the fourth
   preset on 2026-08-24). `red` `#dc2626` is no longer a default preset but
   stays in `PALETTE` forever, because saved diagrams and CTH Film Room

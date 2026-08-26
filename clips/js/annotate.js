@@ -45,7 +45,7 @@ function redraw() {
   if (an.sel) {
     const b = bounds(an.els.find((z) => z.id === an.sel));
     if (b) {
-      ctx.strokeStyle = '#3ec1f5';
+      ctx.strokeStyle = '#2b7fff';
       ctx.lineWidth = 2 * vs();
       ctx.setLineDash([8 * vs(), 6 * vs()]);
       ctx.strokeRect(b.x, b.y, b.w, b.h);

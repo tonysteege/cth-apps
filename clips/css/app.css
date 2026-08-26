@@ -2,10 +2,10 @@
    first), same CTH greyscale system. Only what Clips adds lives here. */
 
 /* ---------------------------------------------------------- library */
-.clib { flex: 1; padding: 22px clamp(16px, 3vw, 40px); background: var(--cloud); overflow-y: auto; }
+.clib { flex: 1; padding: 24px clamp(16px, 3vw, 40px); background: var(--page); overflow-y: auto; }
 .clib-title {
-  font-size: 10.5px; font-weight: 800; text-transform: uppercase;
-  letter-spacing: 0.09em; color: var(--soft); margin: 18px 4px 10px;
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--mist); margin: 22px 4px 10px;
 }
 .clib-title:first-child { margin-top: 0; }
 .clib-recents { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 6px; }
@@ -15,7 +15,7 @@
   background: var(--cloud); padding: 13px 38px 13px 15px; min-width: 200px;
   box-shadow: var(--shadow-1); transition: box-shadow .15s, border-color .15s;
 }
-.recent-card:hover { box-shadow: var(--shadow-2); border-color: #cfcfcf; }
+.recent-card:hover { box-shadow: var(--shadow-2); border-color: var(--n-300); transform: translateY(-1px); }
 .recent-name { display: block; font-weight: 800; font-size: 14px; margin-bottom: 3px; }
 .recent-meta { color: var(--mist); font-size: 12px; }
 .recent-del {
@@ -27,13 +27,17 @@
 /* Full width (2026-08-25, Tony's call): a video row now carries its tag log
    beside the name, and tags need the one thing a 760px cap was spending -
    horizontal room. */
-.clib-browser { display: flex; flex-direction: column; gap: 3px; }
+.clib-browser {
+  display: flex; flex-direction: column; gap: 3px;
+  background: var(--cloud); border: 1px solid var(--edge); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-card); padding: 10px;
+}
 .clib-tools { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; }
 #clibSearch {
   flex: 0 1 320px; min-width: 160px; height: 34px; padding: 0 12px; font: inherit; font-size: 13px;
   border: 1px solid var(--edge); border-radius: var(--r-sm); outline: none; background: var(--cloud);
 }
-#clibSearch:focus { border-color: var(--soft); }
+#clibSearch:focus { border-color: var(--a-500); box-shadow: var(--ring); }
 #clibScope {
   height: 34px; font: inherit; font-size: 12.5px; color: var(--graphite);
   border: 1px solid var(--edge); border-radius: var(--r-sm); background: var(--cloud); padding: 0 6px;
@@ -73,7 +77,7 @@
 .tag-chip button { color: var(--soft); font-size: 12px; line-height: 1; padding: 1px 3px; border-radius: 50%; }
 .tag-chip button:hover { color: var(--danger); background: rgba(180, 35, 24, .08); }
 .tag-chip[data-qtag] { cursor: pointer; }
-.tag-chip[data-qtag]:hover { border-color: #cfcfcf; color: var(--ink); }
+.tag-chip[data-qtag]:hover { border-color: var(--n-300); color: var(--ink); }
 
 .dbx-card {
   max-width: 620px; border: 1px solid var(--edge); border-radius: var(--r-lg);
@@ -89,7 +93,7 @@
   flex: 1; min-width: 200px; height: 38px; padding: 0 12px;
   border: 1px solid var(--edge); border-radius: var(--r-sm); outline: none;
 }
-#dbxKey:focus { border-color: var(--soft); }
+#dbxKey:focus { border-color: var(--a-500); box-shadow: var(--ring); }
 
 .reopen { max-width: 480px; margin: 10vh auto; text-align: center; padding: 0 20px; }
 .reopen h2 { font-size: 20px; }
@@ -166,7 +170,7 @@
   flex: 1; min-width: 0; height: 26px; padding: 0 8px; font-size: 12px;
   border: 1px solid var(--edge); border-radius: 6px; outline: none; background: var(--cloud);
 }
-#vpLogSearch:focus { border-color: var(--soft); }
+#vpLogSearch:focus { border-color: var(--a-500); box-shadow: var(--ring); }
 .log-head select {
   height: 26px; max-width: 84px; font: inherit; font-size: 11.5px;
   border: 1px solid var(--edge); border-radius: 6px; background: var(--cloud);
@@ -192,9 +196,9 @@
   font-size: 12px; color: var(--graphite);
 }
 .log-row:nth-child(even) { background: var(--sunken); }
-.log-row:hover { background: #ececec; color: var(--ink); }
-.log-row.on { background: var(--ink); color: var(--cloud); }
-.log-row.on .log-time, .log-row.on .tag-chip { color: rgba(255,255,255,.72); }
+.log-row:hover { background: var(--n-200); color: var(--ink); }
+.log-row.on { background: var(--a-600); color: #fff; }
+.log-row.on .log-time, .log-row.on .tag-chip { color: rgba(255,255,255,.78); }
 .log-row.on .tag-chip { background: rgba(255,255,255,.14); border-color: transparent; }
 .log-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--c); flex-shrink: 0; }
 .log-time {
@@ -252,12 +256,12 @@
   background: var(--c, var(--soft));
   box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, .12);
 }
-.tag-btn:hover { border-color: #cfcfcf; color: var(--ink); box-shadow: var(--shadow-2); }
+.tag-btn:hover { border-color: var(--n-300); color: var(--ink); box-shadow: var(--shadow-2); }
 .tag-btn:active { transform: translateY(0.5px); cursor: grabbing; }
 .tag-btn.drag-over { box-shadow: inset 0 2px 0 var(--select); }
 .tag-btn-word { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .tag-btn-tag { font-weight: 600; }
-.tag-btn-tag.on { background: var(--ink); border-color: var(--ink); color: var(--cloud); box-shadow: none; }
+.tag-btn-tag.on { background: var(--a-600); border-color: var(--a-600); color: #fff; box-shadow: none; }
 .tag-btn-mode { border-style: dashed; }
 .tag-edit {
   justify-content: center; color: var(--soft); font-weight: 600; margin-top: 7px;
@@ -308,8 +312,9 @@
 }
 .tbtn svg { width: 15px; height: 15px; }
 .tbtn:hover { background: var(--sunken); color: var(--ink); }
-.tbtn-play { background: var(--ink); color: var(--cloud); width: 33px; }
-.tbtn-play:hover { background: var(--ink-raised); color: var(--cloud); }
+.tbtn-play { background-image: var(--grad-primary); color: #fff; width: 33px; box-shadow: inset 0 1px 0 0 rgba(255,255,255,.12); }
+.tbtn-play:hover { background-image: var(--grad-primary-hover); color: #fff; }
+.tbtn-play:active { background-image: var(--grad-primary-active); }
 .tbtn-word { width: auto; padding: 0 8px; font-size: 11px; font-weight: 700; }
 
 /* ---------------------------------------------------------- responsive */

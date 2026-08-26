@@ -368,7 +368,7 @@ async function paintEdSide(currentId) {
         if (id === currentId) {
           const t = $('#edTitle');
           if (t) t.value = d.name;
-          document.title = `${d.name || 'Untitled Diagram'} - CTH Diagrammer`;
+          document.title = `${d.name || 'Untitled Diagram'} - CTH Diagrams`;
         }
       }
       refresh();
@@ -484,7 +484,7 @@ async function paintEdSide(currentId) {
 async function showEditor(id) {
   const drill = await getDrill(id);
   if (!drill) { toast('That Diagram Is Gone', true); location.hash = '#/'; return; }
-  document.title = `${drill.name || 'Untitled Diagram'} - CTH Diagrammer`;
+  document.title = `${drill.name || 'Untitled Diagram'} - CTH Diagrams`;
   const app = $('#app');
   app.innerHTML = `
     <div class="ed">
@@ -573,7 +573,7 @@ async function showEditor(id) {
   const commitTitle = () => {
     if (drill.name === title.value.trim()) return;
     drill.name = title.value.trim();
-    document.title = `${drill.name || 'Untitled Diagram'} - CTH Diagrammer`;
+    document.title = `${drill.name || 'Untitled Diagram'} - CTH Diagrams`;
     // Marked dirty rather than written straight through, so the name follows
     // the same one Save rule as everything else on the diagram.
     acts.markDirty();
