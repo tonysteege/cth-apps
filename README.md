@@ -9,12 +9,13 @@ lives in a subfolder and serves at its own path.
 - **Diagrams** (`/diagrams/`) - hockey diagram design: drills and plays on
   a full rink, saved in the browser, exported as game-ready images that
   stay editable.
-- **Present** (`/present/`) - any Notion page as a film-session slideshow:
+- **Slides** (`/slides/`) - any Notion page as a film-session slideshow:
   dark logo cover, light slides cut at every H2 and divider, scrubbable
   in-slide video (Clips embeds, Dropbox, uploads), telestration on every
   slide, overview grid, blackout, built-in screen recording with Dropbox
   save. Links come from one Notion formula property; content is always
   live, so nothing ever needs republishing.
+- `/present/` remains a compatibility redirect that preserves existing slide links.
 - **Clips** (`/clips/`) - video tagging and clipping: game film streamed
   from Dropbox /videos, two-tier tag buttons with hotkeys and lead/lag,
   trackpad scrubbing, a filterable clip log, live freeze-frames with

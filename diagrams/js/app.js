@@ -46,7 +46,7 @@ function route() {
 }
 
 // The home page is back (2026-08-25, Tony's call, reversing 2026-08-24):
-// `#/` is a library landing page like Clips and Present have. The editor
+// `#/` is a library landing page like Clips and Slides have. The editor
 // keeps its sidebar file tree; the home page is where the app OPENS.
 const LAST_KEY = 'cthd.lastdrill.v1';
 async function resolveDefaultDrill() {

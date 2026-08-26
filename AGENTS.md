@@ -10,13 +10,14 @@ The repo root `index.html` is the hub (a launcher page listing every app);
 each app lives in its own subfolder and serves at its path. Today there
 are three apps: **Diagrams** at `/diagrams/` (the hockey diagram editor),
 **Clips** at `/clips/` (video tagging and clipping over Dropbox), and
-**Present** at `/present/` (Notion pages as film-session slideshows). Static
+**Slides** at `/slides/` (Notion pages as film-session slideshows). `/present/`
+is a compatibility redirect that preserves existing `#p=...&s=...` links. Static
 site, no build step: GitHub Pages serves the `main` branch as-is. **Merging
 to `main` IS the deploy** - the live site updates within about a minute.
 The interface says "Diagram"; the `#/drill/` hash and the `drills`
 IndexedDB store are frozen storage terms - do not rename them. Diagrams has
 a HOME PAGE at `#/` again (2026-08-25, Tony's call, reversing 2026-08-24):
-a library landing page like Clips and Present - recent cards, a searchable
+a library landing page like Clips and Slides - recent cards, a searchable
 folder-grouped list, Import, Back Up and + New Diagram. The editor keeps
 the sidebar file tree (folders, drag and drop, right-click menu); the
 editor's Back button goes to the home page, and the home page's Back goes
@@ -195,9 +196,9 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
 - IndexedDB helpers in both apps' store.js: a `get` on a missing key must
   return undefined, never the raw IDBRequest (that bug shipped once).
 
-## Present (/present/) rules
+## Slides (/slides/) rules
 
-- Present renders a LIVE Notion page as slides through the Worker in
+- Slides renders a LIVE Notion page as slides through the Worker in
   `present-worker/` (cth-present-api on apps-api.coachtonyhockey.com,
   deployed with wrangler; secret NOTION_TOKEN). Notion has no browser CORS,
   so the Worker is required; it exposes ONLY /notion/page/<32-hex id>, no
@@ -207,8 +208,8 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
 - The slide grammar is a contract with how Tony writes pages: page title =
   dark cover slide, every heading_2 starts a slide, every divider cuts a
   slide (keeping the current header), heading_1 makes a dark section slide.
-- Presentation links come from a Notion FORMULA property (name: Presentation):
-  `"https://apps.coachtonyhockey.com/present/#p=" + id()` - the app also
+- Slide links come from a Notion FORMULA property (name: Slides):
+  `"https://apps.coachtonyhockey.com/slides/#p=" + id()` - the app also
   accepts any pasted Notion URL. The #p=<id>&s=<n> hash format is public.
 - Clips embed URLs, Dropbox links, uploaded video files and external video
   URLs all render as the scrubbable in-slide player (media.js); telestration

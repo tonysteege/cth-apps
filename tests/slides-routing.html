@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Slides Routing Test</title></head>
+<body>
+  <output id="result">Running</output>
+  <script type="module">
+    const result = document.getElementById('result');
+    const html = await fetch('../index.html').then((response) => response.text());
+    const page = new DOMParser().parseFromString(html, 'text/html');
+    const app = [...page.querySelectorAll('.app-card')].find((card) => card.querySelector('h2')?.textContent.trim() === 'Slides');
+    const failures = [];
+    if (!app) failures.push('the hub does not name the app Slides');
+    if (app?.getAttribute('href') !== 'slides/') failures.push('the hub does not open /slides/');
+    result.dataset.status = failures.length ? 'fail' : 'pass';
+    result.textContent = failures.length ? `FAIL: ${failures.join('; ')}` : 'PASS: Slides is the canonical hub route';
+  </script>
+</body>
+</html>

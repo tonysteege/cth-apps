@@ -1,4 +1,4 @@
-// cth-present-api - the small server piece behind CTH Present, on
+// cth-present-api - the small server piece behind CTH Slides, on
 // apps-api.coachtonyhockey.com. The Notion API allows no browser calls
 // (no CORS), so this Worker fetches a page and its blocks with the
 // NOTION_TOKEN secret and returns a simplified JSON the static app renders

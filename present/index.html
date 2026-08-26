@@ -3,21 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CTH Present</title>
-  <meta name="description" content="Turn any Notion page into a film-session slideshow: dark title slide, light content slides, scrubbable video, live telestration, and built-in screen recording.">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%231a1a1a%22%20stroke-width%3D%221.8%22%3E%3Crect%20x%3D%222.75%22%20y%3D%224%22%20width%3D%2218.5%22%20height%3D%2213%22%20rx%3D%222.5%22/%3E%3Cpath%20d%3D%22M8%2021h8M12%2017v4%22/%3E%3C/svg%3E">
-  <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../diagrams/css/app.css">
-  <link rel="stylesheet" href="../clips/css/app.css">
-  <link rel="stylesheet" href="css/app.css">
+  <title>Opening CTH Slides…</title>
+  <meta http-equiv="refresh" content="0; url=../slides/">
+  <script>location.replace(`../slides/${location.search}${location.hash}`);</script>
 </head>
 <body>
-  <div id="app" class="app">
-    <div class="boot">Loading…</div>
-  </div>
-  <script type="module" src="js/app.js"></script>
+  <p><a href="../slides/">Open CTH Slides</a></p>
 </body>
 </html>
