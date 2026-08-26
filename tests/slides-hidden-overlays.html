@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Slides Hidden Overlay Test</title>
+  <link rel="stylesheet" href="../diagrams/css/app.css">
+  <link rel="stylesheet" href="../present/css/app.css?test=hidden-overlays">
+</head>
+<body>
+  <div class="pr-grid" id="prGrid" hidden></div>
+  <div class="pr-black" id="prBlack" hidden></div>
+  <output id="result">Running</output>
+  <script>
+    const failures = ['prGrid', 'prBlack'].filter((id) => {
+      const element = document.getElementById(id);
+      return element.hidden && getComputedStyle(element).display !== 'none';
+    });
+    const result = document.getElementById('result');
+    result.dataset.status = failures.length ? 'fail' : 'pass';
+    result.textContent = failures.length
+      ? `FAIL: hidden overlays still display: ${failures.join(', ')}`
+      : 'PASS: hidden overlays do not display';
+  </script>
+</body>
+</html>

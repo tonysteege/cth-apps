@@ -59,6 +59,7 @@ body.dark { background: #0b0b0b; }
   color: rgba(255, 255, 255, .55); font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums;
 }
 .pr-black { position: fixed; inset: 0; background: #000; z-index: 60; }
+.pr-black[hidden], .pr-grid[hidden] { display: none; }
 .pr-grid {
   position: fixed; inset: 0; z-index: 55; overflow-y: auto;
   background: rgba(8, 8, 8, .96); padding: 60px clamp(16px, 4vw, 60px);
