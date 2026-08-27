@@ -229,6 +229,18 @@
 .hist-del:hover { color: var(--danger); background: var(--danger-soft); }
 
 /* ---- settings sheet ----------------------------------------------- */
+
+/* SECTION LABELS ARE TITLE CASE, BLACK, EXTRA BOLD (2026-08-27, Tony's
+   call). The shared `.pe-title` is 11px uppercase grey - quiet enough
+   that the sections read as one long form. Scoped to `.bot-settings` so
+   the Clips panel editor, which shares the class, is untouched. */
+.bot-settings .pe-title {
+  font-size: 15px; font-weight: 800; text-transform: none;
+  letter-spacing: -0.01em; color: var(--ink); margin: 0 0 10px;
+}
+.bot-settings .pe-section { padding-top: 22px; }
+.bot-settings .pe-section + .pe-section { border-top: 1px solid var(--edge); }
+
 .bs-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; font-size: 13px; }
 .bs-row > span:first-child { flex: none; width: 128px; color: var(--mist); font-size: 12px; font-weight: 500; }
 .bs-row input, .bs-row select {
@@ -244,28 +256,83 @@
 .bs-row input:focus { outline: none; box-shadow: var(--field-ring-focus); }
 .bs-swatches { display: flex; gap: 6px; flex-wrap: wrap; }
 .bs-swatches .pe-sw { width: 24px; height: 24px; aspect-ratio: auto; }
-.bs-block { margin-bottom: 12px; }
-.bs-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; font-weight: 500; color: var(--mist); }
-.bs-styles { display: flex; flex-direction: column; gap: 6px; }
-.bs-style { display: flex; align-items: center; gap: 6px; }
-.bs-style input {
-  min-width: 0; height: 32px; padding: 0 10px;
-  font: inherit; font-size: 12.5px;
+
+/* One style: name, an instruction field that grows with its text, and the
+   strip of example files beneath. The instruction used to be a 32px input
+   showing about six words of a forty-word description. */
+.bs-styles { display: flex; flex-direction: column; gap: 10px; }
+.bs-style {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 10px 10px 11px; border-radius: var(--r-md);
+  background: var(--cloud); border: 1px solid var(--edge);
+}
+.bs-style-top { display: flex; align-items: center; gap: 8px; }
+.bs-style input[data-sname] {
+  flex: 0 0 168px; min-width: 0; height: 30px; padding: 0 10px;
+  font: inherit; font-size: 13px; font-weight: 600;
   border: none; border-radius: var(--r-sm);
   background: var(--field); color: var(--ink);
   box-shadow: inset 0 0 0 2px transparent;
+  transition: box-shadow var(--dur) ease;
 }
-.bs-style input:focus { outline: none; box-shadow: var(--field-ring-focus); }
-.bs-style [data-sname] { flex: 0 0 140px; font-weight: 500; }
-.bs-style [data-sprompt] { flex: 1; }
+.bs-style input[data-sname]:hover:not(:focus) { box-shadow: var(--field-ring-hover); }
+.bs-style input[data-sname]:focus { outline: none; box-shadow: var(--field-ring-focus); }
+.bs-style textarea[data-sprompt] {
+  width: 100%; min-height: 64px; padding: 9px 11px;
+  font: inherit; font-size: 12.5px; line-height: 1.55;
+  border: none; border-radius: var(--r-sm);
+  background: var(--field); color: var(--ink);
+  box-shadow: inset 0 0 0 2px transparent;
+  resize: vertical; overflow: hidden;
+  transition: box-shadow var(--dur) ease;
+}
+.bs-style textarea[data-sprompt]:hover:not(:focus) { box-shadow: var(--field-ring-hover); }
+.bs-style textarea[data-sprompt]:focus { outline: none; box-shadow: var(--field-ring-focus); overflow: auto; }
+
+/* Example files: a real preview each, with replace and remove on hover. */
+.bs-ex { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
+.bs-ex.is-reading { opacity: 0.5; pointer-events: none; }
+.bs-exi { position: relative; width: 92px; margin: 0; }
+.bs-exi-shot {
+  display: flex; align-items: center; justify-content: center;
+  width: 92px; height: 62px; overflow: hidden;
+  border-radius: var(--r-sm); background: var(--n-200); border: 1px solid var(--edge);
+}
+.bs-exi-shot img, .bs-exi-shot video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.bs-exi-shot.is-gone::after { content: 'Missing'; font-size: 10.5px; color: var(--soft); }
+.bs-exi-doc { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; color: var(--mist); }
+.bs-exi figcaption {
+  margin-top: 4px; font-size: 10.5px; color: var(--soft);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.bs-exi-acts {
+  position: absolute; inset: 0 0 auto 0; height: 62px;
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+  border-radius: var(--r-sm); background: rgba(10, 10, 10, 0.55);
+  opacity: 0; transition: opacity var(--dur) ease;
+}
+.bs-exi:hover .bs-exi-acts, .bs-exi-acts:focus-within { opacity: 1; }
+.bs-exi-acts .mini { background: var(--cloud); font-size: 10.5px; padding: 2px 6px; }
+.bs-exadd {
+  width: 92px; height: 62px; padding: 0;
+  font: inherit; font-size: 11.5px; font-weight: 500; color: var(--mist);
+  background: var(--n-100); border: 1px dashed var(--n-300);
+  border-radius: var(--r-sm); cursor: pointer;
+  transition: border-color var(--dur) ease, color var(--dur) ease;
+}
+.bs-exadd:hover { border-color: var(--n-400); color: var(--ink); }
+
+.bs-styleadd { display: flex; gap: 8px; margin-top: 10px; }
 .bs-system {
   width: 100%; padding: 11px 12px;
-  font: inherit; font-size: 13px; line-height: 1.5;
+  font: inherit; font-size: 13px; line-height: 1.55;
   border: none; border-radius: var(--r-md);
   background: var(--field); color: var(--ink);
   box-shadow: inset 0 0 0 2px transparent;
-  resize: vertical;
+  resize: vertical; min-height: 120px;
+  transition: box-shadow var(--dur) ease;
 }
+.bs-system:hover:not(:focus) { box-shadow: var(--field-ring-hover); }
 .bs-system:focus { outline: none; box-shadow: var(--field-ring-focus); }
 .bs-note { margin: 8px 0 0; color: var(--soft); font-size: 12px; line-height: 1.5; }
 
@@ -275,8 +342,7 @@
   .bot-resize { display: none; }
   .bs-row { flex-wrap: wrap; }
   .bs-row > span:first-child { width: 100%; }
-  .bs-style { flex-wrap: wrap; }
-  .bs-style [data-sname] { flex: 1 0 100%; }
+  .bs-style input[data-sname] { flex: 1 1 auto; }
 }
 
 /* A failed run: the BoardUI error notification, inline where the results

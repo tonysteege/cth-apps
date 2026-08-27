@@ -5,13 +5,15 @@
 // Board  (#/)          the widget grid: drag to reorder, resize, recolour
 // Run    (#/b/<id>)    that bot's inputs, its results, its history
 
-import { BOTS, botById, defaultsFor, ICONS } from './registry.js';
-import { getConfig, putConfig, getLayout, putLayout, addRun, listRuns, deleteRun, uid } from './store.js';
+import { BOTS, botById, defaultsFor, migrateStyles, ICONS, EXAMPLE_MAX } from './registry.js';
+import { getConfig, putConfig, getLayout, putLayout, addRun, listRuns, deleteRun,
+  putExample, getExample, deleteExample, uid } from './store.js';
 import { aiText, aiVision, aiImage, notionText, parseJson, AiError } from './ai.js';
 import { toast, esc } from '../../diagrams/js/ui.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const EXAMPLE_MAX_BYTES = 60 * 1024 * 1024;
 const BACK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>';
 
 const cfgCache = new Map();
@@ -19,6 +21,9 @@ async function cfgOf(bot) {
   if (cfgCache.has(bot.id)) return cfgCache.get(bot.id);
   const saved = (await getConfig(bot.id)) || {};
   const cfg = { ...defaultsFor(bot), ...saved };
+  // Style names were shortened to one word; a saved config carries its own
+  // copy of the list, so bring the untouched defaults along with it.
+  if (cfg.styles) cfg.styles = migrateStyles(cfg.styles);
   cfgCache.set(bot.id, cfg);
   return cfg;
 }
@@ -301,33 +306,45 @@ function wireResize(board, l) {
 }
 
 // ------------------------------------------------------------- settings
+//
+// Section order (2026-08-27, Tony's call): Card, Behaviour, Instructions,
+// then Styles LAST. Styles is the tallest section by far once a style
+// carries examples, and the global instruction is what everything under
+// it inherits - it belongs above, not buried past a scroll of style rows.
 
 const SWATCHES = ['#0a0a0a', '#2b7fff', '#16a34a', '#e7000b', '#f97316', '#eab308', '#7c3aed', '#0ea5e9', '#737373'];
+
+// Object URLs made for example previews, revoked when the sheet closes -
+// a settings sheet opened twenty times otherwise leaks twenty videos.
+const previewUrls = new Set();
+function previewUrl(blob) {
+  const u = URL.createObjectURL(blob);
+  previewUrls.add(u);
+  return u;
+}
+function dropPreviews() {
+  for (const u of previewUrls) URL.revokeObjectURL(u);
+  previewUrls.clear();
+}
 
 async function showSettings(bot) {
   if (!bot) return;
   const cfg = await cfgOf(bot);
   const veil = document.createElement('div');
   veil.className = 'sheet-veil';
+  const stylesSetting = (bot.settings || []).find((s) => s.type === 'styles');
+  const plain = (bot.settings || []).filter((s) => s.type !== 'styles');
+
   const field = (s) => {
     const v = cfg[s.key];
     if (s.type === 'number') return `<label class="bs-row"><span>${esc(s.label)}</span><input type="number" data-k="${s.key}" min="${s.min ?? 1}" max="${s.max ?? 20}" value="${esc(String(v))}"></label>`;
     if (s.type === 'select') return `<label class="bs-row"><span>${esc(s.label)}</span><select data-k="${s.key}">${s.options.map((o) => `<option${o === v ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select></label>`;
     if (s.type === 'folder') return `<label class="bs-row"><span>${esc(s.label)}</span><input type="text" data-k="${s.key}" value="${esc(String(v))}" placeholder="/visuals"></label>`;
-    if (s.type === 'styles') return `
-      <div class="bs-block">
-        <div class="bs-head"><span>${esc(s.label)}</span>
-          <span class="bot-flex"></span>
-          <button class="mini" data-addstyle>+ Style</button>
-          <button class="mini" data-fromimg>Add From Image</button>
-        </div>
-        <div class="bs-styles" data-styles>${(v || []).map(styleRow).join('')}</div>
-        <p class="bs-note">Add From Image reads a screenshot and writes the style description for you.</p>
-      </div>`;
     return `<label class="bs-row"><span>${esc(s.label)}</span><input type="text" data-k="${s.key}" value="${esc(String(v ?? ''))}"></label>`;
   };
+
   veil.innerHTML = `
-    <div class="sheet sheet-pe" role="dialog" aria-modal="true">
+    <div class="sheet sheet-pe bot-settings" role="dialog" aria-modal="true">
       <div class="pe-top">
         <h3>${esc(bot.name)} Settings</h3>
         <p>${esc(bot.blurb)}</p>
@@ -339,15 +356,26 @@ async function showSettings(bot) {
             <span class="bs-swatches">${SWATCHES.map((h) => `<button type="button" class="pe-sw${(cfg.color || bot.color).toLowerCase() === h ? ' on' : ''}" data-color="${h}" style="--c:${h}" aria-label="${h}"></button>`).join('')}</span>
           </div>
         </section>
+        ${plain.length ? `
         <section class="pe-section">
           <div class="pe-title">Behaviour</div>
-          ${(bot.settings || []).map(field).join('')}
-        </section>
+          ${plain.map(field).join('')}
+        </section>` : ''}
         <section class="pe-section">
           <div class="pe-title">Instructions</div>
-          <textarea class="bs-system" data-k="system" rows="6" spellcheck="false">${esc(cfg.system || bot.system)}</textarea>
+          <textarea class="bs-system" data-k="system" rows="7" spellcheck="false">${esc(cfg.system || bot.system)}</textarea>
           <p class="bs-note">This is what the model is told before every run of this bot. Clear it to fall back to the built-in instruction.</p>
         </section>
+        ${stylesSetting ? `
+        <section class="pe-section">
+          <div class="pe-title">${esc(stylesSetting.label)}</div>
+          <div class="bs-styles" data-styles>${(cfg.styles || []).map(styleRow).join('')}</div>
+          <div class="bs-styleadd">
+            <button class="mini" data-addstyle>+ Style</button>
+            <button class="mini" data-fromimg>Add From Image</button>
+          </div>
+          <p class="bs-note">Keep a style name to one word where it reads - the chips sit four to a card. Add up to ${EXAMPLE_MAX} example files per style and the bot treats them as the gold standard for that look.</p>
+        </section>` : ''}
       </div>
       <div class="sheet-row pe-foot">
         <button class="btn" data-x="reset">Reset To Defaults</button>
@@ -357,9 +385,18 @@ async function showSettings(bot) {
       </div>
     </div>`;
   document.body.appendChild(veil);
-  const close = () => veil.remove();
+
+  // Examples added in this sheet but not yet saved, and blobs whose style
+  // or example row was removed. Neither is committed until Save.
+  const addedBlobs = new Map();
+  const dropped = new Set();
+  const close = () => { dropPreviews(); veil.remove(); };
   veil.addEventListener('mousedown', (e) => { if (e.target === veil) close(); });
-  veil.querySelector('[data-x="cancel"]').onclick = close;
+  veil.querySelector('[data-x="cancel"]').onclick = async () => {
+    // Anything uploaded and then cancelled must not linger in the store.
+    for (const id of addedBlobs.keys()) await deleteExample(id).catch(() => {});
+    close();
+  };
 
   let color = cfg.color || bot.color;
   veil.querySelectorAll('[data-color]').forEach((b) => {
@@ -371,46 +408,146 @@ async function showSettings(bot) {
 
   // ---- style list editing -------------------------------------------
   const stylesBox = veil.querySelector('[data-styles]');
-  const wireStyles = () => {
-    stylesBox?.querySelectorAll('[data-del]').forEach((b) => { b.onclick = () => b.closest('.bs-style').remove(); });
+
+  const grow = (ta) => {
+    ta.style.height = 'auto';
+    ta.style.height = `${Math.min(320, Math.max(64, ta.scrollHeight))}px`;
   };
-  wireStyles();
-  veil.querySelector('[data-addstyle]')?.addEventListener('click', () => {
-    stylesBox.insertAdjacentHTML('beforeend', styleRow({ id: uid(), name: 'New Style', prompt: '' }));
-    wireStyles();
-  });
-  veil.querySelector('[data-fromimg]')?.addEventListener('click', () => {
+
+  // Draw one style's example strip from the refs on its row.
+  async function paintExamples(row) {
+    const box = row.querySelector('[data-ex]');
+    const refs = JSON.parse(row.dataset.examples || '[]');
+    box.innerHTML = refs.map(exampleThumb).join('')
+      + (refs.length < EXAMPLE_MAX ? '<button class="bs-exadd" data-addex title="Attach an example file">+ Example</button>' : '');
+    for (const fig of box.querySelectorAll('[data-exid]')) {
+      const ref = refs.find((r) => r.id === fig.dataset.exid);
+      const slot = fig.querySelector('.bs-exi-shot');
+      if (!slot) continue;
+      const blob = addedBlobs.get(fig.dataset.exid) || await getExample(fig.dataset.exid);
+      if (!blob) { slot.classList.add('is-gone'); continue; }
+      if (ref?.kind === 'image') slot.innerHTML = `<img src="${previewUrl(blob)}" alt="">`;
+      else if (ref?.kind === 'video') slot.innerHTML = `<video src="${previewUrl(blob)}" muted playsinline preload="metadata"></video>`;
+      else slot.innerHTML = `<span class="bs-exi-doc">${esc((ref?.name || '').split('.').pop().slice(0, 4).toUpperCase() || 'TXT')}</span>`;
+    }
+    wireExamples(row);
+  }
+
+  function setRefs(row, refs) {
+    row.dataset.examples = JSON.stringify(refs);
+  }
+
+  function pickFile(onFile) {
     const inp = document.createElement('input');
     inp.type = 'file';
-    inp.accept = 'image/*';
-    inp.onchange = async () => {
-      const f = inp.files?.[0];
-      if (!f) return;
+    inp.accept = 'image/*,video/*,text/plain,text/markdown,.md,.txt,.json,.csv';
+    inp.onchange = () => { const f = inp.files?.[0]; if (f) onFile(f); };
+    inp.click();
+  }
+
+  // Reading an example is what makes it usable: the image models here are
+  // text-to-image, so a reference has to travel as words. An image is read
+  // by the vision model, a video by its own middle frame, text as itself.
+  async function ingest(row, file, replaceId) {
+    if (file.size > EXAMPLE_MAX_BYTES) {
+      toast(`That File Is Over ${Math.round(EXAMPLE_MAX_BYTES / 1048576)}MB - Use A Smaller One`, true);
+      return;
+    }
+    const kind = file.type.startsWith('image/') ? 'image'
+      : file.type.startsWith('video/') ? 'video' : 'text';
+    const box = row.querySelector('[data-ex]');
+    box.classList.add('is-reading');
+    try {
+      let note = '';
+      if (kind === 'text') {
+        note = (await file.text()).replace(/\s+/g, ' ').trim().slice(0, 1200);
+      } else {
+        const shot = kind === 'image' ? await visionDataUrl(file) : await videoFrameDataUrl(file);
+        note = (await aiVision(
+          'Describe this AS A REUSABLE STYLE for generating new images. Do not describe the specific subject. Cover layout, colour, type treatment, lighting and mood in one dense sentence.',
+          shot,
+        )).replace(/\s+/g, ' ').trim().slice(0, 700);
+      }
+      const id = replaceId || uid();
+      await putExample(id, file);
+      addedBlobs.set(id, file);
+      if (replaceId) dropped.delete(replaceId);
+      const ref = { id, name: file.name, mime: file.type, kind, note };
+      const refs = JSON.parse(row.dataset.examples || '[]');
+      const at = refs.findIndex((r) => r.id === replaceId);
+      if (at >= 0) refs[at] = ref; else refs.push(ref);
+      setRefs(row, refs);
+      await paintExamples(row);
+      toast(kind === 'text' ? 'Example Added' : 'Example Added And Read');
+    } catch (e) {
+      console.error(e);
+      toast(e.message || 'Could Not Read That File', true);
+    }
+    box.classList.remove('is-reading');
+  }
+
+  function wireExamples(row) {
+    row.querySelector('[data-addex]')?.addEventListener('click', () => pickFile((f) => ingest(row, f)));
+    row.querySelectorAll('[data-exrep]').forEach((b) => {
+      b.onclick = () => pickFile((f) => ingest(row, f, b.dataset.exrep));
+    });
+    row.querySelectorAll('[data-exdel]').forEach((b) => {
+      b.onclick = async () => {
+        dropped.add(b.dataset.exdel);
+        setRefs(row, JSON.parse(row.dataset.examples || '[]').filter((r) => r.id !== b.dataset.exdel));
+        await paintExamples(row);
+      };
+    });
+  }
+
+  function wireStyleRow(row) {
+    const ta = row.querySelector('[data-sprompt]');
+    if (ta) { grow(ta); ta.addEventListener('input', () => grow(ta)); }
+    row.querySelector('[data-del]').onclick = () => {
+      for (const r of JSON.parse(row.dataset.examples || '[]')) dropped.add(r.id);
+      row.remove();
+    };
+    paintExamples(row);
+  }
+  stylesBox?.querySelectorAll('.bs-style').forEach(wireStyleRow);
+
+  const addStyleRow = (st) => {
+    stylesBox.insertAdjacentHTML('beforeend', styleRow(st));
+    wireStyleRow(stylesBox.lastElementChild);
+    stylesBox.lastElementChild.scrollIntoView({ block: 'nearest' });
+  };
+
+  veil.querySelector('[data-addstyle]')?.addEventListener('click', () => {
+    addStyleRow({ id: uid(), name: 'New', prompt: '', examples: [] });
+  });
+  veil.querySelector('[data-fromimg]')?.addEventListener('click', () => {
+    pickFile(async (f) => {
       const btn = veil.querySelector('[data-fromimg]');
       btn.textContent = 'Reading…';
       try {
         const dataUrl = await visionDataUrl(f);
         const text = await aiVision(
-          'Describe this image AS A REUSABLE STYLE for generating new images. Do not describe the specific subject. Cover layout, colour, type treatment, lighting and mood in one dense sentence. Then on a new line give a 2 to 4 word name for the style. Return JSON: {"name":"...","prompt":"..."}',
+          'Describe this image AS A REUSABLE STYLE for generating new images. Do not describe the specific subject. Cover layout, colour, type treatment, lighting and mood in one dense sentence. Then on a new line give a ONE WORD name for the style. Return JSON: {"name":"...","prompt":"..."}',
           dataUrl,
         );
         const got = parseJson(text) || {};
-        stylesBox.insertAdjacentHTML('beforeend', styleRow({
+        addStyleRow({
           id: uid(),
-          name: got.name || 'From Image',
+          name: (got.name || 'Custom').split(/\s+/)[0],
           prompt: got.prompt || String(text || '').slice(0, 400),
-        }));
-        wireStyles();
+          examples: [],
+        });
         toast('Style Added From The Image');
       } catch (e) {
         toast(e.message || 'Could Not Read That Image', true);
       }
       btn.textContent = 'Add From Image';
-    };
-    inp.click();
+    });
   });
 
   veil.querySelector('[data-x="reset"]').onclick = async () => {
+    for (const st of cfg.styles || []) for (const r of st.examples || []) await deleteExample(r.id).catch(() => {});
+    for (const id of addedBlobs.keys()) await deleteExample(id).catch(() => {});
     cfgCache.delete(bot.id);
     await putConfig(bot.id, {});
     cfgCache.delete(bot.id);
@@ -418,19 +555,32 @@ async function showSettings(bot) {
     toast('Settings Reset');
     rerender('Settings Reset - The Card Updates When The Run Finishes');
   };
+
   veil.querySelector('[data-x="save"]').onclick = async () => {
     const patch = { color };
     veil.querySelectorAll('[data-k]').forEach((el) => {
       const key = el.dataset.k;
-      patch[key] = el.type === 'number' ? Number(el.value) : el.value;
+      if (el.type === 'number') {
+        // An empty or unparseable number field used to persist 0 or NaN
+        // straight into the prompt ("give exactly NaN options").
+        const n = Number(el.value);
+        const def = (bot.settings || []).find((s) => s.key === key)?.def;
+        patch[key] = Number.isFinite(n) && n > 0
+          ? Math.min(Number(el.max) || 99, Math.max(Number(el.min) || 1, Math.round(n)))
+          : def;
+      } else patch[key] = el.value;
     });
     if (!String(patch.system || '').trim()) patch.system = bot.system;
     if (stylesBox) {
       patch.styles = [...stylesBox.querySelectorAll('.bs-style')].map((row) => ({
         id: row.dataset.id,
-        name: row.querySelector('[data-sname]').value.trim() || 'Style',
+        name: row.querySelector('[data-sname]').value.trim().slice(0, 24) || 'Style',
         prompt: row.querySelector('[data-sprompt]').value.trim(),
-      })).filter((x) => x.prompt);
+        examples: JSON.parse(row.dataset.examples || '[]'),
+      })).filter((x) => x.prompt || (x.examples || []).length);
+      // Only now are removals permanent.
+      const kept = new Set(patch.styles.flatMap((st) => st.examples.map((r) => r.id)));
+      for (const id of dropped) if (!kept.has(id)) await deleteExample(id).catch(() => {});
     }
     await saveCfg(bot, patch);
     close();
@@ -438,6 +588,58 @@ async function showSettings(bot) {
     rerender('Settings Saved - The Card Updates When The Run Finishes');
   };
 }
+
+// A video example cannot be handed to a vision model, but a frame of it
+// can. A third of the way in avoids the black frame most clips open on.
+async function videoFrameDataUrl(file, max = 1600) {
+  const url = URL.createObjectURL(file);
+  const v = document.createElement('video');
+  try {
+    v.preload = 'auto';
+    v.muted = true;
+    v.playsInline = true;
+    v.src = url;
+    await new Promise((res, rej) => {
+      v.onloadeddata = res;
+      v.onerror = () => rej(new AiError('That Video Could Not Be Read - Try An MP4 Or A Still Image', 'badvideo'));
+      setTimeout(() => rej(new AiError('That Video Took Too Long To Open', 'badvideo')), 15000);
+    });
+    const want = Math.min(3, (Number.isFinite(v.duration) ? v.duration : 3) / 3);
+    if (Math.abs(v.currentTime - want) > 0.05) {
+      await new Promise((res) => { v.onseeked = res; setTimeout(res, 4000); v.currentTime = want; });
+    }
+    const scale = Math.min(1, max / Math.max(v.videoWidth || 1, v.videoHeight || 1));
+    const cv = document.createElement('canvas');
+    cv.width = Math.max(1, Math.round((v.videoWidth || 640) * scale));
+    cv.height = Math.max(1, Math.round((v.videoHeight || 360) * scale));
+    cv.getContext('2d').drawImage(v, 0, 0, cv.width, cv.height);
+    return cv.toDataURL('image/jpeg', 0.85);
+  } finally {
+    v.src = '';
+    URL.revokeObjectURL(url);
+  }
+}
+
+const styleRow = (s) => `
+  <div class="bs-style" data-id="${esc(s.id)}" data-examples="${esc(JSON.stringify(s.examples || []))}">
+    <div class="bs-style-top">
+      <input data-sname value="${esc(s.name)}" placeholder="Name" maxlength="24">
+      <span class="bot-flex"></span>
+      <button class="mini mini-danger" data-del aria-label="Remove Style" title="Remove Style">&times;</button>
+    </div>
+    <textarea data-sprompt rows="3" placeholder="How it should look - the more specific, the closer the result">${esc(s.prompt)}</textarea>
+    <div class="bs-ex" data-ex></div>
+  </div>`;
+
+const exampleThumb = (r) => `
+  <figure class="bs-exi" data-exid="${esc(r.id)}" title="${esc(r.name)}">
+    <span class="bs-exi-shot"></span>
+    <figcaption>${esc(r.name)}</figcaption>
+    <span class="bs-exi-acts">
+      <button class="mini" data-exrep="${esc(r.id)}" title="Replace">Replace</button>
+      <button class="mini mini-danger" data-exdel="${esc(r.id)}" title="Remove" aria-label="Remove">&times;</button>
+    </span>
+  </figure>`;
 
 // Vision wants pixels, not megabytes. Sending the raw file made a style
 // read slower than it needed to be, and a full-display grab sailed past
@@ -465,13 +667,6 @@ async function visionDataUrl(file, max = 1600) {
   bmp.close?.();
   return cv.toDataURL('image/jpeg', 0.85);
 }
-
-const styleRow = (s) => `
-  <div class="bs-style" data-id="${esc(s.id)}">
-    <input data-sname value="${esc(s.name)}" placeholder="Name">
-    <input data-sprompt value="${esc(s.prompt)}" placeholder="How it should look">
-    <button class="mini mini-danger" data-del aria-label="Remove">&times;</button>
-  </div>`;
 
 // ------------------------------------------------------------- setup
 
@@ -562,6 +757,19 @@ function paintText(card, run) {
 
 const ASPECTS = { 'Landscape 16:9': '16:9', 'Square 1:1': '1:1', 'Portrait 4:5': '4:5' };
 
+// A style's example files, turned into the lines that actually steer the
+// generation. The reference is the DESCRIPTION read off the file when it
+// was attached - these image models take text, not a reference image, and
+// this must not pretend otherwise.
+function exampleLines(style) {
+  const refs = (style?.examples || []).filter((r) => r.note);
+  if (!refs.length) return '';
+  return [
+    `Gold-standard references for this style - match how they look, do not copy their subject:`,
+    ...refs.map((r, i) => `${i + 1}. ${r.kind === 'text' ? 'Reference text' : `Reference ${r.kind}`}: ${r.note}`),
+  ].join('\n');
+}
+
 async function runImage(card, bot, cfg, vals, styleId, say, signal, extra = '') {
   const n = Math.max(1, Math.min(4, Number(cfg.count) || 3));
   const out = card.querySelector('[data-out]');
@@ -578,14 +786,21 @@ async function runImage(card, bot, cfg, vals, styleId, say, signal, extra = '') 
         signal,
       );
       const got = parseJson(pick);
-      if (got?.prompt) style = { id: 'best', name: got.name || 'Best', prompt: got.prompt };
+      if (got?.prompt) {
+        // If Best landed on one of Tony's own styles, it inherits that
+        // style's example files too - otherwise picking Best would quietly
+        // throw away the references he attached.
+        const matched = (cfg.styles || []).find((st) => st.name.toLowerCase() === String(got.name || '').toLowerCase());
+        style = { id: 'best', name: got.name || 'Best', prompt: got.prompt, examples: matched?.examples || [] };
+      }
     } catch (e) {
       if (e.name === 'AbortError') throw e;
       console.error(e);
     }
   }
   say(`Generating ${n}…`);
-  const prompt = `${bot.prompt(vals, cfg, style)}${extra ? `\n${extra}` : ''}`;
+  const refs = exampleLines(style);
+  const prompt = `${bot.prompt(vals, cfg, style)}${refs ? `\n${refs}` : ''}${extra ? `\n${extra}` : ''}`;
   const images = await aiImage(prompt, ASPECTS[cfg.aspect] || '16:9', n, signal);
   say('');
   const run = {

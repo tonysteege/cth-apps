@@ -30,6 +30,19 @@
 //
 // Image bots additionally use `styles` (a settings list Tony can extend,
 // including from a screenshot) and `aspect`.
+//
+// A STYLE NAME IS ONE WORD unless a second is genuinely load-bearing
+// (2026-08-27, Tony's call): the chips sit four to a card, so "Diagram"
+// reads where "Clean Diagram" wraps. "Split Screen" keeps two because
+// "Split" alone says nothing.
+//
+// A style may also carry `examples`: up to EXAMPLE_MAX gold-standard
+// files Tony attaches in settings. The config holds only the light
+// reference - { id, name, mime, kind, note } - with the bytes in the
+// `examples` store. `note` is the description read off the file when it
+// was added, and it is what actually reaches the model: an image model
+// here is text-to-image, so a reference travels as words, not pixels.
+export const EXAMPLE_MAX = 3;
 
 export const ICONS = {
   bot: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2m16 0h2m-7-1v2m-6-2v2"/></svg>',
@@ -44,17 +57,17 @@ export const ICONS = {
 // these in settings - including "Add From Image", which sends a screenshot
 // to the text model and saves the style description it reads back.
 const VISUAL_STYLES = [
-  { id: 'diagram', name: 'Clean Diagram', prompt: 'a clean instructional diagram, flat vector, generous white space, one clear focal idea, thin confident lines, muted palette with a single accent, no clutter' },
-  { id: 'sketch', name: 'Hand Sketchnote', prompt: 'a hand-drawn sketchnote on white, marker linework, hand-lettered labels, simple arrows and containers, warm and human, not polished vector' },
+  { id: 'diagram', name: 'Diagram', prompt: 'a clean instructional diagram, flat vector, generous white space, one clear focal idea, thin confident lines, muted palette with a single accent, no clutter' },
+  { id: 'sketch', name: 'Sketchnote', prompt: 'a hand-drawn sketchnote on white, marker linework, hand-lettered labels, simple arrows and containers, warm and human, not polished vector' },
   { id: 'compare', name: 'Comparison', prompt: 'a side-by-side comparison graphic, two clearly separated halves, a heading over each, matched visual weight, obvious contrast between the two' },
-  { id: 'photo', name: 'Photo Real', prompt: 'a photorealistic image, natural light, shallow depth of field, authentic and un-staged' },
+  { id: 'photo', name: 'Photo', prompt: 'a photorealistic image, natural light, shallow depth of field, authentic and un-staged' },
 ];
 
 const THUMB_STYLES = [
-  { id: 'bold', name: 'Bold Text', prompt: 'a bold thumbnail with three or four huge words of text, heavy condensed type, hard contrast, one dominant subject, colour blocking' },
+  { id: 'bold', name: 'Bold', prompt: 'a bold thumbnail with three or four huge words of text, heavy condensed type, hard contrast, one dominant subject, colour blocking' },
   { id: 'face', name: 'Reaction', prompt: 'a thumbnail centred on one expressive face, strong rim light, blurred action background, a short punchy caption to one side' },
   { id: 'split', name: 'Split Screen', prompt: 'a split-screen thumbnail, a hard vertical divide, before on the left and after on the right, a small label on each side' },
-  { id: 'clean', name: 'Clean Minimal', prompt: 'a restrained thumbnail, one subject on a plain graduated background, a few words of type, lots of breathing room, premium feel' },
+  { id: 'clean', name: 'Minimal', prompt: 'a restrained thumbnail, one subject on a plain graduated background, a few words of type, lots of breathing room, premium feel' },
 ];
 
 export const BOTS = [
@@ -146,6 +159,23 @@ export const BOTS = [
 ];
 
 export const botById = (id) => BOTS.find((b) => b.id === id) || null;
+
+// Style names shortened on 2026-08-27. A saved config keeps its own copy
+// of the style list, so migrate it - but ONLY where the saved name is
+// still exactly the old default. A name Tony typed himself is his.
+const RENAMED = {
+  diagram: ['Clean Diagram', 'Diagram'],
+  sketch: ['Hand Sketchnote', 'Sketchnote'],
+  photo: ['Photo Real', 'Photo'],
+  bold: ['Bold Text', 'Bold'],
+  clean: ['Clean Minimal', 'Minimal'],
+};
+export function migrateStyles(styles) {
+  return (styles || []).map((st) => {
+    const r = RENAMED[st.id];
+    return r && st.name === r[0] ? { ...st, name: r[1] } : st;
+  });
+}
 
 // A bot's settings defaults, merged under whatever Tony has saved.
 export function defaultsFor(bot) {

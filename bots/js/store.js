@@ -1,13 +1,21 @@
-// CTH Bots storage. One IndexedDB, `cth-bots`, three stores:
+// CTH Bots storage. One IndexedDB, `cth-bots`, four stores:
 //   configs  one record per bot id: its settings, instruction and colour
 //   board    one record, key 'layout': card order and per-card size
 //   runs     output history, newest first, capped
+//   examples the gold-standard files attached to a style (2026-08-27)
+//
+// EXAMPLE FILES LIVE IN THEIR OWN STORE, NOT ON THE CONFIG. The config
+// keeps only a light reference per example ({id, name, mime, kind, note});
+// the bytes are fetched lazily, and only when the settings sheet asks for
+// a preview. Blobs on the config would be read on every `cfgOf` - which
+// runs for every bot at boot - so a few reference videos would turn the
+// board's first paint into a hundred megabytes of reading.
 //
 // Storage shapes are ADDITIVE-ONLY, like every other CTH app: never rename
 // or remove a field, and read old records with a fallback.
 
 const DB = 'cth-bots';
-const VER = 1;
+const VER = 2;
 let dbP = null;
 
 function open() {
@@ -19,6 +27,9 @@ function open() {
       if (!d.objectStoreNames.contains('configs')) d.createObjectStore('configs');
       if (!d.objectStoreNames.contains('board')) d.createObjectStore('board');
       if (!d.objectStoreNames.contains('runs')) d.createObjectStore('runs', { keyPath: 'id' });
+      // Added at VER 2. Bumps are ADDITIVE: create what is missing, never
+      // drop or rewrite a store that already holds Tony's work.
+      if (!d.objectStoreNames.contains('examples')) d.createObjectStore('examples');
     };
     r.onsuccess = () => {
       const d = r.result;
@@ -67,5 +78,12 @@ export async function addRun(run) {
 export const listRuns = () => tx('runs', 'readonly', (s) => s.getAll())
   .then((v) => (v || []).sort((a, b) => (b.at || 0) - (a.at || 0)));
 export const deleteRun = (id) => tx('runs', 'readwrite', (s) => s.delete(id));
+
+// ---- style example files -------------------------------------------
+// Keyed by the example's own uid, so a style can be renamed, reordered or
+// copied without touching the bytes.
+export const putExample = (id, blob) => tx('examples', 'readwrite', (s) => s.put(blob, id));
+export const getExample = (id) => tx('examples', 'readonly', (s) => s.get(id)).then((v) => (v === undefined ? undefined : v));
+export const deleteExample = (id) => tx('examples', 'readwrite', (s) => s.delete(id));
 
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);

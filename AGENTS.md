@@ -423,7 +423,12 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   all of which mirror committed DIAGRAM CONTENT so the editing field
   matches what `flat.js` draws: `.ed-input`, `.ed-input-chip`,
   `.ed-input-flabel` and `.pmenu-chip` (plus `.an-textinput` in Clips).
-  Do not "tidy" those to 600.
+  Do not "tidy" those to 600. ONE DELIBERATE EXCEPTION was added on
+  2026-08-27 at Tony's explicit request: `.bot-settings .pe-title`, the
+  section labels in the Bots settings sheet, are 15px/800 Title Case in
+  ink instead of the 11px uppercase grey `.pe-title`. It is scoped to
+  `.bot-settings` so the Clips panel editor, which shares the class, is
+  untouched. Anything else asking for 800 still needs Tony's call.
 - **Colour.** The neutral ramp plus ONE accent. Danger is `--danger` /
   `--danger-soft`; no raw `#dc2626` or `rgba(180, 35, 24, ...)`.
 - **Motion.** `var(--dur)` (150ms), never loose `.12s` / `.15s` values.
@@ -458,7 +463,43 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   screenshot to `/ai/vision` and saves the style description it reads
   back, which is how a style seen on YouTube becomes a reusable option.
   Best asks the text model to pick or invent the strongest style for that
-  subject before generating.
+  subject before generating - and if its pick matches one of Tony's own
+  styles by name, it INHERITS that style's examples, otherwise choosing
+  Best would quietly discard the references he attached.
+- **A STYLE NAME IS ONE WORD** (2026-08-27, Tony's call) unless a second
+  is load-bearing: Diagram, Sketchnote, Photo, Bold, Minimal - but Split
+  Screen keeps two, because "Split" alone says nothing. The chips sit
+  four to a card, so a two-word name wraps. Renaming the DEFAULTS needs a
+  migration (`migrateStyles`), because a saved config carries its own
+  copy of the list; it renames only where the saved name still equals the
+  old default exactly - a name Tony typed is his.
+- **A STYLE CARRIES UP TO 3 GOLD-STANDARD EXAMPLE FILES** (2026-08-27).
+  Images, video or text. THE BYTES LIVE IN THEIR OWN `examples` STORE
+  (IndexedDB VER 2, additive) keyed by the example's uid; the config
+  keeps only `{ id, name, mime, kind, note }`. Blobs on the config would
+  be read by every `cfgOf` - which runs for each bot at boot - so a few
+  reference videos would make the board's first paint read hundreds of
+  megabytes. Previews load lazily in the settings sheet and every object
+  URL is revoked when it closes.
+  HOW AN EXAMPLE ACTUALLY REACHES THE MODEL: as WORDS. These image
+  models are text-to-image, with no reference-image input, so each file
+  is READ ONCE WHEN ATTACHED - an image through `/ai/vision`, a video
+  through a frame a third of the way in, a text file as its own excerpt -
+  and the description is stored as `note`. `exampleLines()` folds those
+  notes into the prompt at run time, so a run costs no extra vision
+  calls. Never imply to Tony that the picture itself is being sent.
+  Uploads are not committed until Save: Cancel deletes what it added,
+  and removals only become permanent on Save.
+- SETTINGS SECTION ORDER IS Card, Behaviour, Instructions, Styles
+  (2026-08-27, Tony's call). Styles goes LAST because it is by far the
+  tallest section once examples are attached, and the global instruction
+  everything inherits belongs above it, not past a scroll of style rows.
+  A style's instruction is a TEXTAREA that grows with its text (64px to
+  320px, `resize: vertical`) - it was a 32px input showing six words of a
+  forty-word description.
+- A NUMBER SETTING IS CLAMPED ON SAVE, not just in the input's min/max.
+  An empty or unparseable field used to persist 0 or NaN straight into
+  the prompt ("Give exactly NaN cue options") and stay there.
 - Results save into the CTH folder through `clips/js/localfs.js` at each
   bot's configured folder (`/visuals`, `/thumbnails`), download fallback.
   Refine re-runs with a region hint derived from a box drawn on the
