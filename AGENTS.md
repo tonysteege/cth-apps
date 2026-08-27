@@ -317,6 +317,38 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   and drag-to-reorder. A divider is `{id, tier, divider: true}` in the same
   `panel.buttons` array - anything reading that array must skip dividers
   (`panelButtons` does; `panelItems` keeps them for rendering).
+- **A button carrying `act` RUNS SOMETHING instead of toggling a tag**
+  (2026-08-27, Tony's call). `{id, tier, act, label, key, color}`, additive
+  and never removed. PLAYERS IS THE ONLY ONE and it used to be hard-coded:
+  spliced into the render under the ratings, painted a fixed orange, and
+  wired to a fixed `p` that was checked above the panel's own key lookup.
+  None of that could be changed. It is now a real row in `panel.buttons`,
+  so its place in the column, its key and its colour all come from the same
+  drag, the same key field and the same colour popover as everything else.
+  Three consequences that must not be undone:
+  - THREE READERS MUST SKIP `act` BUTTONS. `panelTags()` exists for exactly
+    this and is what feeds the tag filter - "Players" is a thing you press,
+    never a tag a clip can carry. `pressTagButton` also bails on it.
+  - THE EDITOR MUST CARRY `act` BACK OUT of the row (`data-act` on
+    `.pe-row`, read in the save). Drop it and the save quietly turns Players
+    into an ordinary tag button that toggles a #Players tag.
+  - `getSettings` INSERTS A MISSING PLAYERS BUTTON under the last rating
+    (`withPlayers`), which is where the hard-coded one drew. It only ever
+    ADDS: a panel that already has one, wherever the user dragged it to, is
+    returned untouched. Its label is fixed and it cannot be deleted, because
+    there is no way back if it were.
+- **PANEL KEYS OUTRANK TRANSPORT KEYS** (2026-08-27). The panel lookup used
+  to sit at the BOTTOM of `onKey`, after every transport handler had already
+  returned, so a button assigned `j k l i o f , .` silently did the
+  transport action and never fired - the reason "not all my shortcuts work".
+  `i` and `o` were the worst: both were guarded by `selClip()`, so a button
+  keyed `i` worked while nothing was selected and stopped the moment a clip
+  was, which reads as random rather than broken. The lookup now runs FIRST:
+  a key typed into the editor is an explicit instruction and beats a
+  built-in default. Do not move it back down. The editor marks collisions as
+  you type - `pe-key--dup` (danger ring: two buttons on one letter, only the
+  first fires) and `pe-key--takes` (grey ring: this button takes a transport
+  key over) - so a takeover is a choice, never a surprise.
 - **The panel editor is a real form** (2026-08-26, Tony's call). Every
   `.pe-` class it uses was referenced by `player.js` and defined in NO
   stylesheet, so the dialog rendered as a wrapping stack of raw inputs with

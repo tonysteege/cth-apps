@@ -78,6 +78,18 @@ export const deleteGame = (id) => tx(GAMES, 'readwrite', (s) => s.delete(id));
 // The default tag panel: Tier 1 buttons make a clip at the playhead (lead
 // seconds before, lag after - the Film Room model); Tier 2 buttons toggle a
 // #tag on the selected clip. Everything is editable in the panel editor.
+//
+// A button carrying `act` RUNS SOMETHING instead of toggling a tag. Players
+// is the only one today. It became a real panel button on 2026-08-27
+// (Tony's call) so its place in the column, its key and its colour are
+// controlled by the same drag, the same key field and the same colour
+// popover as every other button, rather than by a hard-coded splice.
+// Anything reading tags must skip `act` buttons: "Players" is a thing you
+// press, never a tag a clip can carry.
+export const playersButton = () => ({
+  id: uid(), tier: 2, act: 'players', label: 'Players', key: 'p', color: '#f97316',
+});
+
 export const DEFAULT_PANEL = () => ({
   buttons: [
     { id: uid(), tier: 1, label: 'Goal', key: 'g', color: '#16a34a', lead: 10, lag: 4 },
@@ -91,6 +103,7 @@ export const DEFAULT_PANEL = () => ({
     { id: uid(), tier: 2, label: 'good', key: 'u', color: '#16a34a' },
     { id: uid(), tier: 2, label: 'bad', key: 'd', color: '#dc2626', },
     { id: uid(), tier: 2, label: 'star', key: 'x', color: '#eab308' },
+    playersButton(),
     { id: uid(), tier: 2, label: 'ozone', key: '', color: '#0ea5e9' },
     { id: uid(), tier: 2, label: 'dzone', key: '', color: '#6366f1' },
     { id: uid(), tier: 2, label: 'special-teams', key: '', color: '#d946ef' },
@@ -127,6 +140,26 @@ const DEFAULT_SETTINGS = () => ({
   recordArea: null,
 });
 
+// A panel saved before Players became a real button gets one inserted where
+// the hard-coded version used to draw it: directly under the last rating.
+// It is added, never moved, so a panel that already has one - anywhere the
+// user dragged it to - is returned untouched. Additive-only, like every
+// other field here.
+function withPlayers(panel) {
+  const list = panel?.buttons;
+  if (!Array.isArray(list) || list.some((b) => b.act === 'players')) return panel;
+  const ratings = new Set(['good', 'bad', 'star']);
+  let cut = -1;
+  list.forEach((b, n) => { if (b.tier === 2 && !b.divider && ratings.has(String(b.label).toLowerCase())) cut = n; });
+  // No ratings left in the panel: sit at the top of the tag tier instead, so
+  // the button always lands somewhere visible rather than being appended
+  // past a scroll of situation tags.
+  if (cut < 0) cut = list.findIndex((b) => b.tier === 2) - 1;
+  const out = [...list];
+  out.splice(cut + 1, 0, playersButton());
+  return { ...panel, buttons: out };
+}
+
 export async function getSettings() {
   const s = await tx(SETTINGS, 'readonly', (st) => st.get('main'));
   if (s) {
@@ -135,7 +168,7 @@ export async function getSettings() {
     return {
       ...d,
       ...s,
-      panel: s.panel || d.panel,
+      panel: withPlayers(s.panel) || d.panel,
       groups: { ...d.groups, ...(s.groups || {}) },
       players: s.players || d.players,
       freezeBuf: { ...d.freezeBuf, ...(s.freezeBuf || {}) },

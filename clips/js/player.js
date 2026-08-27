@@ -115,6 +115,11 @@ function panelItems(tier) {
 function panelButtons(tier) {
   return panelItems(tier).filter((b) => !b.divider);
 }
+// Tag buttons only: an `act` button is pressed, never carried on a clip, so
+// it must not appear anywhere a tag can be chosen or filtered on.
+function panelTags(tier) {
+  return panelButtons(tier).filter((b) => !b.act);
+}
 
 function pressClipButton(b) {
   const v = video();
@@ -138,6 +143,8 @@ function pressClipButton(b) {
 }
 
 function pressTagButton(b) {
+  // An action button never becomes a tag, whatever route reached here.
+  if (b.act === 'players') { openPlayers(); return; }
   const c = selClip();
   if (!c) { toast('Select A Clip First - Tags Attach To A Clip', true); return; }
   const has = c.tags.includes(b.label);
@@ -781,6 +788,13 @@ export function paintBar() {
   const c = selClip();
   const item = (b) => {
     if (b.divider) return `<div class="side-div" data-drag="${b.id}" draggable="true" title="Divider - Drag To Move"><span></span></div>`;
+    // An `act` button runs something instead of toggling a tag. It drags,
+    // re-keys and re-colours exactly like its neighbours, which is the whole
+    // point of it being a real button rather than an injected one.
+    if (b.act === 'players') return `
+    <button class="tag-btn tag-btn-players" draggable="true" data-drag="${b.id}" data-act="players" style="--c:${b.color};--fg:${btnFg(b.color)}" title="Tag The Players In This Clip${b.key ? ` (${b.key.toUpperCase()})` : ''}. Drag To Reorder">
+      <span class="tag-btn-word">${esc(btnLabel(b.label))}</span>${keyBadge(b.key)}
+    </button>`;
     return b.tier === 1 ? `
     <button class="tag-btn" draggable="true" data-drag="${b.id}" data-clipbtn="${b.id}" style="--c:${b.color};--fg:${btnFg(b.color)}" title="${esc(b.label)}: Clip ${b.lead}s Before To ${b.lag}s After The Playhead. Drag To Reorder">
       <span class="tag-btn-word">${esc(btnLabel(b.label))}</span>${keyBadge(b.key)}
@@ -793,26 +807,10 @@ export function paintBar() {
     <div class="side-label">Clips</div>
     ${panelItems(1).map(item).join('')}
     <div class="side-label">Tags</div>
-    ${(() => {
-      // Players sits directly under the ratings and above every other tag
-      // (2026-08-27, Tony's call): good / bad / star and "who" are the four
-      // things pressed on nearly every clip, so they belong together at the
-      // top of the column rather than past a scroll of situation tags.
-      const items = panelItems(2);
-      const ratings = new Set(['good', 'bad', 'star']);
-      let cut = -1;
-      items.forEach((b, n) => { if (!b.divider && ratings.has(String(b.label).toLowerCase())) cut = n; });
-      const playersBtn = `
-        <button class="tag-btn tag-btn-players" data-act="players" style="--c:#f97316;--fg:#fff" title="Tag The Players In This Clip (P)">
-          <span class="tag-btn-word">Players</span><span class="tag-key">P</span>
-        </button>`;
-      const html = items.map(item);
-      html.splice(cut + 1, 0, playersBtn);
-      return html.join('');
-    })()}
+    ${panelItems(2).map(item).join('')}
     ${cur.clipMode ? `<button class="tag-btn tag-btn-mode on" data-act="exitClip">Playing Clip - Esc Exits</button>` : ''}
     <button class="tag-btn tag-edit" data-act="editPanel" title="Edit Buttons, Keys, Colors, Lead And Lag">Edit Buttons</button>`;
-  bar.querySelector('[data-act="players"]').onclick = () => openPlayers();
+  bar.querySelectorAll('[data-act="players"]').forEach((b) => { b.onclick = () => openPlayers(); });
   bar.querySelectorAll('[data-clipbtn]').forEach((b) => {
     b.onclick = () => pressClipButton(cur.settings.panel.buttons.find((x) => x.id === b.dataset.clipbtn));
   });
@@ -1230,7 +1228,7 @@ export function paintLog() {
   const labelCounts = counts((c) => c.label);
   const tagCounts = counts((c) => c.tags);
   const list = filteredClips();
-  const tagOpts = [...new Set([...panelButtons(2).map((b) => b.label), ...tagCounts.keys()])];
+  const tagOpts = [...new Set([...panelTags(2).map((b) => b.label), ...tagCounts.keys()])];
   // Keep the caret alive across a repaint.
   const ae = document.activeElement;
   const keepSearch = ae === el('vpLogSearch') ? ae.selectionStart : null;
@@ -1397,16 +1395,20 @@ function openPanelEditor() {
       <span class="pe-divword">Divider</span>
       ${acts('This Divider')}
     </div>` : `
-    <div class="pe-row" data-id="${b.id}" draggable="true">
+    <div class="pe-row" data-id="${b.id}"${b.act ? ` data-act="${b.act}"` : ''} draggable="true">
       <span class="pe-grip" title="Drag To Reorder">${GRIP}</span>
       <button type="button" class="pe-well" data-colorbtn style="--c:${b.color}" title="Button Colour" aria-label="Button Colour"></button>
       <input class="pe-color" type="color" value="${b.color}" hidden>
-      <input class="pe-label" value="${esc(b.label)}" placeholder="${b.tier === 1 ? 'Label' : 'tag-name'}" aria-label="Label">
+      <input class="pe-label" value="${esc(b.label)}" placeholder="${b.tier === 1 ? 'Label' : 'tag-name'}" aria-label="Label"${b.act ? ' readonly title="Players Opens The Roster - Its Name Is Fixed. Drag It To Move It, And Change Its Key Or Colour Here."' : ''}>
       <input class="pe-key" value="${esc(b.key || '')}" maxlength="1" placeholder="-" aria-label="Hotkey">
       ${b.tier === 1 ? `
         <input class="pe-num" type="number" value="${b.lead ?? 8}" min="0" max="120" aria-label="Seconds Before The Playhead">
         <input class="pe-num" type="number" value="${b.lag ?? 4}" min="0" max="120" aria-label="Seconds After The Playhead">` : ''}
-      ${acts('This Button')}
+      ${b.act ? `
+      <span class="pe-acts">
+        <button class="mini" data-dup disabled title="Players Cannot Be Duplicated">Copy</button>
+        <button class="mini mini-danger" data-del disabled title="Players Cannot Be Removed - Clear Its Key To Drop The Shortcut" aria-label="Players Cannot Be Removed">&times;</button>
+      </span>` : acts('This Button')}
     </div>`);
   const head = (tier) => `
     <div class="pe-head pe-head--${tier === 1 ? 'clip' : 'tag'}">
@@ -1417,7 +1419,7 @@ function openPanelEditor() {
     <div class="sheet sheet-pe" role="dialog" aria-modal="true" aria-labelledby="peTitle">
       <div class="pe-top">
         <h3 id="peTitle">Tag Buttons</h3>
-        <p>Clip Buttons mark a clip at the playhead - Lead is seconds before it, Lag is seconds after. Tag Buttons toggle a #tag on the selected clip. A key is one letter. Drag a row by its handle to reorder it, and use a divider to group buttons in the side panel.</p>
+        <p>Clip Buttons mark a clip at the playhead - Lead is seconds before it, Lag is seconds after. Tag Buttons toggle a #tag on the selected clip. A key is one letter. Drag a row by its handle to reorder it, and use a divider to group buttons in the side panel. Players opens the roster instead of tagging, so its name is fixed, but it drags, re-keys and re-colours like any other button.</p>
       </div>
       <div class="pe-body">
         <section class="pe-section">
@@ -1513,6 +1515,44 @@ function openPanelEditor() {
   };
   wrap.querySelectorAll('.pe-row').forEach(wireRow);
   wrap.addEventListener('scroll', closePop, true);
+
+  // ---- key collisions, shown live ----------------------------------
+  //
+  // Two buttons on one key means the second never fires, because the
+  // lookup takes the first match. A key that is also a transport
+  // shortcut now WINS over the transport (see onKey), so taking one is
+  // allowed - but it has to be visible, or the player quietly loses a
+  // control and nobody knows why.
+  const RESERVED = {
+    j: 'Slower', k: 'Play / Pause', l: 'Faster',
+    i: 'Set Clip In', o: 'Set Clip Out', f: 'Freeze Frame',
+    ',': 'Back One Frame', '.': 'Forward One Frame',
+  };
+  const markKeys = () => {
+    const fields = [...wrap.querySelectorAll('.pe-key')];
+    const count = {};
+    for (const f of fields) {
+      const v = f.value.trim().toLowerCase();
+      if (v) count[v] = (count[v] || 0) + 1;
+    }
+    for (const f of fields) {
+      const v = f.value.trim().toLowerCase();
+      const dup = v && count[v] > 1;
+      const takes = v && RESERVED[v];
+      f.classList.toggle('pe-key--dup', !!dup);
+      f.classList.toggle('pe-key--takes', !!takes && !dup);
+      f.title = dup
+        ? `${v.toUpperCase()} is on more than one button - only the first will fire. Give one of them a different key.`
+        : takes
+          ? `${v.toUpperCase()} normally does ${takes}. This button takes it over.`
+          : 'One letter. Leave blank for no shortcut.';
+    }
+  };
+  wrap.addEventListener('input', (e) => { if (e.target.classList.contains('pe-key')) markKeys(); });
+  // Adding, copying or deleting a row changes the picture too, and those run
+  // through the click handler below, so re-check after it has done its work.
+  wrap.addEventListener('click', () => setTimeout(markKeys, 0));
+  markKeys();
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !pop.hidden) closePop(); });
 
   const add = (listId, b) => {
@@ -1562,6 +1602,10 @@ function openPanelEditor() {
         label: r.querySelector('.pe-label').value.trim() || 'Untitled',
         key: r.querySelector('.pe-key').value.trim().toLowerCase(),
         color: r.querySelector('.pe-color').value,
+        // `act` is carried back out of the row. Without this the save would
+        // read Players as an ordinary tag button and it would start
+        // toggling a #Players tag instead of opening the roster.
+        ...(r.dataset.act ? { act: r.dataset.act } : {}),
         ...(tier === 1 ? { lead: Number(nums[0].value) || 0, lag: Number(nums[1].value) || 0 } : {}),
       };
     });
@@ -1587,11 +1631,28 @@ function onKey(e) {
   // text undo, which is what anyone typing expects.
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undoLast(); return; }
   if (e.metaKey || e.ctrlKey) return;
-  // P opens the roster. It sits above the panel's own key lookup so a tag
-  // button can never quietly claim the key.
-  if (e.key.toLowerCase() === 'p') { e.preventDefault(); openPlayers(); return; }
   const k = e.key.toLowerCase();
   const stop = () => e.preventDefault();
+
+  // PANEL BUTTONS ARE CHECKED FIRST (2026-08-27). They used to be looked up
+  // at the very bottom, after every transport key had already returned, so a
+  // button assigned j, k, l, i, o, f, comma or period did nothing at all and
+  // silently played the transport action instead - the reason "not all my
+  // shortcuts work". The i and o cases were the worst of it: both were
+  // guarded by `selClip()`, so a button keyed i worked while nothing was
+  // selected and stopped the moment a clip was, which reads as random.
+  //
+  // A key typed into the editor is an explicit instruction and outranks a
+  // built-in default. The editor flags the collision as you type, so taking
+  // a transport key over is a choice, never a surprise.
+  const btn = cur.settings.panel.buttons.find((b) => b.key && b.key === k);
+  if (btn) {
+    stop();
+    if (btn.act === 'players') openPlayers();
+    else if (btn.tier === 1) pressClipButton(btn);
+    else pressTagButton(btn);
+    return;
+  }
 
   if (e.key === ' ') { stop(); togglePlay(); return; }
   if (e.key === 'ArrowLeft') { stop(); seek(video().currentTime - (e.shiftKey ? 15 : 5)); return; }
@@ -1617,11 +1678,6 @@ function onKey(e) {
     if (cur.clipMode) { cur.clipMode = null; paintBar(); return; }
     if (cur.sel) setSel(null);
     return;
-  }
-  const btn = cur.settings.panel.buttons.find((b) => b.key && b.key === k);
-  if (btn) {
-    stop();
-    if (btn.tier === 1) pressClipButton(btn); else pressTagButton(btn);
   }
 }
 

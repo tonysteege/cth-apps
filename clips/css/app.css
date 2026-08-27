@@ -407,7 +407,10 @@
 .vp-flex { flex: 1; }
 
 /* ---- players ------------------------------------------------------- */
-.tag-btn-players { margin-top: 2px; }
+/* Players carries no margin of its own. It used to be pinned under the
+   ratings and wore a 2px top nudge to sit apart from them; now that it drags
+   anywhere in the column, that nudge would put one uneven gap wherever it
+   landed. Use a divider to separate it, the same as any other button. */
 .pl-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   gap: 6px; margin: 14px 0 4px;
@@ -828,6 +831,13 @@
 .pe-label:focus, .pe-key:focus, .pe-num:focus { outline: none; box-shadow: var(--field-ring-focus); }
 .pe-key, .pe-num { text-align: center; padding: 0 4px; font-variant-numeric: tabular-nums; }
 .pe-key { text-transform: lowercase; font-weight: 600; }
+/* Key collisions, marked as you type. A DUPLICATE is broken - only the first
+   button on that letter ever fires - so it wears the danger ring. TAKES OVER
+   is legal: the button wins the letter from a transport shortcut, which is
+   allowed but must be visible. Both use the inset-ring field recipe rather
+   than a border, so the field keeps its filled shape. */
+.pe-key--dup   { box-shadow: inset 0 0 0 2px var(--danger); background: var(--danger-soft); }
+.pe-key--takes { box-shadow: inset 0 0 0 2px var(--soft); }
 
 .pe-acts { display: inline-flex; align-items: center; justify-content: flex-end; gap: 2px; }
 .pe-acts .mini { height: 26px; }
