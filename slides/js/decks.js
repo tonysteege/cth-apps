@@ -89,14 +89,39 @@ export { SLIDE_W, SLIDE_H };
 // The type ramp, in slide units. These are the sizes the Notion-rendered
 // decks already use, so an authored slide and a rendered one sit in the
 // same deck without looking like two products.
+// MEASURED OFF TONY'S OWN FIGMA TEMPLATE (2026-08-27), frame by frame out
+// of a screen recording of it. The method: a slide's width on screen IS
+// 1920 units, so one image pixel converts, and a glyph's cap height over
+// Inter's 0.727 cap ratio gives the font size. Every number below came out
+// that way and was then rounded - which is why they are not the round
+// numbers a guess produces. The earlier ramp WAS a guess and every step of
+// it ran small, the subtitle worst: 44 against a measured 66.
 export const TEXT_ROLES = {
-  title:     { label: 'Title',     size: 96, weight: 800, color: '#0a0a0a', line: 1.06 },
-  subtitle:  { label: 'Subtitle',  size: 44, weight: 600, color: '#737373', line: 1.2 },
-  header:    { label: 'Header',    size: 62, weight: 700, color: '#0a0a0a', line: 1.1 },
-  subheader: { label: 'Subheader', size: 26, weight: 600, color: '#a3a3a3', line: 1.2 },
-  body:      { label: 'Body',      size: 30, weight: 400, color: '#404040', line: 1.45 },
-  bullets:   { label: 'Bullets',   size: 30, weight: 400, color: '#404040', line: 1.5 },
-  caption:   { label: 'Caption',   size: 20, weight: 500, color: '#737373', line: 1.35 },
+  title:     { label: 'Title',     size: 110, weight: 800, color: '#0a0a0a', line: 1.04 },
+  subtitle:  { label: 'Subtitle',  size: 66,  weight: 600, color: '#737373', line: 1.16 },
+  header:    { label: 'Header',    size: 70,  weight: 800, color: '#0a0a0a', line: 1.08 },
+  subheader: { label: 'Subheader', size: 36,  weight: 600, color: '#a3a3a3', line: 1.2 },
+  body:      { label: 'Body',      size: 36,  weight: 400, color: '#404040', line: 1.45 },
+  bullets:   { label: 'Bullets',   size: 36,  weight: 400, color: '#404040', line: 1.55 },
+  caption:   { label: 'Caption',   size: 24,  weight: 500, color: '#737373', line: 1.35 },
+};
+
+// The template's margins, measured the same way: about 76 across and 57
+// down in 1600x900, rounded to numbers that stay easy to type into.
+export const MARGIN = { x: 80, y: 64 };
+
+// The marks come from cth/logos - the canonical files, copied in rather
+// than redrawn. The horizontal lockup is 1000x286 (3.5:1); the icon square.
+export const LOGOS = {
+  'horizontal-white': { src: 'logos/cth-horizontal-white.svg', ratio: 3.497 },
+  'horizontal-black': { src: 'logos/cth-horizontal-black.svg', ratio: 3.497 },
+  'icon-white': { src: 'logos/cth-icon-white.svg', ratio: 1 },
+  'icon-black': { src: 'logos/cth-icon-black.svg', ratio: 1 },
+};
+
+export const newLogo = (variant, over = {}) => {
+  const w = over.w || (variant.startsWith('icon') ? 54 : 300);
+  return { id: uid(), type: 'logo', variant, x: MARGIN.x, y: MARGIN.y, w, h: Math.round(w / LOGOS[variant].ratio), ...over };
 };
 
 export const newText = (role = 'body', over = {}) => ({
@@ -106,31 +131,43 @@ export const newText = (role = 'body', over = {}) => ({
   ...over,
 });
 
+// The layouts are the template's own, at the measured coordinates: the
+// cover's logo top left with its title on the lower third, the content
+// slide's subheader / header / body stacked from the top margin, and the
+// small mark bottom right that every content slide carries.
+const M = MARGIN;
 export const newSlide = (layout = 'blank') => {
   const s = { id: uid(), bg: '#ffffff', notes: '', els: [] };
   if (layout === 'title') {
-    // A dark slide has to carry its own text colour. The ROLE's default is
-    // ink, which is correct on the white layouts and invisible here - the
-    // first thing a new deck showed was a black title on a black cover.
+    // A dark slide carries its own text colour. The role defaults are ink,
+    // which is right on the white layouts and invisible here - the first
+    // thing a new deck showed was a black title on a black cover.
     s.bg = '#0a0a0a';
     s.els = [
-      newText('title', { x: 120, y: 470, w: 1100, h: 130, text: 'Title', color: '#ffffff' }),
-      newText('subtitle', { x: 120, y: 610, w: 1100, h: 70, text: 'Subtitle', color: '#a3a3a3' }),
+      newLogo('horizontal-white'),
+      newText('title', { x: M.x, y: 385, w: 1200, h: 132, text: 'Title', color: '#ffffff' }),
+      newText('subtitle', { x: M.x, y: 517, w: 1200, h: 84, text: 'Subtitle', color: '#a3a3a3' }),
+      newText('caption', { x: 1000, y: 792, w: 520, h: 40, text: '\u00a9 Coach Tony Hockey', color: '#a3a3a3', align: 'right' }),
     ];
   } else if (layout === 'section') {
     s.bg = '#0a0a0a';
-    s.els = [newText('title', { x: 120, y: 400, w: 1360, h: 130, text: 'Section', color: '#ffffff' })];
+    s.els = [
+      newLogo('horizontal-white'),
+      newText('title', { x: M.x, y: 400, w: 1440, h: 140, text: 'Section', color: '#ffffff' }),
+    ];
   } else if (layout === 'header') {
     s.els = [
-      newText('subheader', { x: 120, y: 110, w: 900, h: 40, text: 'Subheader' }),
-      newText('header', { x: 120, y: 160, w: 1100, h: 90, text: 'Header' }),
-      newText('bullets', { x: 120, y: 300, w: 900, h: 400, text: 'First point\nSecond point' }),
+      newText('subheader', { x: M.x, y: M.y, w: 1000, h: 48, text: 'Subheader' }),
+      newText('header', { x: M.x, y: 118, w: 1200, h: 100, text: 'Header' }),
+      newText('bullets', { x: M.x, y: 262, w: 1000, h: 460, text: 'First point\nSecond point' }),
+      newLogo('icon-black', { x: 1466, y: 782, w: 54 }),
     ];
   } else if (layout === 'split') {
     s.els = [
-      newText('subheader', { x: 110, y: 110, w: 600, h: 40, text: 'Subheader' }),
-      newText('header', { x: 110, y: 160, w: 640, h: 90, text: 'Header' }),
-      newText('bullets', { x: 110, y: 300, w: 600, h: 420, text: 'First point\nSecond point' }),
+      newText('subheader', { x: M.x, y: M.y, w: 660, h: 48, text: 'Subheader' }),
+      newText('header', { x: M.x, y: 118, w: 700, h: 100, text: 'Header' }),
+      newText('bullets', { x: M.x, y: 262, w: 660, h: 460, text: 'First point\nSecond point' }),
+      newLogo('icon-black', { x: 1466, y: 782, w: 54 }),
     ];
   }
   return s;

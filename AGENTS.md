@@ -472,6 +472,25 @@ after a live inspection of it. The two live side by side.
 - A dark layout carries its own text colour. The role defaults are ink,
   which is right on the white layouts and invisible on a black cover -
   the first thing a new deck showed was a black title on a black slide.
+- **THE TYPE RAMP AND MARGINS ARE MEASURED, NOT CHOSEN** (2026-08-27,
+  second pass, from a screen recording of Tony's own Figma template). The
+  method is worth repeating for any future retheme: a slide's width on
+  screen IS 1920 units, so one image pixel converts, and a glyph's cap
+  height over Inter's 0.727 cap ratio gives the font size. The guessed
+  ramp that preceded it ran small at every step - the subtitle worst, 44
+  against a measured 66. Do not "tidy" these to round numbers.
+- **THE BOARD IS A WHITEBOARD**: an unbounded canvas that pans on a
+  two-finger swipe and zooms ABOUT THE POINTER on a pinch, with the slides
+  in a row. THE CANVAS MOVES, THE SLIDES DO NOT - each frame sits at a
+  fixed `left` and only the canvas is transformed, which keeps panning free
+  and the geometry in the same units the editor uses. Number chips and the
+  selection ring are scaled back out by `--inv` (1/zoom) or they vanish at
+  20%. It was a CSS grid first, which is a contact sheet, not a canvas.
+- **THE LOGOS COME FROM `cth/logos`**, copied into `slides/logos/` - the
+  canonical files, never redrawn. The horizontal lockup is 1000x286
+  (3.5:1), the icon square. Both the authored layouts and the Notion
+  renderer point at these; the two older one-off copies that used to sit
+  loose in `slides/` are gone.
 
 ## Design system rules (suite-wide)
 

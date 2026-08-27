@@ -201,7 +201,7 @@ function buildDeck(page, startAt) {
     if (s.kind === 'title') {
       el.innerHTML = `
         <div class="sl-cover"${s.cover ? ` style="background-image:linear-gradient(rgba(10,10,10,.80),rgba(10,10,10,.88)),url('${esc(s.cover)}')"` : ''}>
-          <img class="sl-cover-logo" src="cth-horizontal-white.svg" alt="Coach Tony Hockey">
+          <img class="sl-cover-logo" src="logos/cth-horizontal-white.svg" alt="Coach Tony Hockey">
           <div class="sl-cover-body">
             ${s.icon ? `<div class="sl-icon">${esc(s.icon)}</div>` : ''}
             <h1 class="sl-cover-title">${esc(s.title)}</h1>
@@ -212,7 +212,7 @@ function buildDeck(page, startAt) {
     } else if (s.kind === 'section') {
       el.innerHTML = `
         <div class="sl-cover sl-cover--section">
-          <img class="sl-cover-logo" src="cth-horizontal-white.svg" alt="">
+          <img class="sl-cover-logo" src="logos/cth-horizontal-white.svg" alt="">
           <div class="sl-cover-body">
             <h1 class="sl-cover-title">${richHtml(s.header.rich)}</h1>
           </div>
@@ -230,7 +230,7 @@ function buildDeck(page, startAt) {
           </header>`;
       const foot = `
           <span class="sl-num">${i + 1}</span>
-          <img class="sl-mark" src="cth-logo-black.svg" alt="">`;
+          <img class="sl-mark" src="logos/cth-icon-black.svg" alt="">`;
       if (media.length === 1 && rest.length) {
         const slots2 = [];
         el.innerHTML = `${head}

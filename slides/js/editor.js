@@ -21,7 +21,7 @@
 //     presentation. Nothing is ever read back out of the DOM.
 
 import {
-  SLIDE_W, SLIDE_H, TEXT_ROLES, uid, newSlide, newText,
+  SLIDE_W, SLIDE_H, TEXT_ROLES, LOGOS, uid, newSlide, newText,
   getDeck, putDeck, normalizeDeck, slideLabel, putAsset, getAsset, deleteAsset,
 } from './decks.js';
 import { mountVideo, pauseAllVideos } from './media.js';
@@ -107,6 +107,10 @@ export function elHtml(e) {
   if (e.type === 'video') {
     return `<div class="de-el de-video" data-el="${e.id}" data-url="${esc(e.url || '')}" data-in="${e.in || 0}" data-out="${e.out || 0}" style="${box}"><div class="de-vslot"></div></div>`;
   }
+  if (e.type === 'logo') {
+    const l = LOGOS[e.variant] || LOGOS['icon-black'];
+    return `<div class="de-el de-logo" data-el="${e.id}" style="${box}"><img src="${l.src}" alt="Coach Tony Hockey"></div>`;
+  }
   if (e.type === 'shape') {
     const fill = e.fill || 'none';
     const stroke = e.stroke || '#0a0a0a';
@@ -143,7 +147,7 @@ export function mountSlideVideos(root) {
 export async function openEditor(id) {
   const raw = await getDeck(id);
   if (!raw) { toast('That Deck Is Gone', true); location.hash = ''; return; }
-  ed = { deck: normalizeDeck(raw), i: 0, sel: new Set(), view: 'slide', zoom: 1, tool: 'select' };
+  ed = { deck: normalizeDeck(raw), i: 0, sel: new Set(), view: 'slide', zoom: 1, pan: null, tool: 'select' };
   document.title = `${ed.deck.name} - CTH Slides`;
   document.body.classList.remove('dark');
   paintShell();
@@ -209,34 +213,183 @@ function paintBody() {
 
 // ------------------------------------------------------------- board view
 
+// THE BOARD IS A WHITEBOARD (2026-08-27, second pass): an unbounded canvas
+// that pans and zooms under the trackpad, with the slides laid out in a row
+// exactly as Figma lays them out. Two-finger swipe pans, pinch zooms about
+// the pointer, and the zoom reading sits with the view controls. Before
+// this it was a CSS grid, which is a contact sheet, not a canvas.
+const GAP = 140;                       // between slides, in slide units
+const MIN_Z = 0.05;
+const MAX_Z = 2.5;
+
+function boardExtent() {
+  return { w: ed.deck.slides.length * (SLIDE_W + GAP) - GAP, h: SLIDE_H };
+}
+
 function paintBoard() {
   const body = $('#edBody');
   body.innerHTML = `
     <div class="de-board" id="edBoard">
-      <div class="de-boardgrid" id="edBoardGrid">
-        ${ed.deck.slides.map((s, i) => `
-          <figure class="de-card" data-slide="${s.id}" data-i="${i}">
-            <span class="de-cardn">${i + 1}</span>
-            <div class="de-cardbox">${slideHtml(s)}</div>
-            <figcaption>${esc(slideLabel(s, i))}</figcaption>
-          </figure>`).join('')}
-        <button class="de-add" id="edBoardAdd" title="New Slide">+ New Slide</button>
+      <div class="de-canvas" id="edCanvas"></div>
+      <div class="de-zoom">
+        <button class="mini" data-z="out">&minus;</button>
+        <button class="mini" id="edZoomVal" title="Fit The Whole Deck (Shift+1)">100%</button>
+        <button class="mini" data-z="in">+</button>
       </div>
     </div>`;
-  const grid = $('#edBoardGrid');
+  const canvas = $('#edCanvas');
+  canvas.innerHTML = ed.deck.slides.map((sl, i) => `
+    <div class="de-frame" data-slide="${sl.id}" data-i="${i}">
+      <span class="de-framen">${i + 1}</span>
+      <div class="de-framebox">${slideHtml(sl)}</div>
+    </div>`).join('') + '<button class="de-frameadd" id="edBoardAdd" title="New Slide">+</button>';
+
+  if (!ed.pan) fitBoard(false);
+  applyBoardTransform();
+  mountSlideVideos(canvas);
+
   $('#edBoardAdd').onclick = () => addSlide();
-  for (const card of $$('.de-card', grid)) {
-    card.ondblclick = () => { ed.i = Number(card.dataset.i); setView('slide'); };
-    card.onclick = () => { $$('.de-card').forEach((c) => c.classList.toggle('on', c === card)); ed.i = Number(card.dataset.i); };
-    card.oncontextmenu = (e) => { e.preventDefault(); slideMenu(e.clientX, e.clientY, Number(card.dataset.i)); };
+  for (const f of $$('.de-frame', canvas)) {
+    f.addEventListener('pointerdown', (e) => onFrameDown(e, f));
+    f.addEventListener('dblclick', () => { ed.i = Number(f.dataset.i); setView('slide'); });
+    f.oncontextmenu = (e) => { e.preventDefault(); slideMenu(e.clientX, e.clientY, Number(f.dataset.i)); };
   }
-  // Reorder by dragging a card. The board IS the deck's order.
-  sortable(grid, '.de-card', (order) => {
-    ed.deck.slides = order.map((c) => ed.deck.slides.find((s) => s.id === c.dataset.slide));
-    markDirty();
-    paintBoard();
+  const board = $('#edBoard');
+  board.addEventListener('wheel', onBoardWheel, { passive: false });
+  board.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.de-frame') || e.target.closest('.de-zoom')) return;
+    ed.sel.clear();
+    paintBoardSel();
+    startPan(e);
   });
-  mountSlideVideos(grid);
+  $$('[data-z]', board).forEach((b) => {
+    b.onclick = () => zoomAbout(b.dataset.z === 'in' ? 1.25 : 0.8, null);
+  });
+  $('#edZoomVal').onclick = () => fitBoard(true);
+  paintBoardSel();
+}
+
+// Every slide lives at a fixed spot on the canvas; the CANVAS moves, not
+// the slides. That is what makes panning free and keeps the geometry the
+// same numbers the editor uses.
+function applyBoardTransform() {
+  const canvas = $('#edCanvas');
+  if (!canvas) return;
+  canvas.style.transform = `translate(${ed.pan.x}px, ${ed.pan.y}px) scale(${ed.zoom})`;
+  for (const f of $$('.de-frame', canvas)) {
+    const i = Number(f.dataset.i);
+    f.style.left = `${i * (SLIDE_W + GAP)}px`;
+  }
+  const add = $('#edBoardAdd');
+  if (add) add.style.left = `${ed.deck.slides.length * (SLIDE_W + GAP)}px`;
+  const val = $('#edZoomVal');
+  if (val) val.textContent = `${Math.round(ed.zoom * 100)}%`;
+  // The number chips and the selection ring must not shrink with the
+  // canvas, or they vanish at 20% - so they are scaled back out.
+  canvas.style.setProperty('--inv', String(1 / ed.zoom));
+}
+
+function fitBoard(animate) {
+  const board = $('#edBoard');
+  if (!board) return;
+  const r = board.getBoundingClientRect();
+  const ext = boardExtent();
+  const pad = 90;
+  ed.zoom = Math.max(MIN_Z, Math.min(MAX_Z, Math.min((r.width - pad * 2) / ext.w, (r.height - pad * 2) / ext.h)));
+  ed.pan = { x: (r.width - ext.w * ed.zoom) / 2, y: (r.height - ext.h * ed.zoom) / 2 };
+  if (animate) {
+    const canvas = $('#edCanvas');
+    canvas.style.transition = 'transform 220ms cubic-bezier(.2,.7,.3,1)';
+    setTimeout(() => { canvas.style.transition = ''; }, 260);
+  }
+  applyBoardTransform();
+}
+
+function onBoardWheel(e) {
+  e.preventDefault();
+  // A pinch arrives as ctrl+wheel; a two-finger swipe as plain deltas.
+  if (e.ctrlKey || e.metaKey) zoomAbout(Math.exp(-e.deltaY * 0.01), e);
+  else {
+    ed.pan.x -= e.deltaX;
+    ed.pan.y -= e.deltaY;
+    applyBoardTransform();
+  }
+}
+
+// Zoom about a point, so whatever is under the pointer stays under it.
+function zoomAbout(factor, e) {
+  const board = $('#edBoard');
+  const r = board.getBoundingClientRect();
+  const px = e ? e.clientX - r.left : r.width / 2;
+  const py = e ? e.clientY - r.top : r.height / 2;
+  const next = Math.max(MIN_Z, Math.min(MAX_Z, ed.zoom * factor));
+  const k = next / ed.zoom;
+  ed.pan.x = px - (px - ed.pan.x) * k;
+  ed.pan.y = py - (py - ed.pan.y) * k;
+  ed.zoom = next;
+  applyBoardTransform();
+}
+
+function startPan(e) {
+  const from = { x: e.clientX, y: e.clientY };
+  const at = { ...ed.pan };
+  const board = $('#edBoard');
+  board.classList.add('panning');
+  const move = (ev) => {
+    ed.pan = { x: at.x + (ev.clientX - from.x), y: at.y + (ev.clientY - from.y) };
+    applyBoardTransform();
+  };
+  const up = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    board.classList.remove('panning');
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+}
+
+// A slide drags to reorder along the row; a click just selects it.
+function onFrameDown(e, frame) {
+  if (e.button !== 0) return;
+  const i = Number(frame.dataset.i);
+  ed.i = i;
+  ed.sel.clear();
+  ed.sel.add(ed.deck.slides[i].id);
+  paintBoardSel();
+  const from = { x: e.clientX, y: e.clientY };
+  let moved = false;
+  const move = (ev) => {
+    if (!moved && Math.abs(ev.clientX - from.x) < 8) return;
+    moved = true;
+    frame.classList.add('dragging');
+    const dx = (ev.clientX - from.x) / ed.zoom;
+    frame.style.transform = `translateX(${dx}px)`;
+    const slot = Math.max(0, Math.min(ed.deck.slides.length - 1, Math.round(i + dx / (SLIDE_W + GAP))));
+    frame.dataset.slot = String(slot);
+  };
+  const up = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    frame.classList.remove('dragging');
+    frame.style.transform = '';
+    if (!moved) return;
+    const slot = Number(frame.dataset.slot);
+    if (slot !== i) {
+      const [s0] = ed.deck.slides.splice(i, 1);
+      ed.deck.slides.splice(slot, 0, s0);
+      ed.i = slot;
+      markDirty();
+    }
+    paintBoard();
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+}
+
+function paintBoardSel() {
+  for (const f of $$('.de-frame')) {
+    f.classList.toggle('on', ed.sel.has(f.dataset.slide));
+  }
 }
 
 // ------------------------------------------------------------- slide view
@@ -917,6 +1070,10 @@ function onKey(e) {
   if (e.metaKey || e.ctrlKey) return;
 
   if (k === 'g') { e.preventDefault(); setView(ed.view === 'board' ? 'slide' : 'board'); return; }
+  if (ed.view === 'board') {
+    if (e.key === '1' || e.key === '!') { e.preventDefault(); fitBoard(true); return; }
+    if (e.key === 'Enter' && ed.sel.size) { e.preventDefault(); setView('slide'); return; }
+  }
   if (ed.view !== 'slide') return;
 
   if (e.key === 'Escape') { e.preventDefault(); if (ed.tool !== 'select') { ed.tool = 'select'; paintTools(); } else { ed.sel.clear(); paintHandles(); paintProps(); } return; }
