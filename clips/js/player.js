@@ -12,6 +12,7 @@
 import { getSettings, putSettings, putGame, uid } from './store.js';
 import { openScrubSource, releaseScrubSource, scrubProviderFor } from './scrubsource.js';
 import { toast, esc } from './ui.js';
+import { wireStageZoom, resetStageZoom } from './zoom.js';
 import { ctxMenu } from '/diagrams/js/ui.js';
 import { drawEl } from '/diagrams/js/flat.js';
 
@@ -1726,6 +1727,9 @@ export async function openPlayer(game, videoUrl, h = {}) {
   game.clips = game.clips || [];
   game.freezes = game.freezes || [];
   const v = video();
+  // A new video means the last one's magnification is meaningless - opening
+  // a file already zoomed into somebody else's corner is not a feature.
+  resetStageZoom();
   v.src = videoUrl;
   v.addEventListener('loadedmetadata', () => {
     cur.duration = v.duration;
@@ -1751,12 +1755,17 @@ export async function closePlayer() {
   await saveNow();
   const v = el('vpVideo');
   if (v) { v.pause(); v.removeAttribute('src'); v.load(); }
+  resetStageZoom();
   cur = null;
 }
 
 function wireOnce() {
   const stage = el('vpStage');
   stage.addEventListener('wheel', onStageWheel, { passive: false });
+  // Pinch to zoom, drag to move around inside it (js/zoom.js). Its own wheel
+  // listener takes only ctrl+wheel, which onStageWheel above already refuses,
+  // so the scrub gesture and the zoom gesture never see each other's events.
+  wireStageZoom();
   el('vpVideo').addEventListener('click', togglePlay);
   // rAF stops in background tabs; the media clock does not. timeupdate keeps
   // freezes and clip bounds firing even when the tab is not compositing.

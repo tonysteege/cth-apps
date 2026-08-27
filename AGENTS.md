@@ -379,6 +379,28 @@ it and every item is shipped. The rules worth keeping:
 - The joint angle is drawn in `annotate.js`, NOT in `flat.js`: flat.js is
   an interchange contract with Film Room and must not grow a Clips-only
   element type. `drawAny()` routes it and delegates everything else.
+- **THE PICTURE ZOOMS ON A PINCH** (`clips/js/zoom.js`, 2026-08-27, Tony's
+  call), ported from Film Room's `renderer/js/stage.js` so one gesture
+  vocabulary covers both apps: pinch magnifies about the pointer (the same
+  `exp(-deltaY * 0.028)` gain, clamped 0.8-1.25 per event, 1x to 5x), a drag
+  moves around inside it, the chip in the corner says the factor and clicks
+  back to 1x. Three things hold it together. ONE TRANSFORM, published as
+  `--vz` on the stage, drives every picture layer - the video, the scrub
+  overlay, the annotation frame and canvas - which is what keeps a drawn
+  arrow on the play it marks; a new layer that shows the picture must join
+  that rule in app.css and chrome sitting ON the picture must not. THE PAN
+  IS CLAMPED TO THE PICTURE, not the stage box, because the stage is
+  whatever the window leaves over and the film is letterboxed inside it -
+  clamping by the stage let the picture's own edge wander into the middle of
+  the frame. And `--vz` is `none` at 1x, never `scale(1)`, so an unzoomed
+  picture is never handed to the compositor to resample - the same "look
+  like the file" rule the scrub overlay had to learn. A two-finger swipe
+  stays the SCRUB at every zoom level; a drag that actually moved swallows
+  the click it would otherwise send to play/pause; inside the freeze editor
+  a plain drag belongs to the armed tool, so only Option-drag pans there.
+  Zoom is a VIEWING aid like Film Room's flip: nothing is stored on the game
+  record, opening another video resets it, and exports and recordings
+  composite from the video's own pixels and never see it.
 - **TIMELINE**: a marker per TAGGED CLIP, coloured by its rating, that
   jumps there when clicked. Freeze marks are gone - freezes are exports
   now and those marks pointed at nothing. Pinch/wheel zooms about the
