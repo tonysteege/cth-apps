@@ -410,17 +410,26 @@ function wireDeck() {
   });
 
   // The chrome hides itself while presenting; a nudge brings it back.
+  //
+  // THIS LISTENER HAS TO BE TAKEN BACK OFF. It lived on the window with no
+  // removal, so after leaving a deck every mouse move still ran it and threw
+  // on the chrome that was no longer there - dozens of errors a second,
+  // silent because nothing visible depended on it (found 2026-08-27). The
+  // handle is parked on `deck` so teardownDeck can undo it.
   let chromeTimer = null;
   const wake = () => {
-    $('#prChrome').classList.remove('hidden');
-    $('#prRail').classList.remove('hidden');
+    const chrome = $('#prChrome');
+    if (!chrome) return;
+    chrome.classList.remove('hidden');
+    $('#prRail')?.classList.remove('hidden');
     clearTimeout(chromeTimer);
     chromeTimer = setTimeout(() => {
       if (deck?.rec?.recording) return; // keep controls up while recording is being set up
-      $('#prChrome').classList.add('hidden');
+      $('#prChrome')?.classList.add('hidden');
     }, 2600);
   };
   window.addEventListener('pointermove', wake);
+  if (deck) deck.wake = { fn: wake, stop: () => { clearTimeout(chromeTimer); window.removeEventListener('pointermove', wake); } };
   wake();
 }
 
@@ -556,6 +565,7 @@ async function offerRecording(blob, name) {
 function teardownDeck(keepClass = false) {
   if (!deck) return;
   if (deck.rec?.recording) stopRecord();
+  deck.wake?.stop();
   disposeVideos();
   disposeTelestrate();
   deck = null;

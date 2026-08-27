@@ -575,6 +575,21 @@ after a live inspection of it. The two live side by side.
   subject before generating - and if its pick matches one of Tony's own
   styles by name, it INHERITS that style's examples, otherwise choosing
   Best would quietly discard the references he attached.
+- **VISUAL AID BOT'S STYLES ARE TONY'S OWN CATALOGUE** (2026-08-27): the
+  52 formats from his "Visual Aid Types" page in Notion, read through the
+  Worker and kept in `bots/js/visualtypes.js`, plus the three generic
+  looks. A TYPE IS A STRUCTURE (Funnel, Iceberg, Fishbone), not a look -
+  the prompt each one generates describes LAYOUT and leaves the rendering
+  to the bot's instruction, which is what stops 52 options becoming 52
+  different-looking images. A card shows at most `CHIP_MAX` chips and puts
+  the rest behind a grouped, searchable picker; a row of 52 chips is a
+  wall, not a control. The page also names Information is Beautiful as its
+  quality bar - a text-to-image model cannot browse it, so that travels as
+  `QUALITY_CLAUSE`, a described standard rather than a pretended lookup.
+- **THE WORKER READS NOTION TABLES** (added 2026-08-27). `table` was not in
+  the recursion whitelist and `table_row` had no case, so every table came
+  back empty: Slides rendered nothing for them and a knowledge file made
+  of tables looked blank. `cells` is now `rich[][]` per row.
 - **A STYLE NAME IS ONE WORD** (2026-08-27, Tony's call) unless a second
   is load-bearing: Diagram, Sketchnote, Photo, Bold, Minimal - but Split
   Screen keeps two, because "Split" alone says nothing. The chips sit

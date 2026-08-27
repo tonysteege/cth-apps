@@ -67,6 +67,14 @@ async function layout() {
 
 const GEAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.35.44.6.81.71H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
 
+// A card shows the handful of styles worth one click; the rest live behind
+// a grouped picker. Tony's catalogue is 52 formats deep (2026-08-27) and a
+// row of 52 chips is a wall, not a control.
+const CHIP_MAX = 6;
+const chipStyles = (styles) => (styles.length <= CHIP_MAX
+  ? styles
+  : styles.filter((s) => (s.cat || 'Look') === 'Look').slice(0, CHIP_MAX));
+
 function cardHtml(bot, cfg, sz, hidden) {
   const styles = cfg.styles || [];
   return `
@@ -92,7 +100,8 @@ function cardHtml(bot, cfg, sz, hidden) {
             <span>Style</span>
             <div class="run-styles" data-styles>
               <button class="style-chip on" data-style="best" title="Let the bot pick the strongest style for this subject">${ICONS.sparkle}Best</button>
-              ${styles.map((st) => `<button class="style-chip" data-style="${esc(st.id)}">${esc(st.name)}</button>`).join('')}
+              ${chipStyles(styles).map((st) => `<button class="style-chip" data-style="${esc(st.id)}" title="${esc(st.prompt || '').slice(0, 120)}">${esc(st.name)}</button>`).join('')}
+              ${styles.length > CHIP_MAX ? '<button class="style-chip style-more" data-more title="Every visual aid type, by category">All Types…</button>' : ''}
             </div>
           </div>` : ''}
         <div class="bc-go">
@@ -166,11 +175,22 @@ async function wireCard(card, l) {
   let style = 'best';
   let ctrl = null;
 
-  card.querySelectorAll('[data-style]').forEach((b) => {
-    b.onclick = () => {
-      style = b.dataset.style;
-      card.querySelectorAll('[data-style]').forEach((o) => o.classList.toggle('on', o === b));
-    };
+  const armStyle = (id, label) => {
+    style = id;
+    card.querySelectorAll('[data-style]').forEach((o) => o.classList.toggle('on', o.dataset.style === id));
+    const more = card.querySelector('[data-more]');
+    if (more) {
+      // The More chip carries the chosen type's NAME once one is picked, so
+      // the card always says what it is about to draw.
+      const picked = !card.querySelector(`[data-style="${id}"]`);
+      more.classList.toggle('on', picked);
+      more.textContent = picked ? label : 'All Types…';
+    }
+  };
+  card.querySelectorAll('[data-style]').forEach((b) => { b.onclick = () => armStyle(b.dataset.style, b.textContent); });
+  card.querySelector('[data-more]')?.addEventListener('click', async () => {
+    const picked = await pickStyle(await cfgOf(bot));
+    if (picked) armStyle(picked.id, picked.name);
   });
   q('[data-cfg]').onclick = () => showSettings(bot);
   q('[data-hide]').onclick = async () => {
@@ -286,6 +306,60 @@ function wireResize(board, l) {
       h.addEventListener('pointermove', move);
       h.addEventListener('pointerup', up);
     });
+  });
+}
+
+// ---- the visual aid type picker --------------------------------------
+//
+// Grouped by the same nine categories Tony's own page uses, with a search
+// box - "which of the 52" is a question best answered by typing three
+// letters of the answer.
+
+function pickStyle(cfg) {
+  return new Promise((res) => {
+    const styles = cfg.styles || [];
+    const cats = [...new Set(styles.map((s) => s.cat || 'Look'))];
+    const veil = document.createElement('div');
+    veil.className = 'sheet-veil';
+    veil.innerHTML = `
+      <div class="sheet sheet-pe cs-sheet ty-sheet" role="dialog" aria-modal="true">
+        <div class="pe-top">
+          <h3>Visual Aid Type</h3>
+          <p>What SHAPE should the information take? The bot's instruction still decides how it is drawn.</p>
+          <input class="ty-search" id="tySearch" placeholder="Search types…" autocomplete="off">
+        </div>
+        <div class="pe-body" id="tyBody"></div>
+        <div class="sheet-row pe-foot"><span class="bot-flex"></span><button class="btn" data-x="cancel">Cancel</button></div>
+      </div>`;
+    document.body.appendChild(veil);
+    const body = veil.querySelector('#tyBody');
+    const paint = (q = '') => {
+      const needle = q.trim().toLowerCase();
+      const hit = (s) => !needle || `${s.name} ${s.cat || ''} ${s.prompt || ''}`.toLowerCase().includes(needle);
+      body.innerHTML = cats.map((c) => {
+        const list = styles.filter((s) => (s.cat || 'Look') === c && hit(s));
+        if (!list.length) return '';
+        return `<section class="pe-section">
+          <div class="pe-title">${esc(c)}</div>
+          <div class="ty-grid">${list.map((s) => `<button class="ty-pick" data-id="${esc(s.id)}"><b>${esc(s.name)}</b><span>${esc(s.best || s.prompt || '')}</span></button>`).join('')}</div>
+        </section>`;
+      }).join('') || '<p class="bs-empty">Nothing matches that.</p>';
+      body.querySelectorAll('[data-id]').forEach((b) => {
+        b.onclick = () => { const s = styles.find((z) => z.id === b.dataset.id); veil.remove(); res(s || null); };
+      });
+    };
+    paint();
+    const search = veil.querySelector('#tySearch');
+    search.oninput = () => paint(search.value);
+    search.onkeydown = (e) => {
+      e.stopPropagation();
+      if (e.key === 'Escape') { veil.remove(); res(null); }
+      if (e.key === 'Enter') body.querySelector('[data-id]')?.click();
+    };
+    setTimeout(() => search.focus(), 0);
+    const close = () => { veil.remove(); res(null); };
+    veil.addEventListener('mousedown', (e) => { if (e.target === veil) close(); });
+    veil.querySelector('[data-x="cancel"]').onclick = close;
   });
 }
 

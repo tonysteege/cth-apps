@@ -74,6 +74,13 @@ function simplify(b) {
   if (t === 'code') o.language = d.language || '';
   if (t === 'callout') o.icon = d.icon?.emoji || '';
   if (t === 'child_page') o.title = d.title || '';
+  // TABLES WERE DROPPED SILENTLY (found 2026-08-27 reading a page whose
+  // whole content was tables): `table` was not in the recursion whitelist
+  // and `table_row` had no case, so every table came back as an empty
+  // block. Slides rendered nothing for them and the Bots knowledge reader
+  // saw nothing either.
+  if (t === 'table') { o.cols = d.table_width || 0; o.hasHeader = !!d.has_column_header; }
+  if (t === 'table_row') o.cells = (d.cells || []).map((cell) => rich(cell));
   if (b.has_children) o.hasChildren = true;
   return o;
 }
@@ -109,7 +116,7 @@ async function childBlocks(id, env, state, depth) {
         continue;
       }
       if (s.hasChildren && depth < MAX_DEPTH
-        && ['toggle', 'bulleted_list_item', 'numbered_list_item', 'to_do', 'callout', 'quote', 'heading_1', 'heading_2', 'heading_3'].includes(s.type)) {
+        && ['toggle', 'bulleted_list_item', 'numbered_list_item', 'to_do', 'callout', 'quote', 'heading_1', 'heading_2', 'heading_3', 'table'].includes(s.type)) {
         s.children = await childBlocks(raw.id, env, state, depth + 1);
       }
       delete s.hasChildren;

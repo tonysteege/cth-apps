@@ -44,6 +44,8 @@
 // here is text-to-image, so a reference travels as words, not pixels.
 export const EXAMPLE_MAX = 3;
 
+import { VISUAL_TYPE_STYLES, QUALITY_CLAUSE } from './visualtypes.js';
+
 export const ICONS = {
   bot: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2m16 0h2m-7-1v2m-6-2v2"/></svg>',
   botMessage: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9"><path d="M12 6V2H8m7 9v2M2 12h2m16 0h2m-2 4a2 2 0 0 1-2 2H8.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 4 20.286V8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2zM9 11v2"/></svg>',
@@ -53,14 +55,20 @@ export const ICONS = {
   sparkle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9"><path d="M12 3.5 13.8 9l5.5 1.8-5.5 1.8L12 18l-1.8-5.4L4.7 10.8 10.2 9z"/><path d="M18.5 3v3M20 4.5h-3"/></svg>',
 };
 
-// The style list every image bot starts with. Tony edits, adds and removes
-// these in settings - including "Add From Image", which sends a screenshot
-// to the text model and saves the style description it reads back.
+// VISUAL AID BOT'S STYLES ARE TONY'S OWN CATALOGUE (2026-08-27): the 52
+// formats from his "Visual Aid Types" page in Notion, read through the CTH
+// Worker and kept in visualtypes.js. A type is a STRUCTURE - Funnel,
+// Iceberg, Fishbone - and the bot's instruction still governs the look, so
+// fifty-two options do not become fifty-two different-looking images.
+//
+// The four generic looks that were here before are kept at the front: they
+// are about RENDERING rather than structure, and a plain "clean diagram"
+// is still the right answer often enough to stay one click away.
 const VISUAL_STYLES = [
-  { id: 'diagram', name: 'Diagram', prompt: 'a clean instructional diagram, flat vector, generous white space, one clear focal idea, thin confident lines, muted palette with a single accent, no clutter' },
-  { id: 'sketch', name: 'Sketchnote', prompt: 'a hand-drawn sketchnote on white, marker linework, hand-lettered labels, simple arrows and containers, warm and human, not polished vector' },
-  { id: 'compare', name: 'Comparison', prompt: 'a side-by-side comparison graphic, two clearly separated halves, a heading over each, matched visual weight, obvious contrast between the two' },
-  { id: 'photo', name: 'Photo', prompt: 'a photorealistic image, natural light, shallow depth of field, authentic and un-staged' },
+  { id: 'diagram', name: 'Diagram', cat: 'Look', best: 'A clean flat-vector look, whatever the structure', prompt: 'a clean instructional diagram, flat vector, generous white space, one clear focal idea, thin confident lines, muted palette with a single accent, no clutter' },
+  { id: 'sketch', name: 'Sketchnote', cat: 'Look', best: 'Hand-drawn and human rather than polished', prompt: 'a hand-drawn sketchnote on white, marker linework, hand-lettered labels, simple arrows and containers, warm and human, not polished vector' },
+  { id: 'photo', name: 'Photo', cat: 'Look', best: 'A photograph rather than a drawing', prompt: 'a photorealistic image, natural light, shallow depth of field, authentic and un-staged' },
+  ...VISUAL_TYPE_STYLES,
 ];
 
 const THUMB_STYLES = [
@@ -118,7 +126,7 @@ export const BOTS = [
       { key: 'folder', label: 'Save Into', type: 'folder', def: '/visuals' },
       { key: 'styles', label: 'Styles', type: 'styles', def: VISUAL_STYLES },
     ],
-    system: 'You write image-generation prompts for a hockey coach\'s teaching visuals. The result must teach at a glance on a phone or a projector: one idea, clear hierarchy, readable labels, nothing decorative that does not carry meaning.',
+    system: `You write image-generation prompts for a hockey coach's teaching visuals. The result must teach at a glance on a phone or a projector: one idea, clear hierarchy, readable labels, nothing decorative that does not carry meaning. ${QUALITY_CLAUSE}`,
     prompt: (v, c, style) => [
       `Subject: ${v.brief}`,
       // `sourceText` is filled in by the runner when a page link is given:
