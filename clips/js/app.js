@@ -32,8 +32,9 @@ import {
   paintBar,
   playerDuration,
   playerSel,
+  addFreezeHere,
 } from './player.js';
-import { openAnnotate, annotationElements } from './annotate.js';
+import { openAnnotate, annotationElements, paintIdleBar, onAnnotateIdle, applyToolStyle } from './annotate.js';
 import { recordRange, deliver, fileStem, CROP_PRESETS, openMic } from './export.js';
 import { openCompare, closeCompare, comparing } from './compare.js';
 import { drawEl } from '/diagrams/js/flat.js';
@@ -454,11 +455,15 @@ async function showPlayer(id) {
             <div id="anRoot" class="an-root" hidden>
               <canvas id="anFrame" class="an-frame"></canvas>
               <canvas id="anCanvas" class="an-canvas"></canvas>
-              <div class="tb an-tb" id="anBar"></div>
             </div>
           </div>
+          <!-- THE TOOLBAR LIVES HERE NOW (2026-08-27, Tony's call), in the
+               strip the timeline used to own, and it is always on screen. It
+               used to sit inside #anRoot, which meant it only existed once a
+               freeze was already open - so the tools were invisible exactly
+               when you were deciding whether to draw. -->
           <div class="vp-tlwrap">
-            <canvas id="vpTimeline" class="vp-timeline"></canvas>
+            <div class="tb an-tb" id="anBar"></div>
           </div>
           <div class="vp-transport">
             <span class="vp-tc" id="vpClock">0:00:00</span>
@@ -470,6 +475,11 @@ async function showPlayer(id) {
               <button class="tbtn" id="vpFwd5" title="Forward 5s"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 17l5-5-5-5"/><path d="M6 17l5-5-5-5"/></svg></button>
               <button class="tbtn tbtn-word" id="vpSpeed" title="Playback Speed">1x</button>
             </span>
+            <!-- The timeline moved INTO the transport bar, which is where a
+                 scrubber belongs anyway: the clock, the transport and the
+                 position you are scrubbing to are now one control instead of
+                 two stacked strips. -->
+            <canvas id="vpTimeline" class="vp-timeline"></canvas>
             <span class="vp-tc vp-tc--r" id="vpTotal">0:00:00</span>
           </div>
         </div>
@@ -494,6 +504,13 @@ async function showPlayer(id) {
   $('#vpCompare').onclick = () => void openCompare({ name: game.name, url: src, startAt: video().currentTime });
   wirePanels();
 
+  // The toolbar is on screen from the moment the player is, so it needs a
+  // resting state and a way back to it. Picking a tool from the idle row
+  // freezes the current frame and arms that tool in one gesture.
+  const showIdleBar = () => paintIdleBar((tool) => addFreezeHere(tool));
+  onAnnotateIdle(showIdleBar);
+  showIdleBar();
+
   await openPlayer(game, src, {
     onSettings: (focus) => openClipSettings(focus),
     // Every video now arrives as a real File, so the decoder always takes
@@ -501,9 +518,12 @@ async function showPlayer(id) {
     scrubFile: localFiles.get(id) || null,
     onShare: (clip, anchor) => openShareMenu(game, clip, anchor),
     onBulkPull: (clips) => void runBulkPull(game, clips),
-    onAnnotate: async (freeze) => {
+    onAnnotate: async (freeze, armTool = null) => {
       const st = playerSettings() || await getSettings();
       openAnnotate(freeze, grabFrame(), {
+        style: st.toolStyle,
+        positions: st.positions,
+        armTool,
         keys: st.toolKeys,
         // A rebound key is written straight back to settings, so it holds
         // across sessions the way every other preference here does.
@@ -1123,6 +1143,20 @@ const NAME_TOKENS = [
   ['{date}', "today's date"],
 ];
 
+const DEFAULT_POSITIONS = ['D1', 'D2', 'C', 'W1', 'W2', 'F1', 'F2', 'F3'];
+
+// Every tool that carries a look, in toolbar order.
+const TOOL_STYLE_ROWS = [
+  ['pen', 'Pen'],
+  ['arrow', 'Arrow'],
+  ['line', 'Line'],
+  ['freearrow', 'Freeform Arrow'],
+  ['box', 'Box'],
+  ['circle', 'Circle'],
+  ['spotlight', 'Spotlight'],
+  ['pos', 'Position Chip'],
+];
+
 export async function openClipSettings(focus = null) {
   const s = playerSettings() || await getSettings();
   document.querySelector('.sheet-veil')?.remove();
@@ -1157,6 +1191,22 @@ export async function openClipSettings(focus = null) {
           ${num('holdSec', 'Freeze Hold', s.holdSec, 1, 15, 'how long the frame holds')}
           ${num('pullBuf.before', 'Pull In', s.pullBuf.before, 0, 60, 'seconds before the playhead')}
           ${num('pullBuf.after', 'Pull Out', s.pullBuf.after, 1, 120, 'seconds after')}
+        </section>
+        <section class="pe-section">
+          <div class="pe-title">Telestration Tools</div>
+          <div class="cs-toolhead"><span></span><span>Colour</span><span>Thickness</span><span>Dashed</span></div>
+          ${TOOL_STYLE_ROWS.map(([k, label]) => {
+            const t = (s.toolStyle || {})[k] || {};
+            return `<label class="bs-row cs-toolrow"><span>${label}</span>
+              <input type="color" data-k="toolStyle.${k}.color" value="${esc(t.color || '#ff3b30')}" aria-label="${label} Colour">
+              <input type="number" data-k="toolStyle.${k}.width" value="${t.width ?? 8}" min="1" max="40" aria-label="${label} Thickness">
+              <input type="checkbox" data-k="toolStyle.${k}.dash"${t.dash ? ' checked' : ''} aria-label="${label} Dashed">
+            </label>`;
+          }).join('')}
+          <label class="bs-row"><span>Position Chips</span>
+            <input type="text" data-k="positionsCsv" value="${esc((s.positions || []).join(', '))}" spellcheck="false">
+          </label>
+          <p class="bs-note">Thickness is measured on a 1280-wide frame and scales with the video, so a 8 looks the same on any clip. A style applies to NEW drawings; anything already drawn keeps the look it was drawn with.</p>
         </section>
         <section class="pe-section">
           <div class="pe-title">Recording</div>
@@ -1229,12 +1279,21 @@ export async function openClipSettings(focus = null) {
     });
     // A player with no first name is nothing to tag with.
     next.players = roster.filter((p) => (p.first || '').trim());
+    // The position chips arrive as one comma-separated field; store the list
+    // and drop the scratch key so it never lands in the record.
+    if (next.positionsCsv != null) {
+      const list = String(next.positionsCsv).split(',').map((x) => x.trim()).filter(Boolean).slice(0, 12);
+      next.positions = list.length ? list : DEFAULT_POSITIONS;
+      delete next.positionsCsv;
+    }
     await putSettings(next);
     const live = playerSettings();
     if (live) Object.assign(live, next);
     close();
     toast('Settings Saved');
     paintBar();
+    // A freeze open behind the sheet takes the new styles immediately.
+    applyToolStyle(next.toolStyle, next.positions);
   };
 }
 

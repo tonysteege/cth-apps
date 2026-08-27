@@ -170,7 +170,38 @@
 .an-root { position: absolute; inset: 0; background: #0b0b0b; }
 .an-frame { pointer-events: none; }
 .an-canvas { touch-action: none; cursor: crosshair; }
-.an-tb { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); }
+/* No longer floating over the frame: it sits in its own strip, so it is
+   statically placed and simply wraps when the window is narrow. */
+.an-tb { position: static; transform: none; flex-wrap: wrap; justify-content: center; }
+.an-idle { font-size: 12px; color: var(--mist); padding: 0 6px; align-self: center; }
+/* Position chips: D1, C, W2. Small, monospaced-by-number, and they carry the
+   same on-state gradient as every other selected control in the suite. */
+.an-pos { display: inline-flex; align-items: center; gap: 3px; }
+.an-posbtn {
+  height: 26px; min-width: 30px; padding: 0 7px;
+  border: 1px solid var(--edge); border-radius: 6px;
+  background: var(--cloud); color: var(--n-700);
+  font: inherit; font-size: 11.5px; font-weight: 700;
+  cursor: pointer; letter-spacing: -0.01em;
+  transition: background var(--dur) ease, border-color var(--dur) ease, color var(--dur) ease;
+}
+.an-posbtn:hover { background: var(--n-100); border-color: var(--n-300); color: var(--ink); }
+.an-posbtn.on {
+  background-image: var(--grad-primary); border-color: transparent;
+  color: #fff; box-shadow: var(--shadow-nav);
+}
+/* The per-tool style table in Settings: label, colour, thickness, dash. */
+.cs-toolhead, .cs-toolrow {
+  display: grid; grid-template-columns: minmax(0, 1fr) 44px 66px 26px;
+  align-items: center; gap: 8px;
+}
+.cs-toolhead {
+  font-size: 11px; font-weight: 500; color: var(--soft);
+  padding: 0 0 2px; margin-top: 2px;
+}
+.cs-toolhead span:not(:first-child) { text-align: center; }
+.cs-toolrow input[type="color"] { height: 26px; padding: 0; }
+.cs-toolrow input[type="number"] { height: 30px; }
 .an-hold { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--graphite); padding: 0 4px; }
 .an-hold input { width: 44px; height: 28px; border: 1px solid var(--edge); border-radius: 6px; text-align: center; font: inherit; }
 /* THE FIELD AND THE COMMITTED CHIP ARE ONE DRAWING (2026-08-27, Tony's
@@ -684,8 +715,22 @@
 .vp-stage { flex: 1; min-height: 0; }
 
 /* The timeline: one thin lane, no chrome around it. */
-.vp-tlwrap { position: relative; background: var(--ink); }
-.vp-timeline { width: 100%; height: 26px; display: block; cursor: pointer; touch-action: none; }
+/* The strip below the stage. It used to hold the timeline on an ink ground;
+   it now holds the ALWAYS-VISIBLE annotation toolbar, so it takes the app's
+   own surface and lets the bar keep its floating-panel look. */
+.vp-tlwrap {
+  position: relative; background: var(--sunken);
+  border-top: 1px solid var(--edge-soft);
+  display: flex; justify-content: center;
+  padding: 6px 10px; min-height: 46px;
+  overflow-x: auto;
+}
+/* The timeline now lives INSIDE the transport row, so it takes the leftover
+   width instead of a strip of its own. */
+.vp-timeline {
+  flex: 1; min-width: 80px; height: 26px; display: block;
+  cursor: pointer; touch-action: none;
+}
 
 /* The transport: timecode, controls, timecode - one row, centred. */
 .vp-transport {

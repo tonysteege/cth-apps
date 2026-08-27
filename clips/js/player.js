@@ -549,7 +549,10 @@ function drawFreezeOverlay(f) {
   c.style.display = 'block';
 }
 
-function addFreezeHere() {
+// `tool` arms a tool as the freeze opens, which is what lets the always-on
+// toolbar work as one gesture: pick Arrow while the video is live and you get
+// a frozen frame with Arrow already in hand.
+export function addFreezeHere(tool = null) {
   const v = video();
   v.pause();
   cancelFreezeHold();
@@ -557,7 +560,7 @@ function addFreezeHere() {
   cur.game.freezes.push(f);
   scheduleSave();
   drawTimeline();
-  if (hooks.onAnnotate) hooks.onAnnotate(f);
+  if (hooks.onAnnotate) hooks.onAnnotate(f, tool);
 }
 
 export function updateFreeze(f) {

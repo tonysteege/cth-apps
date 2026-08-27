@@ -21,7 +21,7 @@
 //    happened except the loss of selection.
 
 import { drawEl, measureText, TEXT_CHIP } from '/diagrams/js/flat.js';
-import { toast } from './ui.js';
+import { toast, esc } from './ui.js';
 import { uid } from './store.js';
 
 let an = null;
@@ -49,15 +49,63 @@ const TOOLS = [
   ['circle', 'Circle', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="7.75"/></svg>'],
   ['angle', 'Joint Angle', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M5 19h15"/><path d="M5 19 16 6"/><path d="M11.5 19a7 7 0 0 0-1.3-4"/></svg>'],
   ['text', 'Text', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M4 7V5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5V7"/><path d="M12 4v16"/><path d="M9 20h6"/></svg>'],
+  // Added 2026-08-27 on Tony's spec. Icons are drawn on the same 24 grid at
+  // the same 1.9 stroke as the set above, so the row reads as one family.
+  ['line', 'Line', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M4.5 19.5 19.5 4.5"/></svg>'],
+  ['freearrow', 'Freeform Arrow', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c3.5 0 5-9 9-9 2.6 0 3.6 4 6.4 4.6"/><path d="m15.9 9.9 3.6 2.7-2.4 3.2"/></svg>'],
+  ['spotlight', 'Spotlight A Player', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="12" cy="12" r="4.25"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2"/></svg>'],
 ];
 
-const DEFAULT_KEYS = { select: 'v', pen: 'd', arrow: 'a', box: 'b', circle: 'c', angle: 'g', text: 't' };
+const DEFAULT_KEYS = { select: 'v', pen: 'd', arrow: 'a', box: 'b', circle: 'c', angle: 'g', text: 't', line: 'n', freearrow: 'w', spotlight: 'r' };
 const ACT_KEYS = { clear: 'x', export: 'e' };
+
+// Every tool's default look, overridden by settings.toolStyle. Widths are in
+// 1280-wide video units and are scaled by vs() at the moment of drawing.
+const DEFAULT_STYLE = {
+  pen: { color: '#ff3b30', width: 8, dash: false },
+  arrow: { color: '#ff3b30', width: 8, dash: false },
+  line: { color: '#ff3b30', width: 8, dash: false },
+  freearrow: { color: '#ff3b30', width: 8, dash: false },
+  box: { color: '#ffd60a', width: 9, dash: false },
+  circle: { color: '#ffd60a', width: 9, dash: false },
+  spotlight: { color: '#ffd60a', width: 6, dash: false },
+  pos: { color: '#0a84ff', width: 8, dash: false },
+};
 
 const vs = () => (an ? an.vw / 1280 : 1); // element sizes scale with the video
 const keyFor = (t) => (an?.keys?.[t] || DEFAULT_KEYS[t] || '');
 
+// THE STYLE IS RESOLVED ONTO THE ELEMENT AS IT IS CREATED, never read back
+// at render time. A freeze saved today keeps the look it was drawn with even
+// if the tool's defaults change tomorrow, which is the same additive promise
+// every other stored record here makes.
+function styleFor(t) {
+  const d = DEFAULT_STYLE[t] || DEFAULT_STYLE.pen;
+  const st = { ...d, ...((an?.style || {})[t] || {}) };
+  // The colour swatch on the bar is a live override for the active tool, so
+  // picking red then drawing does what it looks like it will do.
+  const color = (an && an.tool === t && an.colorSet) ? an.color : st.color;
+  return { color, width: (st.width ?? d.width) * vs(), dash: !!st.dash };
+}
+
 export function annotating() { return !!an; }
+
+// THE IDLE BAR. The toolbar is on screen whether or not a freeze is open, so
+// something has to occupy it while nothing is being annotated. It shows the
+// same tools in the same order - a row that changed shape when you froze a
+// frame would be a different toolbar, not the same one waiting - and picking
+// any of them freezes the current frame and arms that tool in one gesture.
+export function paintIdleBar(onPick) {
+  const bar = el('anBar');
+  if (!bar || an) return;
+  bar.innerHTML = `
+    ${TOOLS.map(([t, label, icon]) => `<button class="tb-btn" data-idle="${t}" title="${label} - Freezes This Frame And Starts Drawing" aria-label="${label}">${icon}</button>`).join('')}
+    <span class="tb-sep"></span>
+    <span class="an-idle">Pick a tool to freeze this frame and draw on it</span>`;
+  bar.querySelectorAll('[data-idle]').forEach((b) => {
+    b.onclick = () => onPick?.(b.dataset.idle);
+  });
+}
 
 // Diagnostic tap, the Film Room idiom: only meaningful to someone who went
 // looking for it, and free at runtime.
@@ -225,9 +273,21 @@ function bounds(x) {
     const pad = (x.width || 8) * 3;
     return { x: Math.min(...xs) - pad, y: Math.min(...ys) - pad, w: Math.max(...xs) - Math.min(...xs) + pad * 2, h: Math.max(...ys) - Math.min(...ys) + pad * 2 };
   }
-  if (x.type === 'pen') {
+  if (x.type === 'pen' || x.type === 'freearrow') {
     const xs = x.pts.map((p) => p[0]); const ys = x.pts.map((p) => p[1]);
-    return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+    // A freehand arrow's head sticks out past the last point, so its box has
+    // to allow for it or the head sits outside its own selection.
+    const pad = x.type === 'freearrow' ? (x.width || 8) * 6.45 : 0;
+    return { x: Math.min(...xs) - pad, y: Math.min(...ys) - pad, w: Math.max(...xs) - Math.min(...xs) + pad * 2, h: Math.max(...ys) - Math.min(...ys) + pad * 2 };
+  }
+  // A ring's box is its own square, so dragging a corner grows the radius.
+  if (x.type === 'spotlight') {
+    const r = Math.max(2, x.r || 0) + (x.width || 6) * 1.5;
+    return { x: x.x - r, y: x.y - r, w: r * 2, h: r * 2 };
+  }
+  if (x.type === 'player') {
+    const r = (x.r || 26) + 2;
+    return { x: x.x - r, y: x.y - r, w: r * 2, h: r * 2 };
   }
   if (x.type === 'text') {
     const T = TEXT_CHIP;
@@ -310,16 +370,50 @@ function onDown(e) {
     return;
   }
 
-  if (an.tool === 'pen') {
-    const x = { id: uid(), type: 'pen', pts: [[p.x, p.y]], color: an.color, width: 8 * s };
+  // A position chip is placed, not dragged: one click drops D1 or C where
+  // the player is. It is a `player` element, the type Diagrams already draws
+  // as a labelled disc, so it needs no new renderer and it lands in a saved
+  // freeze looking exactly like a rink diagram's player.
+  if (an.tool === 'pos') {
+    const st = styleFor('pos');
+    const x = {
+      id: uid(), type: 'player', x: p.x, y: p.y,
+      r: 26 * s, color: st.color, label: an.posLabel || 'D1',
+    };
+    an.els.push(x);
+    an.sel = new Set([x.id]);
+    markDirty(); redraw();
+    return;
+  }
+  if (an.tool === 'pen' || an.tool === 'freearrow') {
+    const st = styleFor(an.tool);
+    const x = {
+      id: uid(), type: an.tool === 'pen' ? 'pen' : 'freearrow',
+      pts: [[p.x, p.y]], color: st.color, width: st.width, ...(st.dash ? { dash: true } : {}),
+    };
     an.els.push(x);
     an.drag = { id: x.id, kind: 'pen' };
     return;
   }
-  if (an.tool === 'arrow') {
-    const x = { id: uid(), type: 'arrow', x1: p.x, y1: p.y, x2: p.x, y2: p.y, mx: p.x, my: p.y, color: an.color, width: 8 * s, head: 'triangle' };
+  // Line is an arrow with no head. Same record, same curve, same drag, same
+  // hit test - only the head style differs, and both renderers already treat
+  // an unknown head as "draw nothing", so this needed no drawing code.
+  if (an.tool === 'arrow' || an.tool === 'line') {
+    const st = styleFor(an.tool);
+    const x = {
+      id: uid(), type: 'arrow', x1: p.x, y1: p.y, x2: p.x, y2: p.y, mx: p.x, my: p.y,
+      color: st.color, width: st.width, head: an.tool === 'line' ? 'none' : 'triangle',
+      ...(st.dash ? { dash: true } : {}),
+    };
     an.els.push(x);
     an.drag = { id: x.id, kind: 'arrow' };
+    return;
+  }
+  if (an.tool === 'spotlight') {
+    const st = styleFor('spotlight');
+    const x = { id: uid(), type: 'spotlight', x: p.x, y: p.y, r: 0, color: st.color, width: st.width, ...(st.dash ? { dash: true } : {}) };
+    an.els.push(x);
+    an.drag = { id: x.id, kind: 'spot', start: p };
     return;
   }
   if (an.tool === 'box' || an.tool === 'circle') {
@@ -327,9 +421,11 @@ function onDown(e) {
     // plain ice and hides the play over a busy frame; an outline is the
     // opposite, so both have to be one click away (2026-08-27, Tony).
     const solid = an.shapeStyle === 'outline';
+    const st = styleFor(an.tool);
     const x = {
-      id: uid(), type: an.tool, x: p.x, y: p.y, w: 0, h: 0, color: an.color,
-      alpha: solid ? 1 : 0.3, ...(solid ? { outline: true, width: 9 * s } : {}),
+      id: uid(), type: an.tool, x: p.x, y: p.y, w: 0, h: 0, color: st.color,
+      alpha: solid ? 1 : 0.3, ...(solid ? { outline: true, width: st.width } : {}),
+      ...(st.dash ? { dash: true } : {}),
     };
     an.els.push(x);
     an.drag = { id: x.id, kind: 'shape', start: p };
@@ -373,7 +469,7 @@ function onMove(e) {
     for (const o of d.origs) {
       const x = an.els.find((z) => z.id === o.id);
       if (!x) continue;
-      if (x.type === 'pen') x.pts = o.pts.map(([px, py]) => [px + dx, py + dy]);
+      if (x.type === 'pen' || x.type === 'freearrow') x.pts = o.pts.map(([px, py]) => [px + dx, py + dy]);
       else if (x.type === 'arrow') { x.x1 = o.x1 + dx; x.y1 = o.y1 + dy; x.x2 = o.x2 + dx; x.y2 = o.y2 + dy; x.mx = o.mx + dx; x.my = o.my + dy; }
       else if (x.type === 'angle') { x.ax = o.ax + dx; x.ay = o.ay + dy; x.vx = o.vx + dx; x.vy = o.vy + dy; x.bx = o.bx + dx; x.by = o.by + dy; }
       else { x.x = o.x + dx; x.y = o.y + dy; }
@@ -426,6 +522,9 @@ function onMove(e) {
     x.x = p.x < d.start.x ? d.start.x - w : d.start.x;
     x.y = p.y < d.start.y ? d.start.y - h : d.start.y;
     x.w = w; x.h = h;
+  } else if (d.kind === 'spot') {
+    // Press on the player, drag out to the ring you want.
+    x.r = Math.hypot(p.x - d.start.x, p.y - d.start.y);
   } else if (d.kind === 'angle') {
     // The drag sets the vertex; the far limb mirrors it until it is moved.
     x.vx = p.x; x.vy = p.y;
@@ -443,11 +542,14 @@ function onUp() {
   const x = an.els.find((z) => z.id === d.id);
   if (x && d.kind === 'shape' && (x.w < 12 || x.h < 12)) an.els = an.els.filter((z) => z.id !== d.id);
   if (x && d.kind === 'angle' && Math.hypot(x.vx - x.ax, x.vy - x.ay) < 20) an.els = an.els.filter((z) => z.id !== d.id);
+  // A ring too small to see is a stray click, not a spotlight. A bare click
+  // still gets one, at a sensible default size, so tapping a player works.
+  if (x && d.kind === 'spot' && x.r < 10) x.r = 44 * vs();
   if (d.kind !== 'band') markDirty();
   // THE TOOL STAYS ARMED (2026-08-27, Tony's call). Every draw used to snap
   // back to Select, so three arrows on one play meant re-arming twice.
   // Escape disarms; another tool replaces it; nothing else does.
-  if (['pen', 'arrow', 'shape', 'angle'].includes(d.kind) && an.els.some((z) => z.id === d.id)) {
+  if (['pen', 'arrow', 'shape', 'angle', 'spot'].includes(d.kind) && an.els.some((z) => z.id === d.id)) {
     an.sel.clear();
     an.sel.add(d.id);
   }
@@ -545,6 +647,11 @@ const markDirty = () => { dirty = true; };
 
 function setTool(t) {
   an.tool = t;
+  // Switching tools drops the swatch override and shows the new tool's own
+  // colour, so the bar always tells the truth about what will be drawn.
+  an.colorSet = false;
+  const st = { ...DEFAULT_STYLE[t], ...((an.style || {})[t] || {}) };
+  if (st.color) an.color = st.color;
   if (t !== 'select') an.sel.clear();
   paintBar();
   redraw();
@@ -576,6 +683,12 @@ function paintBar() {
       <button class="an-segbtn${an.shapeStyle === 'outline' ? ' on' : ''}" data-shape="outline" title="Boxes And Circles As A Solid Outline">Outline</button>
     </span>
     <span class="tb-sep"></span>
+    <!-- Position chips. One click arms the tool AND picks the label, so
+         dropping a D1 on the frame is a single decision, not two. -->
+    <span class="an-pos" role="group" aria-label="Position Indicators">
+      ${(an.positions || []).map((lab) => `<button class="an-posbtn${an.tool === 'pos' && an.posLabel === lab ? ' on' : ''}" data-pos="${esc(lab)}" title="Drop A ${esc(lab)} Marker">${esc(lab)}</button>`).join('')}
+    </span>
+    <span class="tb-sep"></span>
     <label class="an-hold" title="How Long The Exported Clip Holds On This Frame">Hold <input id="anHold" type="number" min="0" max="30" value="${an.freeze.hold ?? 3}">s</label>
     <span class="tb-sep"></span>
     <button class="tb-btn tb-word" data-act="clear" title="Remove Every Drawing (${(an.actKeys.clear || ACT_KEYS.clear).toUpperCase()})">Clear${key(an.actKeys.clear || ACT_KEYS.clear)}</button>
@@ -596,9 +709,15 @@ function paintBar() {
       paintBar();
     };
   });
+  bar.querySelectorAll('[data-pos]').forEach((b) => {
+    b.onclick = () => { an.posLabel = b.dataset.pos; setTool('pos'); };
+  });
   bar.querySelectorAll('[data-color]').forEach((b) => {
     b.onclick = () => {
       an.color = b.dataset.color;
+      // The swatch is a live override for the ACTIVE tool only, so picking
+      // red and drawing an arrow does not silently repaint the box tool too.
+      an.colorSet = true;
       // Recolour whatever is selected, so a colour can be changed after the
       // fact instead of only before.
       for (const id of an.sel) {
@@ -662,12 +781,34 @@ function teardown() {
   el('anRoot').hidden = true;
   an = null;
   dirty = false;
+  // The bar is always on screen, so closing a freeze hands it back to the
+  // idle row rather than leaving the last session's controls sitting there
+  // with nothing behind them.
+  idleHook?.();
+}
+
+// Set once by the app so teardown can restore the idle bar without annotate
+// needing to know how a freeze is started.
+let idleHook = null;
+export function onAnnotateIdle(fn) { idleHook = fn; }
+
+// Saving Settings while a freeze is open pushes the new styles straight into
+// it. Without this a colour change would look ignored until the next freeze,
+// which reads as a bug rather than as a scoping rule.
+export function applyToolStyle(style, positions) {
+  if (!an) return;
+  if (style) an.style = { ...DEFAULT_STYLE, ...style };
+  if (positions) an.positions = positions;
+  an.colorSet = false;
+  const st = { ...DEFAULT_STYLE[an.tool], ...((an.style || {})[an.tool] || {}) };
+  if (st.color) an.color = st.color;
+  paintBar();
 }
 
 // ------------------------------------------------------------- open
 
 let wired = false;
-export function openAnnotate(freeze, frameCanvas, { onDone, onExport, keys, actKeys, onKeys } = {}) {
+export function openAnnotate(freeze, frameCanvas, { onDone, onExport, keys, actKeys, onKeys, style, positions, armTool } = {}) {
   const root = el('anRoot');
   root.hidden = false;
   an = {
@@ -679,6 +820,10 @@ export function openAnnotate(freeze, frameCanvas, { onDone, onExport, keys, actK
     drag: null,
     band: null,
     shapeStyle: 'fill',
+    style: { ...DEFAULT_STYLE, ...(style || {}) },
+    positions: positions || ['D1', 'D2', 'C', 'W1', 'W2', 'F1', 'F2', 'F3'],
+    posLabel: 'D1',
+    colorSet: false,
     keys: { ...DEFAULT_KEYS, ...(keys || {}) },
     actKeys: { ...ACT_KEYS, ...(actKeys || {}) },
     onKeys,
@@ -706,7 +851,7 @@ export function openAnnotate(freeze, frameCanvas, { onDone, onExport, keys, actK
     window.addEventListener('pointerup', onUp);
     window.addEventListener('keydown', onKey, true);
   }
-  setTool(an.tool);
+  setTool(armTool || an.tool);
   redraw();
   void toast;
 }

@@ -349,6 +349,52 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   you type - `pe-key--dup` (danger ring: two buttons on one letter, only the
   first fires) and `pe-key--takes` (grey ring: this button takes a transport
   key over) - so a takeover is a choice, never a surprise.
+- **THE ANNOTATION TOOLBAR IS ALWAYS ON SCREEN** (2026-08-27, Tony's call).
+  It used to live inside `#anRoot`, so it existed only once a freeze was
+  already open - the tools were invisible exactly when you were deciding
+  whether to draw. It now sits in `.vp-tlwrap`, the strip the timeline used to
+  own, and THE TIMELINE MOVED INTO `.vp-transport`, where a scrubber belongs
+  beside the clock and the transport buttons. Rules:
+  - The bar has TWO STATES. `paintIdleBar()` draws the same tools in the same
+    order while nothing is being annotated; picking one calls
+    `addFreezeHere(tool)`, which freezes the current frame and arms that tool
+    in ONE gesture. `teardown()` calls the `onAnnotateIdle` hook to hand the
+    strip back. A row that changed shape on freeze would be a different
+    toolbar, not the same one waiting.
+  - `.an-tb` is `position: static` now and wraps; it is not a floating panel.
+- **PER-TOOL TELESTRATION STYLE** (`settings.toolStyle`, 2026-08-27): colour,
+  thickness and dash for pen, arrow, line, freearrow, box, circle, spotlight
+  and the position chip, edited in Settings under Telestration Tools.
+  - THE STYLE IS RESOLVED ONTO THE ELEMENT AS IT IS CREATED (`styleFor`),
+    never read back at render time. Change a default tomorrow and every freeze
+    already saved still looks exactly as it was drawn. This is the same
+    additive promise every stored record here makes.
+  - Widths are in 1280-WIDE VIDEO UNITS and multiplied by `vs()` when drawn,
+    so a width of 8 looks the same on a 4K clip and a phone clip.
+  - The colour swatch on the bar is a LIVE OVERRIDE FOR THE ACTIVE TOOL only
+    (`an.colorSet`), cleared by `setTool`. Picking red for an arrow must not
+    silently repaint the box tool.
+  - Saving Settings calls `applyToolStyle()` so a freeze open behind the sheet
+    takes the change immediately; otherwise it reads as ignored.
+- **THE NEW TOOLS, AND WHAT THEY REUSE** (2026-08-27, Tony's spec). Two of the
+  four needed no new drawing code at all, which is the point:
+  - LINE is `{type:'arrow', head:'none'}`. Both renderers already draw nothing
+    for an unrecognised head and already trim only for `triangle`, so it
+    inherits the curve, the dash, the drag and the hit test for free.
+  - POSITION CHIPS (D1 D2 C W1 W2 F1 F2 F3, editable in
+    `settings.positions`) are `{type:'player', label}` - the labelled disc
+    Diagrams already draws. Clicking a chip arms the tool AND picks the label,
+    so dropping one is a single decision.
+  - FREEARROW and SPOTLIGHT are genuinely new and therefore live in BOTH
+    `drawEl` (flat.js) and `svgEl` (editor.js) - hard rule 3. Same `w * 6.45`
+    head multiplier, same `0.28` halo alpha, same `w*2.4 / w*2` dash ratio in
+    each. Change one, change both.
+  - `freeEndAngle()` measures a freehand stroke's exit angle back over several
+    points, not the last pair: the final two samples of a pointer path are
+    often a pixel apart and give a jittery head.
+  - Spotlight is a RING, deliberately not a darkened surround. Dimming outside
+    is a full-frame effect and on a rink diagram it would black out the drill
+    rather than pick a player out of it.
 - **THE PLAYER RAIL** (`.vp-prail`, 2026-08-27, Tony's spec): a slim column
   beside the tag panel, one white button per player showing NUMBER AND FIRST
   NAME ONLY. It is a smaller `.btn` (28px, white, hairline, n-700 text), NOT a

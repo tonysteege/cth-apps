@@ -414,8 +414,84 @@ function drawElInner(ctx, x) {
     ctx.lineWidth = x.width || 8;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+    if (x.dash) ctx.setLineDash([(x.width || 8) * 2.4, (x.width || 8) * 2]);
     ctx.stroke();
+    ctx.setLineDash([]);
+    return;
   }
+  // A FREEHAND STROKE THAT ENDS IN AN ARROWHEAD (2026-08-27, Tony's spec).
+  // A drawn path says where the play went; the head says which way it was
+  // going, which a plain pen line cannot. Same record as a pen plus a head,
+  // so it moves, scales and hit-tests through the pen code paths.
+  // Keep this in step with svgEl in editor.js - hard rule 3.
+  if (x.type === 'freearrow') {
+    if (!x.pts || x.pts.length < 2) return;
+    const w = x.width || 8;
+    const col = colorOf(x.color);
+    ctx.beginPath();
+    ctx.moveTo(x.pts[0][0], x.pts[0][1]);
+    for (const [px, py] of x.pts.slice(1)) ctx.lineTo(px, py);
+    ctx.strokeStyle = col;
+    ctx.lineWidth = w;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    if (x.dash) ctx.setLineDash([w * 2.4, w * 2]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    const ang = freeEndAngle(x);
+    const head = w * 6.45;   // the same 1.5x multiplier every arrowhead uses
+    const [ex, ey] = x.pts[x.pts.length - 1];
+    ctx.beginPath();
+    ctx.moveTo(ex, ey);
+    ctx.lineTo(ex - Math.cos(ang - 0.44) * head, ey - Math.sin(ang - 0.44) * head);
+    ctx.lineTo(ex - Math.cos(ang + 0.44) * head, ey - Math.sin(ang + 0.44) * head);
+    ctx.closePath();
+    ctx.fillStyle = col;
+    ctx.fill();
+    ctx.lineWidth = w * 0.9;
+    ctx.strokeStyle = col;
+    ctx.stroke();
+    return;
+  }
+  // A RING AROUND ONE PLAYER. Deliberately a ring and not a darkened
+  // surround: dimming everything outside would be a full-frame effect, and
+  // on a rink diagram it would black out the drill rather than pick someone
+  // out of it. Two strokes - a soft wide halo under a crisp ring - so it
+  // reads over both white ice and dark boards.
+  if (x.type === 'spotlight') {
+    const r = Math.max(2, x.r || 40);
+    const w = x.width || 6;
+    const col = colorOf(x.color);
+    ctx.save();
+    ctx.globalAlpha = 0.28;
+    ctx.beginPath();
+    ctx.arc(x.x, x.y, r, 0, Math.PI * 2);
+    ctx.strokeStyle = col;
+    ctx.lineWidth = w * 3;
+    ctx.stroke();
+    ctx.restore();
+    ctx.beginPath();
+    ctx.arc(x.x, x.y, r, 0, Math.PI * 2);
+    ctx.strokeStyle = col;
+    ctx.lineWidth = w;
+    if (x.dash) ctx.setLineDash([w * 2.4, w * 2]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+// The direction a freehand stroke is travelling at its end. Measured back
+// over a few points, not just the last pair: the final two samples of a
+// pointer path are often a pixel apart and give a jittery angle.
+export function freeEndAngle(x) {
+  const p = x.pts || [];
+  const b = p[p.length - 1];
+  let a = p[0];
+  for (let i = p.length - 2; i >= 0; i--) {
+    a = p[i];
+    if (Math.hypot(b[0] - a[0], b[1] - a[1]) > (x.width || 8) * 1.5) break;
+  }
+  return Math.atan2(b[1] - a[1], b[0] - a[0]);
 }
 
 // Render a stored cthDiagram state to a flat canvas, no live editor needed.

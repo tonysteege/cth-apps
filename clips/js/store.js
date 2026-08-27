@@ -146,6 +146,25 @@ const DEFAULT_SETTINGS = () => ({
   playerTrigger: '0',
   playerWindow: 3000,
   railOpen: true,
+  // Per-tool telestration style (2026-08-27, Tony's spec). Every drawing
+  // tool carries its own colour, thickness and dash, so an arrow can be a
+  // fat red solid while a line is a thin white dash without touching a
+  // control between strokes. The style is RESOLVED ONTO THE ELEMENT when it
+  // is drawn, never read back at render time - change a default tomorrow and
+  // every freeze already saved still looks exactly as it did.
+  toolStyle: {
+    pen:       { color: '#ff3b30', width: 8,  dash: false },
+    arrow:     { color: '#ff3b30', width: 8,  dash: false },
+    line:      { color: '#ff3b30', width: 8,  dash: false },
+    freearrow: { color: '#ff3b30', width: 8,  dash: false },
+    box:       { color: '#ffd60a', width: 9,  dash: false },
+    circle:    { color: '#ffd60a', width: 9,  dash: false },
+    spotlight: { color: '#ffd60a', width: 6,  dash: false },
+    pos:       { color: '#0a84ff', width: 8,  dash: false },
+  },
+  // The position chips on the toolbar. Editable, so a coach who thinks in
+  // LD/RD/LW/RW is not stuck with Tony's labels.
+  positions: ['D1', 'D2', 'C', 'W1', 'W2', 'F1', 'F2', 'F3'],
 });
 
 // A panel saved before Players became a real button gets one inserted where
@@ -183,6 +202,11 @@ export async function getSettings() {
       pullBuf: { ...d.pullBuf, ...(s.pullBuf || {}) },
       cursorHi: { ...d.cursorHi, ...(s.cursorHi || {}) },
       toolKeys: { ...d.toolKeys, ...(s.toolKeys || {}) },
+      // Per tool, so a record saved before a tool existed grows that tool's
+      // defaults without losing the ones already customised.
+      toolStyle: Object.fromEntries(Object.entries(d.toolStyle)
+        .map(([k, v]) => [k, { ...v, ...((s.toolStyle || {})[k] || {}) }])),
+      positions: s.positions || d.positions,
     };
   }
   return DEFAULT_SETTINGS();

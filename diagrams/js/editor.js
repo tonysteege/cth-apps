@@ -38,7 +38,7 @@ import { toast, esc } from './ui.js';
 import {
   INK, PALETTE, SLOT_COUNT, colorOf, labelInkOn, measureText, arrowCtrl, arrowEndAngle,
   drawEl, TEXT_CHIP, shapeLabelSize, ROTATABLE,
-  rotCenterOf, sliceFrames, motionPolys,
+  rotCenterOf, sliceFrames, motionPolys, freeEndAngle,
 } from './flat.js';
 
 // Editor-only breathing room in SEQUENCES: extra visual space between and
@@ -535,7 +535,33 @@ function svgEl(x) {
     </g>`);
   }
   if (x.type === 'pen') {
-    return `<polyline data-id="${x.id}" points="${x.pts.map((p) => `${p[0]},${p[1]}`).join(' ')}" fill="none" stroke="${colorOf(x.color)}" stroke-width="${x.width || 8}" stroke-linecap="round" stroke-linejoin="round"></polyline>`;
+    const w = x.width || 8;
+    return `<polyline data-id="${x.id}" points="${x.pts.map((p) => `${p[0]},${p[1]}`).join(' ')}" fill="none" stroke="${colorOf(x.color)}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"${x.dash ? ` stroke-dasharray="${w * 2.4} ${w * 2}"` : ''}></polyline>`;
+  }
+  // Mirrors drawEl in flat.js - hard rule 3. Same head multiplier, same
+  // halo alpha, same dash ratio; if one changes, change both.
+  if (x.type === 'freearrow') {
+    if (!x.pts || x.pts.length < 2) return '';
+    const w = x.width || 8;
+    const col = colorOf(x.color);
+    const ang = freeEndAngle(x);
+    const head = w * 6.45;
+    const [ex, ey] = x.pts[x.pts.length - 1];
+    const p1 = `${ex - Math.cos(ang - 0.44) * head},${ey - Math.sin(ang - 0.44) * head}`;
+    const p2 = `${ex - Math.cos(ang + 0.44) * head},${ey - Math.sin(ang + 0.44) * head}`;
+    return `<g data-id="${x.id}">
+      <polyline points="${x.pts.map((p) => `${p[0]},${p[1]}`).join(' ')}" fill="none" stroke="${col}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"${x.dash ? ` stroke-dasharray="${w * 2.4} ${w * 2}"` : ''}></polyline>
+      <polygon points="${ex},${ey} ${p1} ${p2}" fill="${col}" stroke="${col}" stroke-width="${w * 0.9}" stroke-linejoin="round"></polygon>
+    </g>`;
+  }
+  if (x.type === 'spotlight') {
+    const r = Math.max(2, x.r || 40);
+    const w = x.width || 6;
+    const col = colorOf(x.color);
+    return `<g data-id="${x.id}">
+      <circle cx="${x.x}" cy="${x.y}" r="${r}" fill="none" stroke="${col}" stroke-width="${w * 3}" opacity="0.28"></circle>
+      <circle cx="${x.x}" cy="${x.y}" r="${r}" fill="none" stroke="${col}" stroke-width="${w}"${x.dash ? ` stroke-dasharray="${w * 2.4} ${w * 2}"` : ''}></circle>
+    </g>`;
   }
   return '';
 }
