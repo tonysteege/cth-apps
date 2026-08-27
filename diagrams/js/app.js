@@ -328,10 +328,6 @@ async function paintEdSide(currentId) {
         </div>`).join('')}
       <div class="eside-loose" data-rootrows data-root>${loose.map(row).join('') || '<div class="eside-empty">No Loose Diagrams</div>'}</div>
     </div>
-    <div class="eside-foot">
-      <button class="mini" id="esideImport" title="Open A Diagram PNG Or Restore A Backup JSON">Import</button>
-      <button class="mini" id="esideBackup" title="Download Every Diagram As One Backup JSON">Back Up</button>
-    </div>
     <input type="file" id="esideFile" accept=".png,.json,application/json,image/png" hidden multiple>`;
 
   const refresh = () => paintEdSide(currentId);
@@ -448,8 +444,11 @@ async function paintEdSide(currentId) {
     ctxMenu(e.clientX, e.clientY, [
       ['New Diagram', () => void newDrill('')],
       ['New Folder', () => $('#esideNewF').click()],
+      // Import and Back Up used to be buttons pinned under the tree.
+      // Tony wanted the column back for files; they live here now, which
+      // is where a file manager keeps them anyway.
       ['Import', () => $('#esideFile').click()],
-      ['Back Up All', () => $('#esideBackup').click()],
+      ['Back Up All', () => void backupAll()],
     ]);
   });
 
@@ -464,8 +463,6 @@ async function paintEdSide(currentId) {
       refresh();
     });
   };
-  $('#esideImport').onclick = () => $('#esideFile').click();
-  $('#esideBackup').onclick = () => void backupAll();
   $('#esideFile').onchange = async (e) => {
     const files = [...e.target.files];
     e.target.value = '';
@@ -503,10 +500,10 @@ async function showEditor(id) {
           <button class="btn" id="edRedo" title="Redo (Shift+Cmd+Z)">Redo</button>
           <span class="ed-sep"></span>
           <button class="btn" id="edRinks" hidden title="Copy, Print Or Export Chosen Rinks From This Sequence">Rinks</button>
-          <button class="btn" id="edAnim" title="Animate The Drill - Players And Pucks Follow Your Arrows (Then Save A GIF Or Video). Right-click for the guide">Animate</button>
+          <button class="btn" id="edAnim" title="Animate The Drill - Players And Pucks Follow Your Arrows (Then Save A GIF Or Video)">Animate</button>
+          <button class="btn btn-help" id="edAnimHelp" title="How To Use Animate - The Full Guide" aria-label="Animate Guide">?</button>
           <button class="btn" id="edSaveImg" title="Save This Diagram As A PNG In Your cth/diagrams Folder">Save PNG</button>
           <button class="btn" id="edCopy" title="Copy The Finished Picture To The Clipboard">Copy</button>
-          <button class="btn" id="edPrint" title="Print This Diagram">Print</button>
           <button class="btn btn-ink" id="edPng" title="Download As PNG - The File Reopens Fully Editable Here And In CTH Film Room">Download PNG</button>
         </div>
       </header>
@@ -597,14 +594,14 @@ async function showEditor(id) {
     toast('PNG Downloaded - That File Reopens Fully Editable');
   };
   $('#edCopy').onclick = async () => { await copyCanvas(await renderFlat()); };
-  $('#edPrint').onclick = async () => {
-    await saveNow();
-    printCanvas(await renderFlat(), drill.name);
-  };
   $('#edRinks').onclick = () => showRinksSheet(drill);
   $('#edSaveImg').onclick = () => void savePngToFolder(drill, null);
   // Right-click Animate for the written guide to getting a good one.
-  $('#edAnim').oncontextmenu = (e) => { e.preventDefault(); window.open('../diagrams/ANIMATE.md', '_blank', 'noopener'); };
+  // The guide had only one door - a right-click on Animate - which is
+  // not a door anyone finds (2026-08-27). It now has a button beside it.
+  const openAnimGuide = () => window.open('ANIMATE.md', '_blank', 'noopener');
+  $('#edAnim').oncontextmenu = (e) => { e.preventDefault(); openAnimGuide(); };
+  $('#edAnimHelp').onclick = openAnimGuide;
   $('#edAnim').onclick = async () => {
     try {
       await saveNow();

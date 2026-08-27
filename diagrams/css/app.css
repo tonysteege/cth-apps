@@ -180,6 +180,17 @@ input:focus, select:focus, textarea:focus { outline: none; }
 .btn-back { padding: 0 11px; }
 .btn-back svg { width: 20px; height: 20px; display: block; }
 
+/* A quiet circular help button - used beside Animate to open its guide.
+   Same 36px height as the buttons it sits with, so the row stays even. */
+.btn-help {
+  width: 32px;
+  padding: 0;
+  border-radius: 999px;
+  font-weight: 600;
+  color: var(--mist);
+}
+.btn-help:hover { color: var(--ink); }
+
 /* ---------------------------------------------------------- library */
 .lib-head {
   display: flex;
@@ -518,8 +529,13 @@ input:focus, select:focus, textarea:focus { outline: none; }
 
 /* Renaming a rink is seamless: the field sits exactly on the label, same
    font, no box - just a thin editing underline. */
+/* Bottom-anchored: editor.js pins this to a point 8 units above the rink
+   and the box is pulled up by its own height, so the field - underline
+   included - can never cross the frame at any zoom. */
 .ed-input-flabel {
-  transform: translate(-2px, -0.14em);
+  /* The 8-unit anchor scales with zoom, so it can shrink to under a pixel
+     when zoomed out; the extra 6px is a floor the gap never drops below. */
+  transform: translate(-2px, calc(-100% - 6px));
   text-align: left;
   font-weight: 800;
   color: var(--ink);
@@ -541,6 +557,12 @@ input:focus, select:focus, textarea:focus { outline: none; }
    floating rounded panel (n-100 surface, 1px white border, the template's
    own elevation) instead of a flush column. Below 860px the overlay-drawer
    media query takes over and flattens it back to a full-height sheet. */
+/* `display: flex` outranks the [hidden] attribute's UA `display: none`, so
+   without this line the sidebar button toggled the attribute and the tree
+   never actually went away (found 2026-08-27 while measuring the toolbar:
+   the stage's left edge stayed at 246px either way). Any element that is
+   toggled with `hidden` AND given a display in css needs this pair. */
+.ed-side[hidden] { display: none; }
 .ed-side {
   display: flex;
   flex-direction: column;
@@ -554,8 +576,33 @@ input:focus, select:focus, textarea:focus { outline: none; }
   border-radius: 24px;
   box-shadow: var(--shadow-side);
 }
-.ed-side .eside-row:hover { background: var(--n-200); }
-.ed-side .eside-folder:hover { background: var(--n-200); }
+/* SELECTION AND HOVER MUST ALWAYS BE LEGIBLE, AND TWO LIT ROWS MUST NEVER
+   TOUCH (2026-08-27, Tony's call). Two things do that: every row carries a
+   3px gutter beneath it, so a selected row and a hovered neighbour read as
+   two separate objects instead of one block; and hover is n-200 with a
+   n-300 hairline rather than a barely-there tint on an n-100 panel. */
+.ed-side .eside-row,
+.ed-side .eside-folder { margin-bottom: 3px; }
+.ed-side .eside-row:hover,
+.ed-side .eside-folder:hover {
+  background: var(--n-200);
+  box-shadow: inset 0 0 0 1px var(--n-300);
+  color: var(--ink);
+}
+.ed-side .eside-row:focus-visible,
+.ed-side .eside-folder:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--select);
+}
+/* The active diagram keeps the gradient pill on hover - it must not fall
+   back to the neutral hover and look deselected under the pointer. */
+.ed-side .eside-row.on:hover {
+  background-image: var(--grad-primary);
+  background-color: transparent;
+  color: #fff;
+  box-shadow: var(--shadow-nav);
+}
+.ed-side .eside-folder:last-child { margin-bottom: 3px; }
 #esideSearch {
   width: 100%;
   height: 32px;
@@ -755,6 +802,13 @@ input:focus, select:focus, textarea:focus { outline: none; }
 .lmenu .tb-btn { width: 34px; height: 34px; }
 
 /* ------------------------------------------------- floating toolbar */
+/* THE TOOLBAR CENTRES ON THE CANVAS, NOT THE WINDOW (2026-08-27, Tony's
+   call). Centred on the viewport it slid its left end under the file
+   tree. The shift is half the tree's footprint (232px panel + its 14px
+   margin), applied only while the tree is actually shown - and dropped
+   again below 860px, where the tree becomes an overlay drawer and the
+   stage already has the whole window. `:has` keeps this declarative, so
+   it follows the toggle with no JS to keep in step. */
 .tb {
   position: fixed;
   left: 50%;
@@ -777,6 +831,13 @@ input:focus, select:focus, textarea:focus { outline: none; }
   scrollbar-width: none;
 }
 .tb::-webkit-scrollbar { display: none; }
+.ed-main:has(> .ed-side:not([hidden])) ~ .tb {
+  left: calc(50% + 123px);
+  max-width: calc(100vw - 266px);
+}
+@media (max-width: 860px) {
+  .ed-main:has(> .ed-side:not([hidden])) ~ .tb { left: 50%; max-width: calc(100vw - 20px); }
+}
 .tb-sep { width: 1px; align-self: stretch; margin: 4px 3px; background: var(--edge); flex-shrink: 0; }
 
 .tb-btn, .tb-player, .tb-swatch {
@@ -1105,16 +1166,8 @@ input:focus, select:focus, textarea:focus { outline: none; }
   font-variant-numeric: tabular-nums;
 }
 .eside-list { flex: 1; }
-.eside-foot {
-  position: sticky;
-  bottom: -12px;
-  display: flex;
-  gap: 6px;
-  padding: 10px 2px 12px;
-  margin: 8px -2px -12px;
-  border-top: 1px solid var(--n-200);
-  background: var(--n-100);
-}
+/* .eside-foot removed 2026-08-27: Import and Back Up moved to the
+   tree's right-click menu, giving the column back to files. */
 .move-menu .ctx-danger { color: var(--danger); }
 .move-menu .ctx-danger:hover { background: var(--danger-soft); color: var(--danger); }
 .eside-list { min-height: 120px; }

@@ -478,6 +478,7 @@ export async function openAnimator({ state, name, rinkNames }) {
         <label class="anim-check"><input type="checkbox" data-set="paths"${s.paths ? ' checked' : ''}> Show Routes</label>
         <span class="anim-flex"></span>
         <span class="anim-status" aria-live="polite"></span>
+        <button class="btn" data-a="guide" title="How To Use Animate - The Full Guide">Guide</button>
         <button class="btn" data-a="webm">Save Video</button>
         <button class="btn btn-ink" data-a="gif">Save GIF</button>
         <button class="btn" data-a="close">Close</button>
@@ -541,6 +542,9 @@ export async function openAnimator({ state, name, rinkNames }) {
   document.addEventListener('keydown', onKey, true);
   veil.addEventListener('mousedown', (e) => { if (e.target === veil && !busy) close(); });
   veil.querySelector('[data-a="close"]').onclick = () => { if (!busy) close(); };
+  // The guide is reachable from inside the animator too - the moment
+  // someone wants it is the moment they are looking at this panel.
+  veil.querySelector('[data-a="guide"]').onclick = () => window.open('ANIMATE.md', '_blank', 'noopener');
   veil.querySelector('[data-a="play"]').onclick = () => { playing = !playing; };
   scrub.oninput = () => { playing = false; t = (Number(scrub.value) / 1000) * tl.total; };
   veil.querySelectorAll('[data-set]').forEach((el) => {

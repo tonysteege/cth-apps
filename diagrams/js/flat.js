@@ -156,7 +156,14 @@ export function motionPolys(a, trim) {
   const m = a.motion;
   if (!m || m === 'skate' || a.dash) return null;
   const w = a.width || 8;
-  const pts = arrowPathPoints(a, trim);
+  // SAMPLE DENSITY IS PART OF THE SHAPE. The wave and the scallop are now
+  // tight enough that the old flat 64 points aliased them into a jagged
+  // zigzag - about two samples per cycle. Sample by LENGTH instead, at
+  // roughly a dozen points per cycle, capped so a very long route cannot
+  // turn one arrow into a thousand-point polyline.
+  const len = arrowLength(a);
+  const n = Math.max(96, Math.min(760, Math.round(len / 5)));
+  const pts = arrowPathPoints(a, trim, n);
   const withNormals = pts.map((p, i) => {
     const q = pts[Math.min(i + 1, pts.length - 1)];
     const r = pts[Math.max(i - 1, 0)];
@@ -173,12 +180,15 @@ export function motionPolys(a, trim) {
     ];
   }
   if (m === 'puck') {
-    // CARRYING THE PUCK: a smooth, open wave - a few big cycles, not a
-    // tight spring. Matched to how the drill books draw it (2026-08-27):
-    // roughly one cycle per 130 units with a deep amplitude, so it still
-    // reads as a wave at thumbnail size instead of turning into fuzz.
-    const amp = w * 3.1;
-    const wave = Math.max(w * 15, 118);
+    // CARRYING THE PUCK: a TIGHT, SHALLOW SINE, drawn to the Ice Hockey
+    // Systems proportions (2026-08-27, second pass, from Tony's
+    // screenshot): a short wavelength and an amplitude about a third of
+    // it, swinging evenly to both sides of the route. The earlier long,
+    // deep wave read as the same squiggle as Skate Backwards - the two
+    // notations have to be tellable apart at a glance, which is the
+    // whole point of having both.
+    const amp = Math.max(w * 1.6, 12);
+    const wave = Math.max(w * 6, 44);
     let dist = 0;
     return [withNormals.map((p, i) => {
       if (i) dist += Math.hypot(p.x - withNormals[i - 1].x, p.y - withNormals[i - 1].y);
@@ -190,14 +200,18 @@ export function motionPolys(a, trim) {
     })];
   }
   if (m === 'backward') {
-    // BACKWARDS: one CONTINUOUS scalloped line - a run of half-circles
-    // along the route, which is the c-cut notation. It used to draw
-    // detached letter shapes, which read as text on the ice rather than
-    // as edgework (2026-08-27).
-    // Deep enough to read as c-cuts rather than as fine chatter: the
-    // scallop is about four line-widths tall and only a little wider.
-    const r = Math.max(w * 4.2, 28);
-    const gap = r * 1.55;
+    // BACKWARDS: one CONTINUOUS scalloped line - a run of arches all on
+    // the SAME side of the route with a cusp between each, which is the
+    // c-cut notation. Two things separate it from the puck wave above and
+    // both are deliberate: the arches are one-sided where the wave is
+    // symmetrical, and each one is much WIDER than it is tall (the IHS
+    // scallop is a flattened arc, not a half-circle). Never let this
+    // become detached letter shapes again - that reads as text on ice.
+    // Measured against the reference: the arch is about a third as tall
+    // as it is wide, and its total swing must exceed the puck wave's -
+    // a scallop that swings LESS than the wave reads as the same mark.
+    const r = Math.max(w * 4.2, 32);
+    const gap = Math.max(w * 13, 100);
     let dist = 0;
     return [withNormals.map((p, i) => {
       if (i) dist += Math.hypot(p.x - withNormals[i - 1].x, p.y - withNormals[i - 1].y);
@@ -302,7 +316,10 @@ function drawElInner(ctx, x) {
     const { cx, cy } = arrowCtrl(x);
     const ang = arrowEndAngle(x);
     const w = x.width || 8;
-    const head = w * 4.3;
+    // 1.5x the old 4.3 (2026-08-27, Tony's call). Keep this multiplier
+    // identical in editor.js svgEl - drawEl and svgEl must render the
+    // same picture (hard rule 3).
+    const head = w * 6.45;
     const style = x.head || 'triangle';
     const trim = style === 'triangle' ? head * 0.7 : 0;
     ctx.strokeStyle = colorOf(x.color);

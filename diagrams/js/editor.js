@@ -156,7 +156,7 @@ function elBounds(x) {
       ys.push((1 - t) * (1 - t) * x.y1 + 2 * (1 - t) * t * cy + t * t * x.y2);
     }
     const w = x.width || 8;
-    const head = (x.head || 'triangle') === 'none' ? 0 : w * 4.3;
+    const head = (x.head || 'triangle') === 'none' ? 0 : w * 6.45;
     const ang = arrowEndAngle(x);
     for (const a of [ang - 0.6, ang + 0.6, ang + Math.PI / 2, ang - Math.PI / 2]) {
       xs.push(x.x2 - Math.cos(a) * head);
@@ -486,7 +486,7 @@ function svgEl(x) {
     const { cx, cy } = arrowCtrl(x);
     const ang = arrowEndAngle(x);
     const w = x.width || 8;
-    const head = w * 4.3;
+    const head = w * 6.45;
     const style = x.head || 'triangle';
     const trim = style === 'triangle' ? head * 0.7 : 0;
     const tx = x.x2 - Math.cos(ang) * trim;
@@ -663,14 +663,19 @@ export function render() {
 
 const ICON = {
   select: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M4.04 4.69a.5.5 0 0 1 .65-.65l16 6.5a.5.5 0 0 1-.06.94l-6.13 1.58a2 2 0 0 0-1.43 1.44l-1.58 6.12a.5.5 0 0 1-.95.07z"/></svg>',
-  // The five movement arrows, all drawn on the same lower-left to
-  // upper-right diagonal with the same head, so the row reads as one
-  // family and only the LINE says what the movement is.
-  arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M4.5 19.5 18 6"/><path d="M10.5 5.5H19V14"/></svg>',
-  dasharrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M4.5 19.5 18 6" stroke-dasharray="3.2 3"/><path d="M10.5 5.5H19V14"/></svg>',
-  skatepuck: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M4 19.5c1.9-1.1 1.2-3.4 3.1-4.5s2.6 1.2 4.5.1 1.2-3.4 3.1-4.5 2.6 1.2 4.5.1"/><path d="M12.5 5.2H19v6.5"/></svg>',
-  skateback: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M4 19.5a2 2 0 1 0 2.9-2.8 2 2 0 1 1 2.9-2.9 2 2 0 1 0 2.9-2.8 2 2 0 1 1 2.9-2.9"/><path d="M12.5 5.2H19v6.5"/></svg>',
-  shoot: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M3.2 18.1 16.6 4.7"/><path d="M5.9 20.8 19.3 7.4"/><path d="M11.6 4.2h8.2v8.2"/></svg>',
+  // THE FIVE MOVEMENT ARROWS ARE DRAWN HORIZONTALLY (2026-08-27, second
+  // pass). They used to run on a lower-left to upper-right diagonal,
+  // which looked tidy in a large viewBox and fell apart at the 20px the
+  // toolbar actually renders: a diagonal wave has to fit its cycles into
+  // 0.7 of the box and the curves collapsed into a smudge. Left to right
+  // gives every cycle the full width, and the shared chevron head keeps
+  // the row reading as one family - only the LINE says what it means.
+  // Each is the same notation the canvas draws, in miniature.
+  arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M3 12h13.6"/><path d="m16.6 8.4 3.7 3.6-3.7 3.6"/></svg>',
+  dasharrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M3 12h13.6" stroke-dasharray="3.1 2.9"/><path d="m16.6 8.4 3.7 3.6-3.7 3.6"/></svg>',
+  skatepuck: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M3 12q2.3-3.6 4.6 0t4.6 0 4.6 0"/><path d="m16.6 8.4 3.7 3.6-3.7 3.6"/></svg>',
+  skateback: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M3 13.7a2.3 2.3 0 0 1 4.6 0 2.3 2.3 0 0 1 4.6 0 2.3 2.3 0 0 1 4.6 0"/><path d="m16.6 8.4 3.7 3.6-3.7 3.6"/></svg>',
+  shoot: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M3 9.8h13.4M3 14.2h13.4"/><path d="m16.6 8.4 3.7 3.6-3.7 3.6"/></svg>',
   box: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4.25" y="5.25" width="15.5" height="13.5" rx="2.75"/></svg>',
   circle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="7.75"/></svg>',
   text: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M4 7V5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5V7"/><path d="M12 4v16"/><path d="M9 20h6"/></svg>',
@@ -1799,7 +1804,13 @@ function openFrameLabelInput(k) {
   render();
   const body = el('edStageWrap');
   const topV = k * (RINK_H + SEQ_GAP) + vShiftOf(k);
-  const pos = screenPos({ x: FLABEL.x, y: topV - FLABEL.gapAbove }, true);
+  // BOTTOM-ANCHORED, not top-anchored (2026-08-27, Tony's call). Anchoring
+  // the field's top to the label line let its box - which is taller than
+  // the glyphs, by its padding and its underline - hang down across the
+  // rink's top edge. Pinning the BOTTOM a few units above the frame and
+  // pulling the box up by its own height (`translateY(-100%)` in the css)
+  // keeps it clear at every zoom, instead of at one.
+  const pos = screenPos({ x: FLABEL.x, y: topV - 8 }, true);
   const input = document.createElement('input');
   input.id = 'edInput';
   input.className = 'ed-input ed-input-flabel';
