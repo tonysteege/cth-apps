@@ -644,9 +644,10 @@ export function render() {
   }
   svg.querySelector('#edEls').innerHTML = cur.elements.map((x) => vWrap(centerOf(x).y, svgEl(x))).join('');
   svg.querySelector('#edUi').innerHTML = uiSvg();
-  const lines = cur.tool === 'arrow' || cur.tool === 'dasharrow' || cur.tool === 'pen'
-    || selEls().some((z) => z.type === 'arrow' || z.type === 'pen');
-  const sig = `${cur.tool}|${cur.color}|${cur.head}|${cur.seq}|${settings().arrowPx || 8}|${paletteHexes().join()}|${lines}`;
+  // Head and line weight left the toolbar for their own popup (2026-08-27),
+  // so neither belongs in this signature any more: keeping them here would
+  // repaint the bar - and close the popup - on every choice made inside it.
+  const sig = `${cur.tool}|${cur.color}|${cur.seq}|${paletteHexes().join()}`;
   if (sig !== toolsSig) { toolsSig = sig; paintTools(); }
 }
 
@@ -776,6 +777,83 @@ function showPlayerMenu(slot, btn) {
       setTool(`p-${slot}`);
       hidePlayerMenu();
       toast(b.dataset.label ? `Placing A "${b.dataset.label}" Player - Click The Ice` : 'Placing A Blank Player - Click The Ice');
+    };
+  });
+}
+
+// ---- line options menu (arrow head + line weight) ------------------------
+//
+// These used to APPEND to the toolbar whenever a line tool was armed or a
+// line was selected, so the bar grew by seven buttons and every tool under
+// the pointer shifted sideways (Tony's call 2026-08-27). They now live in a
+// popup that opens the same way the player letters do: hover for the mouse,
+// a second press on the armed button for touch.
+
+const WEIGHTS = [[4, 'Fine Lines'], [8, 'Standard Lines'], [14, 'Bold Lines']];
+const LINE_TOOLS = new Set(['arrow', 'dasharrow', 'pen']);
+
+let lmenuEl = null;
+let lmenuTimer = null;
+function hideLineMenu(soon = false) {
+  clearTimeout(lmenuTimer);
+  if (soon) { lmenuTimer = setTimeout(() => hideLineMenu(), 250); return; }
+  lmenuEl?.remove();
+  lmenuEl = null;
+}
+function showLineMenu(tool, btn) {
+  clearTimeout(lmenuTimer);
+  if (lmenuEl?.dataset.tool === tool) return;
+  hideLineMenu();
+  const headNow = cur.head || 'triangle';
+  const weight = Number(settings().arrowPx) || 8;
+  // The pen draws freehand strokes, which have no arrowhead - offering one
+  // there would be a control that does nothing.
+  const wantsHead = tool !== 'pen';
+  lmenuEl = document.createElement('div');
+  lmenuEl.className = 'pmenu lmenu';
+  lmenuEl.dataset.tool = tool;
+  lmenuEl.innerHTML = `
+    ${wantsHead ? `<span class="lmenu-label">Head</span>
+    ${HEADS.map(([h, label]) => `<button class="tb-btn tb-small${headNow === h ? ' on' : ''}" data-head="${h}" aria-label="${label}" title="${label}">${HEAD_ICONS[h]}</button>`).join('')}
+    <span class="tb-sep"></span>` : ''}
+    <span class="lmenu-label">Line</span>
+    ${WEIGHTS.map(([wpx, label], i) => `<button class="tb-btn tb-small${weight === wpx ? ' on' : ''}" data-weight="${wpx}" aria-label="${label}" title="${label}"><svg viewBox="0 0 24 24"><path d="M4 12h16" stroke="currentColor" stroke-linecap="round" stroke-width="${1.4 + i * 1.8}"/></svg></button>`).join('')}`;
+  document.body.appendChild(lmenuEl);
+  const r = btn.getBoundingClientRect();
+  const mw = lmenuEl.offsetWidth;
+  lmenuEl.style.left = `${Math.max(8, Math.min(window.innerWidth - mw - 8, r.left + r.width / 2 - mw / 2))}px`;
+  lmenuEl.style.top = `${r.top - lmenuEl.offsetHeight - 10}px`;
+  lmenuEl.addEventListener('pointerenter', () => clearTimeout(lmenuTimer));
+  lmenuEl.addEventListener('pointerleave', () => hideLineMenu(true));
+
+  // The choices apply to what is selected as well as to what is drawn next,
+  // exactly as the toolbar row did. The popup updates its own active states
+  // rather than repainting the bar, so it stays open for a second choice.
+  const mark = (attr, val) => lmenuEl?.querySelectorAll(`[data-${attr}]`).forEach((o) => {
+    o.classList.toggle('on', o.dataset[attr] === String(val));
+  });
+  lmenuEl.querySelectorAll('[data-head]').forEach((b) => {
+    b.onclick = () => {
+      cur.head = b.dataset.head;
+      saveSettings({ arrowHead: cur.head });
+      const arrows = selEls().filter((z) => z.type === 'arrow');
+      if (arrows.length) { snapshot(); arrows.forEach((z) => { z.head = cur.head; }); markDirty(); }
+      mark('head', cur.head);
+      render();
+    };
+  });
+  lmenuEl.querySelectorAll('[data-weight]').forEach((b) => {
+    b.onclick = () => {
+      const wpx = Number(b.dataset.weight);
+      saveSettings({ arrowPx: wpx });
+      const lines = selEls().filter((z) => z.type === 'arrow' || z.type === 'pen');
+      if (lines.length) {
+        snapshot();
+        lines.forEach((z) => { z.width = Math.max(2, Math.round(wpx * scaleF())); });
+        markDirty();
+      }
+      mark('weight', wpx);
+      render();
     };
   });
 }
@@ -925,11 +1003,8 @@ function paintTools() {
   const bar = el('edBar');
   if (!bar || !cur) return;
   hidePlayerMenu();
-  const headNow = cur.head || 'triangle';
+  hideLineMenu();
   const hexes = paletteHexes();
-  const weight = Number(settings().arrowPx) || 8;
-  const lineCtx = cur.tool === 'arrow' || cur.tool === 'dasharrow' || cur.tool === 'pen'
-    || selEls().some((z) => z.type === 'arrow' || z.type === 'pen');
 
   bar.innerHTML = `
     ${TOOLS.map(([t, label]) => `<button class="tb-btn${cur.tool === t ? ' on' : ''}" data-tool="${t}" aria-label="${label}">${ICON[t]}${keyBadge(t)}</button>`).join('')}
@@ -939,10 +1014,7 @@ function paintTools() {
     ${sep}
     ${ITEM_ORDER.map((k) => `<button class="tb-btn${cur.tool === `i-${k}` ? ' on' : ''}" data-tool="i-${k}" aria-label="${ITEMS[k].label}">${itemIcon(k)}${keyBadge(`i-${k}`)}</button>`).join('')}
     ${sep}
-    ${hexes.map((hex, i) => `<button class="tb-swatch${cur.color === slotColor(i) ? ' on' : ''}" data-slot="${i}" style="--c:${hex}" aria-label="Color Preset ${i + 1}"></button>`).join('')}
-    ${lineCtx ? `${sep}
-      ${HEADS.map(([h, label]) => `<button class="tb-btn tb-small${headNow === h ? ' on' : ''}" data-head="${h}" aria-label="${label}">${HEAD_ICONS[h]}</button>`).join('')}
-      ${[4, 8, 14].map((wpx, i) => `<button class="tb-btn tb-small${weight === wpx ? ' on' : ''}" data-weight="${wpx}" aria-label="${['Fine', 'Standard', 'Bold'][i]} Lines"><svg viewBox="0 0 24 24"><path d="M4 12h16" stroke="currentColor" stroke-linecap="round" stroke-width="${1.4 + i * 1.8}"/></svg></button>`).join('')}` : ''}`;
+    ${hexes.map((hex, i) => `<button class="tb-swatch${cur.color === slotColor(i) ? ' on' : ''}" data-slot="${i}" style="--c:${hex}" aria-label="Color Preset ${i + 1}"></button>`).join('')}`;
 
   bar.querySelectorAll('[data-tool]').forEach((b) => {
     b.onclick = () => {
@@ -951,6 +1023,11 @@ function paintTools() {
         // the touch path to it (hover covers the mouse path).
         if (cur.tool === b.dataset.tool) { showPlayerMenu(Number(b.dataset.tool.slice(2)), b); return; }
         cur.pendingLabel = null;
+      }
+      // Same for the line tools and their head / weight options.
+      if (LINE_TOOLS.has(b.dataset.tool) && cur.tool === b.dataset.tool) {
+        showLineMenu(b.dataset.tool, b);
+        return;
       }
       setTool(b.dataset.tool);
     };
@@ -966,6 +1043,11 @@ function paintTools() {
     b.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') showPlayerMenu(i, b); });
     b.addEventListener('pointerleave', () => hidePlayerMenu(true));
   });
+  bar.querySelectorAll('[data-tool]').forEach((b) => {
+    if (!LINE_TOOLS.has(b.dataset.tool)) return;
+    b.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') showLineMenu(b.dataset.tool, b); });
+    b.addEventListener('pointerleave', () => hideLineMenu(true));
+  });
   bar.querySelectorAll('[data-slot]').forEach((b) => {
     const i = Number(b.dataset.slot);
     b.onclick = () => chooseSlot(i);
@@ -976,30 +1058,6 @@ function paintTools() {
     };
     b.ondblclick = customize;
     b.oncontextmenu = customize;
-  });
-  bar.querySelectorAll('[data-head]').forEach((b) => {
-    b.onclick = () => {
-      cur.head = b.dataset.head;
-      saveSettings({ arrowHead: cur.head });
-      const arrows = selEls().filter((z) => z.type === 'arrow');
-      if (arrows.length) { snapshot(); arrows.forEach((z) => { z.head = cur.head; }); markDirty(); }
-      toolsSig = '';
-      render();
-    };
-  });
-  bar.querySelectorAll('[data-weight]').forEach((b) => {
-    b.onclick = () => {
-      const wpx = Number(b.dataset.weight);
-      saveSettings({ arrowPx: wpx });
-      const lines = selEls().filter((z) => z.type === 'arrow' || z.type === 'pen');
-      if (lines.length) {
-        snapshot();
-        lines.forEach((z) => { z.width = Math.max(2, Math.round(wpx * scaleF())); });
-        markDirty();
-      }
-      toolsSig = '';
-      render();
-    };
   });
   const act = (name, fn) => { const b = bar.querySelector(`[data-act="${name}"]`); if (b) b.onclick = fn; };
   act('faceoff', () => placeFaceoff());
@@ -1831,6 +1889,8 @@ function onKey(e) {
   }
   if (e.key === 'Escape') {
     e.preventDefault();
+    // An open popup is the innermost thing Escape should close.
+    if (lmenuEl || pmenuEl) { hideLineMenu(); hidePlayerMenu(); return; }
     if (cur.tool !== 'select') { setTool('select'); return; }
     if (cur.sel) { setSel([]); render(); return; }
     return;
@@ -1904,6 +1964,7 @@ export async function closeEditor() {
   drag = null;
   activeFinish = null;
   hidePlayerMenu();
+  hideLineMenu();
   document.getElementById('edInput')?.remove();
 }
 

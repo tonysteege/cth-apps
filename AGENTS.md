@@ -131,6 +131,21 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
    `InvalidStateError: The database connection is closing.` - which is exactly
    the bug that made manual save necessary in the first place.
 
+- **Toolbar popups, never a growing toolbar** (2026-08-27, Tony's call).
+  Arrow head and line weight used to APPEND to the toolbar whenever a line
+  tool was armed or a line was selected, so the bar grew by seven buttons
+  and every tool under the pointer shifted sideways. They now live in
+  `showLineMenu()` - the same `.pmenu` panel the player letters use, opened
+  on hover for a mouse and on a second press of the armed button for touch,
+  closed on Escape, on leaving, and by `paintTools`/`closeEditor`. The pen's
+  menu omits Head, because a freehand stroke has no arrowhead. The choices
+  still apply to the current selection as well as to the next line drawn.
+  Two rules keep this working: `cur.head` and `arrowPx` must stay OUT of the
+  `toolsSig` render signature (otherwise choosing inside the popup repaints
+  the bar and closes it), and the popup updates its own `.on` states rather
+  than repainting. Any future contextual control belongs in a popup too -
+  the toolbar's width is fixed by design.
+
 ## Clips (/clips/) rules
 
 - Clips reads game film from `/videos` inside the chosen CTH folder and
