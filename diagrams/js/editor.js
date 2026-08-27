@@ -1035,11 +1035,18 @@ function sizeStage() {
   const wrap = el('edStageWrap');
   const z = el('edZoom');
   if (!wrap || !z || !cur) return;
-  const availW = Math.max(320, wrap.clientWidth - 40);
+  // clientWidth INCLUDES the wrap's padding, and that padding is a clamp()
+  // that reaches 40px per side - so the old flat "- 40" undercounted by up
+  // to 40px and, with sideways scrolling now clipped, cut the rink's right
+  // edge off whenever the width branch won. Measure the real padding.
+  const cs = getComputedStyle(wrap);
+  const pad = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+  const availW = Math.max(280, wrap.clientWidth - pad - 2);
   const availH = Math.max(300, wrap.clientHeight - 110);
   const unit = onRink() ? VTOP + RINK_H + 70 : totalVH();
   const w = Math.min(availW, (availH / unit) * cur.w);
-  z.style.width = `${Math.round(Math.max(360, w))}px`;
+  // The 360px floor guards tiny windows, but must never exceed what fits.
+  z.style.width = `${Math.round(Math.max(Math.min(360, availW), w))}px`;
 }
 
 // ------------------------------------------------------------- image ops

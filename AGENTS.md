@@ -382,3 +382,7 @@ the app, create a drill, place a few elements, wait a second for autosave
 survive), and export a PNG. Check the editor at a narrow window too: the
 rink stage scrolls vertically only, and a sideways scrollbar anywhere is a
 bug (`.ed-stagewrap` is `overflow-x: hidden`, `html, body` are capped).
+`sizeStage()` (editor.js) must subtract the wrap's REAL computed padding -
+clientWidth includes it, and the old flat "- 40" undercounted by up to
+40px, which clipped the rink's right edge once sideways overflow stopped
+scrolling. Its 360px floor is capped to availW for the same reason.

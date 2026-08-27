@@ -542,11 +542,13 @@ input:focus, select:focus, textarea:focus { outline: none; }
    own elevation) instead of a flush column. Below 860px the overlay-drawer
    media query takes over and flattens it back to a full-height sheet. */
 .ed-side {
-  width: 232px;
+  display: flex;
+  flex-direction: column;
+  width: 240px;
   flex-shrink: 0;
   overflow-y: auto;
   margin: 14px 0 14px 14px;
-  padding: 12px 10px 90px;
+  padding: 12px 10px;
   background: var(--n-100);
   border: 1px solid var(--cloud);
   border-radius: 24px;
@@ -591,17 +593,24 @@ input:focus, select:focus, textarea:focus { outline: none; }
   margin: 12px 8px 4px;
 }
 .eside-row {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 7px;
   width: 100%;
   text-align: left;
   border: none;
   background: none;
   border-radius: var(--r-sm);
-  padding: 7px 10px;
+  padding: 6px 8px;
+  min-height: 28px;
   color: var(--graphite);
   font-size: 13px;
   transition: background var(--dur) ease, color var(--dur) ease;
 }
+/* The rink glyph each diagram row leads with. */
+.eside-doc { width: 15px; height: 15px; flex: none; color: var(--soft); }
+.eside-row:hover .eside-doc { color: var(--mist); }
+.eside-row.on .eside-doc { color: rgba(255, 255, 255, 0.85); }
 .eside-row:hover { background: var(--sunken); color: var(--ink); }
 .eside-row.on {
   background-image: var(--grad-primary);
@@ -609,7 +618,16 @@ input:focus, select:focus, textarea:focus { outline: none; }
   font-weight: 500;
   box-shadow: var(--shadow-nav);
 }
-.eside-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eside-name { display: block; min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Folder contents nest: indented behind a rail, so what belongs to which
+   folder is visible without reading. */
+.eside-list [data-rows] {
+  margin: 1px 0 4px 13px;
+  padding-left: 7px;
+  border-left: 1px solid var(--n-300);
+}
+.eside-list [data-rootrows] { margin-bottom: 4px; }
 .eside-empty { color: var(--soft); font-size: 12px; padding: 4px 10px; }
 
 /* the cone art reads oversized next to the flat glyphs - pull it in */
@@ -1047,7 +1065,17 @@ input:focus, select:focus, textarea:focus { outline: none; }
   font-weight: 500; font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
-.eside-foot { display: flex; gap: 6px; padding-top: 10px; margin-top: 8px; border-top: 1px solid var(--edge-soft); }
+.eside-list { flex: 1; }
+.eside-foot {
+  position: sticky;
+  bottom: -12px;
+  display: flex;
+  gap: 6px;
+  padding: 10px 2px 12px;
+  margin: 8px -2px -12px;
+  border-top: 1px solid var(--n-200);
+  background: var(--n-100);
+}
 .move-menu .ctx-danger { color: var(--danger); }
 .move-menu .ctx-danger:hover { background: var(--danger-soft); color: var(--danger); }
 .eside-list { min-height: 120px; }

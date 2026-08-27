@@ -303,9 +303,13 @@ async function paintEdSide(currentId) {
   const folderList = [...folders(), ...[...known].filter((f) => !folders().includes(f))];
   const closedSet = collapsed();
 
+  // Every diagram row leads with a small rink glyph: rows of bare text gave
+  // the eye nothing to land on, and the glyph also separates a diagram from
+  // a folder at a glance (2026-08-27, Tony's call).
+  const DOC_ICON = '<svg class="eside-doc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="6.5" width="18" height="11" rx="5"/><path d="M12 6.5v11"/></svg>';
   const row = (d) => `
     <div class="eside-row${d.id === currentId ? ' on' : ''}" data-open="${d.id}" draggable="true" tabindex="0">
-      <span class="eside-name">${esc(d.name || 'Untitled Diagram')}</span>
+      ${DOC_ICON}<span class="eside-name">${esc(d.name || 'Untitled Diagram')}</span>
     </div>`;
   const loose = drills.filter((d) => !(d.folder || ''));
   side.innerHTML = `
