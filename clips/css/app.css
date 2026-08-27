@@ -13,7 +13,7 @@
 .clib-recents { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 6px; }
 .recent-card {
   position: relative; flex-shrink: 0; text-align: left;
-  border: 1px solid var(--edge); border-radius: var(--r-md);
+  border: 1px solid var(--edge); border-radius: 16px;
   background: var(--cloud); padding: 13px 38px 13px 15px; min-width: 200px;
   box-shadow: var(--shadow-card);
   transition: box-shadow var(--dur) ease, border-color var(--dur) ease, transform var(--dur) ease;
@@ -32,22 +32,27 @@
    horizontal room. */
 .clib-browser {
   display: flex; flex-direction: column; gap: 3px;
-  background: var(--cloud); border: 1px solid var(--edge); border-radius: var(--r-lg);
+  background: var(--cloud); border: 1px solid var(--edge); border-radius: 16px;
   box-shadow: var(--shadow-card); padding: 10px;
 }
 .clib-tools { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; }
 #clibSearch {
-  flex: 0 1 320px; min-width: 160px; height: 34px; padding: 0 12px; font: inherit; font-size: 13px;
-  border: 1px solid var(--edge); border-radius: var(--r-sm); outline: none; background: var(--cloud);
+  flex: 0 1 320px; min-width: 160px; height: 34px; padding: 0 15px; font: inherit; font-size: 13px;
+  border: none; border-radius: 999px; background: var(--field);
+  box-shadow: inset 0 0 0 2px transparent;
+  transition: box-shadow var(--dur) ease;
 }
-#clibSearch:focus { border-color: var(--a-500); box-shadow: var(--ring); }
+#clibSearch::placeholder { color: var(--soft); }
+#clibSearch:hover:not(:focus) { box-shadow: var(--field-ring-hover); }
+#clibSearch:focus { outline: none; box-shadow: var(--field-ring-focus); }
 #clibScope {
   height: 34px; font: inherit; font-size: 12.5px; color: var(--graphite);
-  border: 1px solid var(--edge); border-radius: var(--r-sm); background: var(--cloud); padding: 0 6px;
-  transition: border-color var(--dur) ease, box-shadow var(--dur) ease;
+  border: 1px solid var(--edge); border-radius: var(--r-md); background: var(--cloud); padding: 0 8px;
+  box-shadow: var(--shadow-card);
+  transition: border-color var(--dur) ease, background var(--dur) ease, box-shadow var(--dur) ease;
 }
-#clibScope:hover { border-color: var(--n-300); }
-#clibScope:focus { outline: none; border-color: var(--a-500); box-shadow: var(--ring); }
+#clibScope:hover { border-color: var(--n-300); background: var(--n-100); }
+#clibScope:focus { outline: none; border-color: var(--n-400); }
 .clib-row {
   display: flex; align-items: center; gap: 11px; text-align: left;
   border: none; background: none; border-radius: var(--r-sm);
@@ -97,9 +102,13 @@
 .dbx-row { display: flex; gap: 10px; flex-wrap: wrap; }
 #dbxKey {
   flex: 1; min-width: 200px; height: 38px; padding: 0 12px;
-  border: 1px solid var(--edge); border-radius: var(--r-sm); outline: none;
+  border: none; border-radius: var(--r-md); background: var(--field);
+  box-shadow: inset 0 0 0 2px transparent;
+  transition: box-shadow var(--dur) ease;
 }
-#dbxKey:focus { border-color: var(--a-500); box-shadow: var(--ring); }
+#dbxKey::placeholder { color: var(--soft); }
+#dbxKey:hover:not(:focus) { box-shadow: var(--field-ring-hover); }
+#dbxKey:focus { outline: none; box-shadow: var(--field-ring-focus); }
 
 .reopen { max-width: 480px; margin: 10vh auto; text-align: center; padding: 0 20px; }
 .reopen h2 { font-size: 20px; }
@@ -174,10 +183,14 @@
   background: var(--cloud);
 }
 #vpLogSearch {
-  flex: 1; min-width: 0; height: 26px; padding: 0 8px; font-size: 12px;
-  border: 1px solid var(--edge); border-radius: 6px; outline: none; background: var(--cloud);
+  flex: 1; min-width: 0; height: 26px; padding: 0 10px; font-size: 12px;
+  border: none; border-radius: 999px; background: var(--field);
+  box-shadow: inset 0 0 0 2px transparent;
+  transition: box-shadow var(--dur) ease;
 }
-#vpLogSearch:focus { border-color: var(--a-500); box-shadow: var(--ring); }
+#vpLogSearch::placeholder { color: var(--soft); }
+#vpLogSearch:hover:not(:focus) { box-shadow: var(--field-ring-hover); }
+#vpLogSearch:focus { outline: none; box-shadow: var(--field-ring-focus); }
 .log-head select {
   height: 26px; max-width: 84px; font: inherit; font-size: 11.5px;
   border: 1px solid var(--edge); border-radius: 6px; background: var(--cloud);
@@ -186,12 +199,16 @@
 .log-count { color: var(--soft); font-size: 10.5px; white-space: nowrap; padding: 0 2px; }
 .log-list { flex: 1; overflow-y: auto; }
 /* Column headers, the table's own. Sticky so a long log keeps its labels. */
+/* The BoardUI table header: n-100 surface, hairline top and bottom, quiet
+   medium type in n-400 - no uppercase, no tracking. */
 .log-cols {
-  display: flex; gap: 8px; padding: 4px 10px;
+  display: flex; gap: 8px; padding: 6px 10px;
   position: sticky; top: 0; z-index: 1;
-  background: var(--sunken); border-bottom: 1px solid var(--edge);
-  font-size: 9.5px; font-weight: 600; letter-spacing: 0.07em;
-  text-transform: uppercase; color: var(--soft);
+  background: var(--sunken);
+  border-top: 1px solid var(--edge); border-bottom: 1px solid var(--edge);
+  font-size: 11.5px; font-weight: 500;
+  text-transform: none; letter-spacing: 0;
+  color: var(--soft);
 }
 .log-cols .c-time { width: 58px; flex-shrink: 0; }
 /* ALTERNATING ROWS (Tony's ask, mChapters' own look): the stripe is what
@@ -204,7 +221,7 @@
 }
 .log-row:nth-child(even) { background: var(--sunken); }
 .log-row:hover { background: var(--n-200); color: var(--ink); }
-.log-row.on { background: var(--a-600); color: #fff; }
+.log-row.on { background-image: var(--grad-primary); color: #fff; box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.18); }
 .log-row.on .log-time, .log-row.on .tag-chip { color: rgba(255,255,255,.78); }
 .log-row.on .tag-chip { background: rgba(255,255,255,.14); border-color: transparent; }
 .log-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--c); flex-shrink: 0; }
@@ -409,7 +426,7 @@
   display: flex; flex-direction: column; gap: 4px;
   background: var(--cloud);
   border: 1px solid var(--edge);
-  border-radius: var(--r-lg);
+  border-radius: 16px;
   box-shadow: var(--shadow-card);
   padding: 6px;
 }
@@ -447,16 +464,18 @@
 
 .pe-label, .pe-key, .pe-num {
   height: 30px; min-width: 0; width: 100%;
-  padding: 0 9px;
+  padding: 0 10px;
   font: inherit; font-size: 13px;
-  border: 1px solid var(--edge);
+  border: none;
   border-radius: var(--r-sm);
-  background: var(--cloud);
+  background: var(--field);
   color: var(--ink);
-  transition: border-color var(--dur) ease, box-shadow var(--dur) ease;
+  box-shadow: inset 0 0 0 2px transparent;
+  transition: box-shadow var(--dur) ease;
 }
 .pe-label::placeholder, .pe-key::placeholder { color: var(--soft); }
-.pe-label:focus, .pe-key:focus, .pe-num:focus { border-color: var(--a-500); box-shadow: var(--ring); }
+.pe-label:hover:not(:focus), .pe-key:hover:not(:focus), .pe-num:hover:not(:focus) { box-shadow: var(--field-ring-hover); }
+.pe-label:focus, .pe-key:focus, .pe-num:focus { outline: none; box-shadow: var(--field-ring-focus); }
 .pe-key, .pe-num { text-align: center; padding: 0 4px; font-variant-numeric: tabular-nums; }
 .pe-key { text-transform: lowercase; font-weight: 600; }
 
@@ -491,7 +510,7 @@
   padding: 10px;
   background: var(--cloud);
   border: 1px solid var(--edge);
-  border-radius: var(--r-md);
+  border-radius: 16px;
   box-shadow: var(--shadow-dropdown);
 }
 .pe-pop[hidden] { display: none; }
@@ -600,12 +619,14 @@
 #emTo {
   width: 100%; height: 36px; padding: 0 12px;
   font: inherit; font-size: 13px;
-  border: 1px solid var(--edge); border-radius: var(--r-sm);
-  background: var(--cloud); color: var(--ink);
-  transition: border-color var(--dur) ease, box-shadow var(--dur) ease;
+  border: none; border-radius: var(--r-md);
+  background: var(--field); color: var(--ink);
+  box-shadow: inset 0 0 0 2px transparent;
+  transition: box-shadow var(--dur) ease;
 }
 #emTo::placeholder { color: var(--soft); }
-#emTo:focus { outline: none; border-color: var(--a-500); box-shadow: var(--ring); }
+#emTo:hover:not(:focus) { box-shadow: var(--field-ring-hover); }
+#emTo:focus { outline: none; box-shadow: var(--field-ring-focus); }
 
 /* A game can hold dozens of clips, so this list has to be bounded and
    scroll rather than push the dialog past the bottom of the screen. */
@@ -613,9 +634,9 @@
   max-height: min(46dvh, 340px);
   overflow-y: auto;
   margin-top: 12px;
-  padding: 5px;
+  padding: 6px;
   border: 1px solid var(--edge);
-  border-radius: var(--r-md);
+  border-radius: 12px;
   background: var(--n-50);
   gap: 3px;
 }

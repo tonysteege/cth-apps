@@ -312,6 +312,26 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
 
 ## Design system rules (suite-wide)
 
+- **Component recipes are BoardUI's own** (2026-08-26, full-fidelity pass,
+  taken from the cth-boardui-starter source, not eyeballed):
+  - INPUTS ARE FILLED, never outlined: n-200 surface (`--field`), no
+    border, a 2px inset ring - transparent at rest, n-300 on hover, n-400
+    on focus (`.bui-field` recipe / the per-field copies of it). Search
+    fields are fully rounded pills. The ACCENT ring is reserved for
+    keyboard `:focus-visible`; BoardUI does not focus inputs in blue.
+  - SELECTED NAV is the accent gradient pill: `--grad-primary` fill, white
+    text/glyph, `--shadow-nav` (0 0 0 1px accent-500 + inset white top
+    highlight). Used by `.eside-row.on`, `.tb-btn.on`, `.log-row.on`.
+  - SIDEBARS FLOAT: the editor tree (`.ed-side`) is a rounded-24 n-100
+    panel with a 1px white border and `--shadow-side` (the Figma
+    "Background/Sidebar Elevation" shadow, copied 1:1), except under 860px
+    where the overlay drawer flattens it.
+  - PANELS AND MENUS are radius 16 with 10px padding and 10px-radius
+    items; sheets are radius 20; cards and list containers are radius 16.
+  - TABLE HEADERS (`.log-cols`) are the BoardUI th: n-100 surface,
+    hairline top and bottom, quiet 500-weight text in n-400, no uppercase.
+  - Buttons: medium is 36px / radius 10 / shadow-card; secondary hovers to
+    n-100 bg + n-300 border, active n-200 + n-400, press scale(0.98).
 - **Type ramp.** Chrome tops out at 600 (400 body / 500 labels / 600
   headings). 700 is used only for SLIDE CONTENT, which is read across a
   room. 800 is NOT in the BoardUI ramp and survives in exactly four places,

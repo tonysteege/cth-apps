@@ -17,16 +17,20 @@ body.dark { background: #0b0b0b; }
 .ph > * { max-width: 860px; }
 .ph-open { display: flex; gap: 10px; flex-wrap: wrap; }
 #phUrl {
-  flex: 1; min-width: 240px; height: 42px; padding: 0 14px;
-  border: 1px solid var(--edge); border-radius: var(--r-sm); outline: none; font-size: 14px;
+  flex: 1; min-width: 240px; height: 42px; padding: 0 16px;
+  border: none; border-radius: var(--r-md); background: var(--field);
+  box-shadow: inset 0 0 0 2px transparent; font-size: 14px;
+  transition: box-shadow var(--dur) ease;
 }
-#phUrl:focus { border-color: var(--a-500); box-shadow: var(--ring); }
+#phUrl::placeholder { color: var(--soft); }
+#phUrl:hover:not(:focus) { box-shadow: var(--field-ring-hover); }
+#phUrl:focus { outline: none; box-shadow: var(--field-ring-focus); }
 .ph-title {
   font-size: 11px; font-weight: 600; text-transform: uppercase;
   letter-spacing: .09em; color: var(--soft); margin: 26px 4px 10px;
 }
 .ph-recents { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 6px; }
-.ph-card { border: 1px solid var(--edge); border-radius: var(--r-lg); padding: 18px 22px; box-shadow: var(--shadow-card); background: var(--cloud); }
+.ph-card { border: 1px solid var(--edge); border-radius: 16px; padding: 18px 22px; box-shadow: var(--shadow-card); background: var(--cloud); }
 .ph-card p { color: var(--mist); line-height: 1.6; font-size: 13.5px; margin: 0 0 12px; }
 .ph-card p:last-child { margin: 0; }
 .ph-formula {

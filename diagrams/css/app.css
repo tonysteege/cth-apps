@@ -70,7 +70,34 @@
 
   --dur: 150ms;
   --ring: 0 0 0 3px rgba(43, 127, 255, 0.18);
+
+  /* BoardUI component recipes (2026-08-26, full-fidelity pass):
+     - nav-selected: the ring + inner top highlight under the accent
+       gradient a selected nav item wears (Figma "Sidebar selected").
+     - sidebar: the "Background/Sidebar Elevation" shadow, copied 1:1.
+     - field: BoardUI inputs are FILLED - n-200 surface, no border, a 2px
+       inset ring that is transparent at rest, n-300 on hover, n-400 on
+       focus. The accent ring stays reserved for keyboard focus-visible. */
+  --shadow-nav: 0 0 0 1px var(--a-500), inset 0 1px 0 0 rgba(255, 255, 255, 0.25);
+  --shadow-side:
+    0 1px 0 0 rgb(0 0 0 / 0.02),
+    0 1px 12px 0 rgb(0 0 0 / 0.06),
+    0 0 1px 0 rgb(0 0 0 / 0.32);
+  --field: var(--n-200);
+  --field-ring-hover: inset 0 0 0 2px var(--n-300);
+  --field-ring-focus: inset 0 0 0 2px var(--n-400);
 }
+
+/* The filled BoardUI text field, shared by every search and dialog input. */
+.bui-field {
+  border: none;
+  background: var(--field);
+  box-shadow: inset 0 0 0 2px transparent;
+  transition: background var(--dur) ease, box-shadow var(--dur) ease, color var(--dur) ease;
+}
+.bui-field::placeholder { color: var(--soft); }
+.bui-field:hover:not(:focus) { box-shadow: var(--field-ring-hover); }
+.bui-field:focus { outline: none; box-shadow: var(--field-ring-focus); }
 
 * { box-sizing: border-box; }
 html, body { height: 100%; }
@@ -117,8 +144,8 @@ input:focus, select:focus, textarea:focus { outline: none; }
               transform 420ms cubic-bezier(0.4, 0, 0.2, 1);
   white-space: nowrap;
 }
-.btn:hover { border-color: var(--n-300); color: var(--ink); background: var(--n-50); }
-.btn:active { transform: scale(0.98); border-color: var(--n-400); transition-duration: var(--dur), var(--dur), var(--dur), var(--dur), 220ms; }
+.btn:hover { border-color: var(--n-300); color: var(--ink); background: var(--n-100); }
+.btn:active { transform: scale(0.98); border-color: var(--n-400); background: var(--n-200); transition-duration: var(--dur), var(--dur), var(--dur), var(--dur), 220ms; }
 
 /* Primary action - the BoardUI gradient CTA. The hover gradient lives on a
    ::before overlay so default→hover fades instead of snapping. */
@@ -179,23 +206,34 @@ input:focus, select:focus, textarea:focus { outline: none; }
 #libSearch {
   height: 36px;
   width: min(240px, 44vw);
-  padding: 0 12px;
-  border: 1px solid var(--edge);
-  border-radius: var(--r-sm);
-  background: var(--cloud);
-  box-shadow: inset 0 1px 1px 0 rgb(0 0 0 / 0.03);
-  transition: border-color var(--dur) ease, box-shadow var(--dur) ease;
+  padding: 0 15px;
+  border: none;
+  border-radius: 999px;
+  background: var(--field);
+  box-shadow: inset 0 0 0 2px transparent;
+  transition: box-shadow var(--dur) ease;
 }
 #libSearch::placeholder { color: var(--soft); }
-#libSearch:focus { border-color: var(--a-500); box-shadow: var(--ring); }
+#libSearch:hover:not(:focus) { box-shadow: var(--field-ring-hover); }
+#libSearch:focus { outline: none; box-shadow: var(--field-ring-focus); }
 
 .lib-body { flex: 1; display: flex; min-height: 0; background: var(--page); }
+/* The BoardUI sidebar: a floating rounded panel with the template's own
+   elevation, not a flush column. */
 .lib-side {
-  width: 230px;
+  width: 240px;
   flex-shrink: 0;
-  padding: 22px 14px 22px clamp(16px, 3vw, 40px);
+  align-self: flex-start;
+  position: sticky;
+  top: 16px;
+  max-height: calc(100dvh - 120px);
+  overflow-y: auto;
+  margin: 16px 4px 16px clamp(12px, 2vw, 24px);
+  padding: 14px 12px;
   background: var(--cloud);
-  border-right: 1px solid var(--edge);
+  border: 1px solid var(--cloud);
+  border-radius: 24px;
+  box-shadow: var(--shadow-side);
 }
 .side-title {
   font-size: 11px;
@@ -221,10 +259,16 @@ input:focus, select:focus, textarea:focus { outline: none; }
   transition: background var(--dur) ease, color var(--dur) ease;
 }
 .side-row:hover { background: var(--sunken); color: var(--ink); }
-.side-row.on { background: var(--a-50); color: var(--a-700); font-weight: 600; box-shadow: inset 0 0 0 1px var(--a-200); }
+.side-row.on {
+  background-image: var(--grad-primary);
+  color: #fff;
+  font-weight: 500;
+  box-shadow: var(--shadow-nav);
+}
 .side-row.side-drop { border-color: var(--select); background: var(--select-soft); }
 .side-ic { width: 16px; height: 16px; flex-shrink: 0; color: var(--soft); }
-.side-row.on .side-ic { color: var(--a-600); }
+.side-row.on .side-ic { color: #fff; }
+.side-row.on .side-count { color: rgba(255, 255, 255, 0.72); }
 .side-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .side-count { color: var(--soft); font-size: 12px; font-variant-numeric: tabular-nums; }
 .side-tools { display: none; gap: 2px; }
@@ -247,13 +291,13 @@ input:focus, select:focus, textarea:focus { outline: none; }
 .side-new:hover { border-color: var(--n-400); color: var(--ink); }
 .side-input {
   width: 100%;
-  border: 1px solid var(--a-500);
-  border-radius: 6px;
-  padding: 3px 7px;
+  border: none;
+  border-radius: 8px;
+  padding: 4px 8px;
   font: inherit;
   outline: none;
-  background: var(--cloud);
-  box-shadow: var(--ring);
+  background: var(--field);
+  box-shadow: var(--field-ring-focus);
 }
 .side-editing { display: block; }
 
@@ -267,15 +311,15 @@ input:focus, select:focus, textarea:focus { outline: none; }
   overflow-y: auto;
   background: var(--cloud);
   border: 1px solid var(--edge);
-  border-radius: var(--r-md);
+  border-radius: 16px;
   box-shadow: var(--shadow-dropdown);
-  padding: 5px;
+  padding: 10px;
 }
 .move-menu button {
   text-align: left;
   border: none;
   background: none;
-  border-radius: 7px;
+  border-radius: 10px;
   padding: 8px 10px;
   color: var(--n-700);
   white-space: nowrap;
@@ -295,7 +339,7 @@ input:focus, select:focus, textarea:focus { outline: none; }
 .card {
   background: var(--cloud);
   border: 1px solid var(--edge);
-  border-radius: var(--r-lg);
+  border-radius: 16px;
   overflow: hidden;
   box-shadow: var(--shadow-card);
   cursor: pointer;
@@ -390,7 +434,7 @@ input:focus, select:focus, textarea:focus { outline: none; }
 }
 .ed-title::placeholder { font-weight: 400; color: var(--soft); }
 .ed-title:hover { border-color: var(--edge); }
-.ed-title:focus { border-color: var(--a-500); background: var(--cloud); box-shadow: var(--ring); }
+.ed-title:focus { border-color: transparent; background: var(--field); box-shadow: var(--field-ring-focus); }
 .ed-status { color: var(--soft); font-size: 12px; min-width: 52px; text-align: center; }
 .ed-head-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ed-sep { width: 1px; height: 20px; background: var(--edge); margin: 0 2px; }
@@ -493,27 +537,38 @@ input:focus, select:focus, textarea:focus { outline: none; }
 
 /* ---------------------------------------------- in-editor diagram tree */
 .ed-main { flex: 1; display: flex; min-height: 0; min-width: 0; }
+/* The editor's file tree, drawn as the BoardUI dashboard sidebar: a
+   floating rounded panel (n-100 surface, 1px white border, the template's
+   own elevation) instead of a flush column. Below 860px the overlay-drawer
+   media query takes over and flattens it back to a full-height sheet. */
 .ed-side {
-  width: 220px;
+  width: 232px;
   flex-shrink: 0;
   overflow-y: auto;
-  padding: 14px 10px 90px;
-  background: var(--cloud);
-  border-right: 1px solid var(--edge-soft);
+  margin: 14px 0 14px 14px;
+  padding: 12px 10px 90px;
+  background: var(--n-100);
+  border: 1px solid var(--cloud);
+  border-radius: 24px;
+  box-shadow: var(--shadow-side);
 }
+.ed-side .eside-row:hover { background: var(--n-200); }
+.ed-side .eside-folder:hover { background: var(--n-200); }
 #esideSearch {
   width: 100%;
   height: 32px;
-  padding: 0 10px;
-  border: 1px solid var(--edge);
-  border-radius: var(--r-sm);
-  background: var(--cloud);
+  padding: 0 12px;
+  border: none;
+  border-radius: 999px;
+  background: var(--field);
+  box-shadow: inset 0 0 0 2px transparent;
   margin-bottom: 8px;
   font-size: 13px;
-  transition: border-color var(--dur) ease, box-shadow var(--dur) ease;
+  transition: box-shadow var(--dur) ease;
 }
 #esideSearch::placeholder { color: var(--soft); }
-#esideSearch:focus { border-color: var(--a-500); box-shadow: var(--ring); }
+#esideSearch:hover:not(:focus) { box-shadow: var(--field-ring-hover); }
+#esideSearch:focus { outline: none; box-shadow: var(--field-ring-focus); }
 .eside-new {
   width: 100%;
   text-align: left;
@@ -548,7 +603,12 @@ input:focus, select:focus, textarea:focus { outline: none; }
   transition: background var(--dur) ease, color var(--dur) ease;
 }
 .eside-row:hover { background: var(--sunken); color: var(--ink); }
-.eside-row.on { background: var(--a-50); color: var(--a-700); font-weight: 600; box-shadow: inset 0 0 0 1px var(--a-200); }
+.eside-row.on {
+  background-image: var(--grad-primary);
+  color: #fff;
+  font-weight: 500;
+  box-shadow: var(--shadow-nav);
+}
 .eside-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .eside-empty { color: var(--soft); font-size: 12px; padding: 4px 10px; }
 
@@ -579,12 +639,12 @@ input:focus, select:focus, textarea:focus { outline: none; }
   position: fixed;
   z-index: 70;
   min-width: 190px;
-  padding: 5px;
+  padding: 10px;
   background: rgba(255, 255, 255, 0.97);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border: 1px solid var(--edge);
-  border-radius: 12px;
+  border-radius: 16px;
   box-shadow: var(--shadow-dropdown);
 }
 .ctx-item {
@@ -592,9 +652,9 @@ input:focus, select:focus, textarea:focus { outline: none; }
   align-items: center;
   gap: 9px;
   width: 100%;
-  padding: 7px 9px;
+  padding: 8px 10px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 10px;
   background: none;
   font-size: 13px;
   color: var(--ink);
@@ -703,13 +763,15 @@ input:focus, select:focus, textarea:focus { outline: none; }
 .tb-btn svg { width: 20px; height: 20px; stroke-width: 1.8; }
 .tb-btn img { width: 25px; height: 25px; object-fit: contain; }
 .tb-btn:hover { background: var(--sunken); color: var(--ink); }
-/* Active tool: BoardUI ghost-accent chip with an accent keyline. */
+/* Active tool: BoardUI's selected nav item - the accent gradient fill with
+   its ring and inner top highlight, white glyph. */
 .tb-btn.on {
-  background: var(--a-100);
+  background-image: var(--grad-primary);
   border-color: transparent;
-  color: var(--a-700);
-  box-shadow: inset 0 0 0 1px var(--a-300);
+  color: #fff;
+  box-shadow: var(--shadow-nav);
 }
+.tb-btn.on img { filter: invert(1) brightness(1.7); }
 .tb-btn:disabled { opacity: .35; cursor: default; background: transparent; }
 .tb-word { width: auto; padding: 0 12px; font-size: 12.5px; font-weight: 600; }
 .tb-small svg { width: 18px; height: 18px; }
@@ -723,7 +785,7 @@ input:focus, select:focus, textarea:focus { outline: none; }
   color: var(--soft);
   pointer-events: none;
 }
-.tb-btn.on .tb-key { color: var(--a-500); }
+.tb-btn.on .tb-key { color: rgba(255, 255, 255, 0.72); }
 
 .tb-player {
   border-radius: 50%;
@@ -779,7 +841,7 @@ input:focus, select:focus, textarea:focus { outline: none; }
 }
 .sheet {
   background: var(--cloud);
-  border-radius: var(--r-lg);
+  border-radius: 20px;
   box-shadow: 0 10px 10px -5px rgb(0 0 0 / 0.04), 0 20px 25px -5px rgb(0 0 0 / 0.10), 0 0 1px 0 rgb(0 0 0 / 0.24);
   padding: 24px 26px;
   width: min(420px, calc(100vw - 40px));
@@ -796,7 +858,7 @@ input:focus, select:focus, textarea:focus { outline: none; }
   max-height: 55vh;
   overflow-y: auto;
 }
-.keys-k { font-size: 12px; font-weight: 600; color: var(--n-600); background: var(--n-100); border: 1px solid var(--edge); border-bottom-width: 2px; border-radius: 6px; padding: 3px 8px; justify-self: start; white-space: nowrap; }
+.keys-k { font-size: 12px; font-weight: 600; color: var(--n-500); background: var(--n-200); border: none; border-radius: 6px; padding: 3px 8px; justify-self: start; white-space: nowrap; }
 .keys-v { color: var(--mist); align-self: center; }
 
 .rink-list { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
@@ -823,13 +885,15 @@ input:focus, select:focus, textarea:focus { outline: none; }
 @media (max-width: 700px) {
   .lib-body { flex-direction: column; }
   .lib-side {
-    width: 100%;
+    width: auto;
     display: flex;
     gap: 6px;
     overflow-x: auto;
-    padding: 12px clamp(16px, 3vw, 40px) 10px;
-    border-right: none;
-    border-bottom: 1px solid var(--edge);
+    position: static;
+    max-height: none;
+    margin: 10px clamp(12px, 3vw, 24px) 0;
+    padding: 8px;
+    border-radius: 18px;
     scrollbar-width: none;
   }
   .lib-side::-webkit-scrollbar { display: none; }
@@ -874,14 +938,16 @@ input:focus, select:focus, textarea:focus { outline: none; }
 .dlib-card-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .dlib-card-name { display: block; font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #dlibSearch {
-  height: 36px; width: min(320px, 60vw); padding: 0 12px; font: inherit; font-size: 13px;
-  border: 1px solid var(--edge); border-radius: var(--r-sm); background: var(--cloud);
+  height: 36px; width: min(320px, 60vw); padding: 0 15px; font: inherit; font-size: 13px;
+  border: none; border-radius: 999px; background: var(--field);
+  box-shadow: inset 0 0 0 2px transparent;
   margin-bottom: 10px;
-  transition: border-color var(--dur) ease, box-shadow var(--dur) ease;
+  transition: box-shadow var(--dur) ease;
 }
 #dlibSearch::placeholder { color: var(--soft); }
-#dlibSearch:focus { border-color: var(--a-500); box-shadow: var(--ring); }
-.dlib-list { display: flex; flex-direction: column; background: var(--cloud); border: 1px solid var(--edge); border-radius: var(--r-lg); box-shadow: var(--shadow-card); padding: 6px; }
+#dlibSearch:hover:not(:focus) { box-shadow: var(--field-ring-hover); }
+#dlibSearch:focus { outline: none; box-shadow: var(--field-ring-focus); }
+.dlib-list { display: flex; flex-direction: column; background: var(--cloud); border: 1px solid var(--edge); border-radius: 16px; box-shadow: var(--shadow-card); padding: 6px; }
 .dlib-folder {
   display: flex; align-items: center; gap: 7px;
   font-weight: 600; font-size: 13px; color: var(--n-600); padding: 12px 8px 4px;
@@ -936,8 +1002,11 @@ input:focus, select:focus, textarea:focus { outline: none; }
     left: 0;
     z-index: 30;
     width: min(272px, 82vw);
+    margin: 0;
     background: var(--cloud);
+    border: none;
     border-right: 1px solid var(--edge);
+    border-radius: 0;
     box-shadow: var(--shadow-3);
   }
 }
