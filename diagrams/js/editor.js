@@ -304,15 +304,41 @@ function status(msg) {
   if (s) s.textContent = msg;
 }
 
-// SAVING IS MANUAL (Tony's call 2026-08-24). This used to start a 1.2s
-// autosave timer. Now an edit only raises the flag; the diagram is written
-// when Tony presses Save, hits Cmd+S, or confirms the leave prompt. Every
-// edit path calls this, so it is the single place the dirty state is set.
+// AUTOSAVE (Tony's call 2026-08-26, reversing the manual-save rule of
+// 2026-08-24). An edit raises the dirty flag and schedules the write; the
+// diagram saves itself once the edits stop. Save and Cmd+S still work and
+// still save immediately - autosave is a safety net, not a replacement.
+//
+// DEBOUNCED, deliberately, rather than a fixed interval: every drag step
+// calls markDirty, and a timer that fired mid-drag would run a full state
+// clone and a thumbnail render while the hand is still moving. Waiting for
+// a pause means the save lands between motions, where it costs nothing.
+// The manual-save era existed because a dead IndexedDB connection made
+// every write fail (hard rule 7); store.js now drops and retries that
+// handle, which is what makes an automatic write safe again.
+const AUTOSAVE_MS = 1000;
+let autoTimer = null;
+
+function cancelAutosave() {
+  if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
+}
+
+function scheduleAutosave() {
+  cancelAutosave();
+  autoTimer = setTimeout(() => {
+    autoTimer = null;
+    if (cur && cur.dirty) void saveNow();
+  }, AUTOSAVE_MS);
+}
+
+// Every edit path calls this, so it is the single place the dirty state is
+// set and the single place a save gets scheduled.
 function markDirty() {
   if (!cur) return;
   cur.dirty = true;
   status('Unsaved');
   if (hooks.onDirty) hooks.onDirty(true);
+  scheduleAutosave();
 }
 
 function setRinkBackground(n) {
@@ -374,6 +400,7 @@ export function frameInfo() {
 }
 
 export async function saveNow() {
+  cancelAutosave();
   if (!cur) return;
   if (!cur.dirty) { status('Saved'); return; }
   const c = cur; // the editor may close while this runs - never re-read cur
@@ -1859,9 +1886,10 @@ export async function closeEditor() {
   if (!cur) return;
   const c = cur;
   clearTimeout(c.timer);
-  // NO implicit save here. Saving is manual, and app.js has already asked
-  // Tony what to do with unsaved work before routing away. Saving anyway
-  // would make "Discard" a lie.
+  // Drop any pending autosave. NO implicit save here: app.js has already
+  // asked Tony what to do with unsaved work before routing away, and
+  // writing anyway would make "Discard" a lie.
+  cancelAutosave();
   cur = null;
   hooks = {};
   pointers.clear();

@@ -1,17 +1,20 @@
 // CTH Clips - app shell. Two views:
-//   Library (#/)        - videos from Dropbox /videos (folders + files),
-//                         recent tagged games, local-file fallback.
+//   Library (#/)        - videos from the CTH folder's /videos (folders +
+//                         files), recent tagged games, one-file fallback.
 //   Player  (#/v/<id>)  - the tagging workspace (player.js).
 //
-// Sharing is built around PERMANENT Dropbox links: every clip can become a
-// Notion-embeddable player URL, an email, or a real exported video file
-// landing back in Dropbox under /videos/exports.
+// The film lives in Tony's own cth folder on disk (2026-08-26, replacing
+// Dropbox). Exported clips and frames land back in /videos/exports. There
+// is no upload and no account: localfs.js holds one folder handle the
+// browser remembers, so a video opens as a real File - which is also the
+// fastest input the scrub engine has.
 
 import {
-  dbxConnected, dbxAppKey, dbxBeginAuth, dbxFinishAuth, dbxDisconnect,
-  dbxListFolder, dbxTempLink, dbxStreamLink, dbxUpload, dbxUploadProgress, dbxCreateFolder,
+  fsSupported, fsInit, fsConnect, fsReconnect, fsDisconnect,
+  fsConnected, fsRemembered, fsRootName,
+  fsListFolder, fsCreateFolder, fsGetFile, fsWrite, fsLabel,
   VIDEO_ROOT, EXPORT_ROOT,
-} from './dropbox.js';
+} from './localfs.js';
 import { listGames, getGame, putGame, deleteGame, getSettings, putSettings, uid } from './store.js';
 import {
   openPlayer, closePlayer, playClip, recordClip, grabFrame, fmtTime, clipName,
@@ -62,7 +65,10 @@ const libView = { q: '', scope: 'both' };
 async function ensureGame(path, name) {
   let g = await getGame(path);
   if (!g) {
-    g = { id: path, name: name.replace(/\.[^.]+$/, ''), path, source: 'dropbox', clips: [], freezes: [] };
+    // 'folder' joins 'dropbox' and 'local' as a source value; readers treat
+    // anything that is not 'local' as "resolve by path inside the folder",
+    // so libraries saved by the Dropbox build keep opening unchanged.
+    g = { id: path, name: name.replace(/\.[^.]+$/, ''), path, source: 'folder', clips: [], freezes: [] };
     await putGame(g);
   }
   return g;
@@ -83,8 +89,8 @@ async function showLibrary() {
       </div>
       <div class="lib-actions">
         <button class="btn" id="libLocal" title="Open A Video File From This Device (Marks Still Save)">Open File</button>
-        ${dbxConnected() ? '<button class="btn" id="libUpload" title="Upload A Clip To Dropbox - As-Is Or Compressed">Upload</button>' : ''}
-        ${dbxConnected() ? '<button class="btn" id="libDbxOut" title="Disconnect Dropbox">Dropbox Connected</button>' : ''}
+        ${fsConnected() ? '<button class="btn" id="libUpload" title="Copy A Video Into This Folder - As-Is Or Compressed">Add Video</button>' : ''}
+        ${fsConnected() ? `<button class="btn" id="libDbxOut" title="Choose A Different Folder">${esc(fsRootName())}</button>` : ''}
       </div>
     </header>
     <main class="clib">
@@ -98,8 +104,8 @@ async function showLibrary() {
               <span class="recent-del" data-forget="${esc(g.id)}" title="Forget This Video's Marks">&times;</span>
             </button>`).join('')}
         </div>` : ''}
-      <div class="clib-title">Dropbox &middot; ${esc(browsePath === VIDEO_ROOT ? 'videos' : browsePath.replace(VIDEO_ROOT + '/', 'videos/'))}</div>
-      ${dbxConnected() ? `
+      <div class="clib-title">${esc(fsRootName() || 'Folder')} &middot; ${esc(browsePath === VIDEO_ROOT ? 'videos' : browsePath.replace(VIDEO_ROOT + '/', 'videos/'))}</div>
+      ${fsConnected() ? `
       <div class="clib-tools">
         <input id="clibSearch" type="search" placeholder="Search Videos, Tags, Clips…" value="${esc(libView.q)}" autocomplete="off">
         <select id="clibScope" title="What The Search Looks Through">
@@ -107,7 +113,7 @@ async function showLibrary() {
           <option value="tags"${libView.scope === 'tags' ? ' selected' : ''}>Tags Only</option>
           <option value="clips"${libView.scope === 'clips' ? ' selected' : ''}>Clips Only</option>
         </select>
-        <button class="mini" id="clibNewFolder" title="Create A Folder Here - It Is A Real Dropbox Folder">New Folder</button>
+        <button class="mini" id="clibNewFolder" title="Create A Real Folder Here On Disk">New Folder</button>
       </div>` : ''}
       <div id="clibBrowser" class="clib-browser"><div class="clib-note">Loading…</div></div>
     </main>
@@ -127,7 +133,7 @@ async function showLibrary() {
       const name = raw.trim().replace(/[/\\]+/g, '-');
       if (!name) return;
       try {
-        await dbxCreateFolder(`${browsePath}/${name}`);
+        await fsCreateFolder(`${browsePath}/${name}`);
         toast(`Folder Created: ${name}`);
         await paintBrowser();
       } catch (e) { toast(e.message || 'Could Not Create The Folder', true); }
@@ -137,8 +143,8 @@ async function showLibrary() {
   const out = $('#libDbxOut');
   if (out) {
     out.onclick = async () => {
-      if (await confirmSheet({ title: 'Disconnect Dropbox?', body: 'Your marks stay saved here. Reconnect any time.', action: 'Disconnect' })) {
-        dbxDisconnect();
+      if (await confirmSheet({ title: 'Forget This Folder?', body: 'Your clips and tags stay saved here. You can choose a folder again any time.', action: 'Forget' })) {
+        void fsDisconnect().then(() => go());
         await showLibrary();
       }
     };
@@ -165,33 +171,49 @@ async function showLibrary() {
 async function paintBrowser() {
   const box = $('#clibBrowser');
   if (!box) return;
-  if (!dbxConnected()) {
+  if (!fsConnected()) {
+    const noApi = !fsSupported();
     box.innerHTML = `
       <div class="dbx-card">
-        <h2>Connect Dropbox</h2>
-        <p>Clips reads your game film from the <strong>videos</strong> folder of your Dropbox and writes exports to <strong>videos/exports</strong>. One-time setup:</p>
-        <ol>
-          <li>Create a (free) Dropbox app at <a href="https://www.dropbox.com/developers/apps/create" target="_blank" rel="noopener">dropbox.com/developers/apps</a>: choose Scoped Access, Full Dropbox, any name.</li>
-          <li>On the app's Settings tab, add both Redirect URIs:<br><code>https://apps.coachtonyhockey.com/clips/</code><br><code>http://localhost:8642/clips/</code></li>
-          <li>On the Permissions tab, tick: files.metadata.read, files.content.read, files.content.write, sharing.read, sharing.write. Submit.</li>
-          <li>Paste the App key below and press Connect.</li>
-        </ol>
-        <div class="dbx-row">
-          <input id="dbxKey" placeholder="Dropbox App Key" value="${esc(dbxAppKey())}" autocomplete="off">
-          <button class="btn btn-ink" id="dbxGo">Connect Dropbox</button>
-        </div>
+        <h2>${noApi ? 'Open Videos One At A Time' : (fsRemembered() ? 'Reconnect Your CTH Folder' : 'Choose Your CTH Folder')}</h2>
+        ${noApi ? `
+          <p>This browser cannot open a whole folder, so Clips will ask for one video at a time. Your clips and tags still save normally.</p>
+          <p class="ph-note">Chrome or Edge can open the folder once and remember it.</p>
+          <div class="dbx-row">
+            <button class="btn btn-ink" id="dbxGo">Open A Video</button>
+          </div>` : `
+          <p>Clips reads your game film straight from your own <strong>cth</strong> folder and writes exports back to <strong>videos/exports</strong>. Nothing is uploaded and nothing leaves this Mac.</p>
+          <ol>
+            <li>Press the button below.</li>
+            <li>Pick the <code>cth</code> folder in your home folder (the one holding <code>videos</code> and <code>diagrams</code>).</li>
+            <li>Choose Allow, and tick "allow on every visit" so it stays open.</li>
+          </ol>
+          <div class="dbx-row">
+            <button class="btn btn-ink" id="dbxGo">${fsRemembered() ? 'Reconnect Folder' : 'Choose Folder'}</button>
+            ${fsRemembered() ? '<button class="btn" id="dbxOther">Pick A Different Folder</button>' : ''}
+          </div>`}
       </div>`;
-    $('#dbxGo').onclick = () => {
-      const k = $('#dbxKey').value.trim();
-      if (!k) { toast('Paste The App Key First', true); return; }
-      void dbxBeginAuth(k);
+    $('#dbxGo').onclick = async () => {
+      if (noApi) { $('#libOpen')?.click(); return; }
+      try {
+        await (fsRemembered() ? fsReconnect() : fsConnect());
+        await go();
+      } catch (e) {
+        if (e && e.name === 'AbortError') return;
+        toast(e.message || 'Could Not Open That Folder', true);
+      }
+    };
+    const other = $('#dbxOther');
+    if (other) other.onclick = async () => {
+      try { await fsConnect(); await go(); }
+      catch (e) { if (e && e.name !== 'AbortError') toast(e.message || 'Could Not Open That Folder', true); }
     };
     return;
   }
   try {
-    const [{ folders, files, missing }, games] = await Promise.all([dbxListFolder(browsePath), listGames()]);
+    const [{ folders, files, missing }, games] = await Promise.all([fsListFolder(browsePath), listGames()]);
     if (missing) {
-      box.innerHTML = '<div class="clib-note">No "videos" Folder In Your Dropbox Yet - Create One And Drop Game Film In It.</div>';
+      box.innerHTML = `<div class="clib-note">No "videos" Folder In ${esc(fsRootName())} Yet - Create One And Drop Game Film In It.</div>`;
       return;
     }
     const byPath = new Map(games.map((g) => [g.id, g]));
@@ -208,7 +230,7 @@ async function paintBrowser() {
     const shownFiles = q ? files.filter((f) => has(f.name) || gameHit(byPath.get(f.path))) : files;
     // Search reaches the whole LIBRARY, not just the open folder: a tagged
     // game in another folder answers from its own records without a
-    // recursive Dropbox walk. Only tagged/opened videos can match here,
+    // recursive folder walk. Only tagged/opened videos can match here,
     // because those are the only ones the library has records for.
     const herePaths = new Set(files.map((f) => f.path));
     const elsewhere = q
@@ -301,7 +323,7 @@ async function paintBrowser() {
     });
   } catch (e) {
     console.error(e);
-    box.innerHTML = `<div class="clib-note">Dropbox Error: ${esc(e.message || 'Unknown')}. <button class="mini" id="dbxRetry">Retry</button></div>`;
+    box.innerHTML = `<div class="clib-note">Folder Error: ${esc(e.message || 'Unknown')}. <button class="mini" id="dbxRetry">Retry</button></div>`;
     $('#dbxRetry').onclick = () => void paintBrowser();
   }
 }
@@ -351,10 +373,15 @@ async function showPlayer(id) {
     }
   } else {
     try {
-      src = await dbxTempLink(game.path);
+      // A real File, so scrubsource.js reads frames with File.slice - its
+      // fast path - instead of range requests over the network.
+      const f = await fsGetFile(game.path);
+      localFiles.set(id, f);
+      src = URL.createObjectURL(f);
+      localUrls.set(id, src);
     } catch (e) {
       console.error(e);
-      toast(`Could Not Open From Dropbox: ${e.message || ''}`, true);
+      toast(`Could Not Open That Video: ${e.message || ''}`, true);
       location.hash = '#/';
       return;
     }
@@ -414,8 +441,8 @@ async function showPlayer(id) {
   wirePanels();
 
   await openPlayer(game, src, {
-    // The decoder slices bytes off the File for a local game; a Dropbox game
-    // range-requests the same temp link the <video> streams from.
+    // Every video now arrives as a real File, so the decoder always takes
+    // its fast path: bytes sliced straight off the file, no range requests.
     scrubFile: localFiles.get(id) || null,
     onShare: (clip, anchor) => openShareMenu(game, clip, anchor),
     onAnnotate: (freeze) => {
@@ -559,7 +586,7 @@ function openUploadSheet() {
   wrap.innerHTML = `
     <div class="sheet" role="dialog" aria-modal="true">
       <h3>Upload A Clip</h3>
-      <p>Lands in Dropbox <strong>${esc(destLabel)}</strong> - the folder open in the tree. Compressed matches the CTH Compressor: H.264, 1080p, about 4 Mbps.</p>
+      <p>Lands in <strong>${esc(destLabel)}</strong> - the folder open in the tree. Compressed matches the CTH Compressor: H.264, 1080p, about 4 Mbps.</p>
       <div class="up-row">
         <button class="btn" id="upPick">Choose Video…</button>
         <span class="up-name" id="upName">No File Chosen</span>
@@ -618,7 +645,7 @@ function openUploadSheet() {
       }
       const base = q === 'original' ? 0 : 0.7;
       const span = 1 - base;
-      await dbxUploadProgress(`${browsePath}/${name}`, blob, (p) => { pct(base + p * span); say(`Uploading… ${Math.round(p * 100)}%`); });
+      await fsWrite(`${browsePath}/${name}`, blob, { onProgress: (p) => { pct(base + p * span); say(`Saving… ${Math.round(p * 100)}%`); } });
       pct(1);
       toast(`Uploaded: ${destLabel}/${name}`);
       busy = false;
@@ -652,9 +679,12 @@ function menu(anchor, items) {
   m.querySelectorAll('[data-i]').forEach((b) => { b.onclick = () => { close(); items[Number(b.dataset.i)][1](); }; });
 }
 
+// A shareable link needs a URL other people's browsers can reach. A file in
+// Tony's own folder has none, so link sharing is only possible for a video
+// that already sits at a public URL (an external link saved on the record).
 async function clipEmbedUrl(game, clip) {
-  if (game.source !== 'dropbox') throw new Error('Sharing Needs The Video In Dropbox');
-  const stream = await dbxStreamLink(game.path);
+  const stream = game.streamUrl || (/^https?:/i.test(game.path || '') ? game.path : '');
+  if (!stream) throw new Error('Local Files Cannot Be Linked - Export The Clip And Send The File');
   const u = new URL('embed.html', location.href);
   u.hash = `v=${encodeURIComponent(stream)}&in=${clip.in.toFixed(2)}&out=${clip.out.toFixed(2)}&t=${encodeURIComponent(clip.name || clip.label)}`;
   return u.toString();
@@ -679,7 +709,7 @@ function openShareMenu(game, clip, anchor) {
       } catch (e) { toast(e.message, true); }
     }],
     ['Email This Clip', () => openEmailSheet(game, [clip.id])],
-    ['Export Video To Dropbox', () => void exportClipVideo(game, clip)],
+    ['Export Video To Folder', () => void exportClipVideo(game, clip)],
   ]);
 }
 
@@ -688,15 +718,15 @@ async function exportClipVideo(game, clip) {
     toast('Recording The Clip In Real Time - Leave This Tab Front And Center');
     const { blob, ext } = await recordClip(clip, (p) => status?.(p));
     const name = `${stem(game.name)}-${stem(clip.name || clip.label)}-${fmtTime(clip.in).replace(':', 'm')}s.${ext}`;
-    if (game.source === 'dropbox') {
-      const meta = await dbxUpload(`${EXPORT_ROOT}/${name}`, blob);
+    if (game.source !== 'local') {
+      const meta = await fsWrite(`${EXPORT_ROOT}/${name}`, blob);
       // The exported file gets its own library record carrying the clip's
       // tags (plus its label), so the file tree shows what the export IS
       // without opening it. path_lower is the id the tree rows use.
-      const eg = await ensureGame(meta.path_lower, meta.name || name);
+      const eg = await ensureGame(meta.path, meta.name || name);
       eg.videoTags = [...new Set([...(eg.videoTags || []), normTag(clip.label), ...clip.tags.map(normTag)])].filter(Boolean);
       await putGame(eg);
-      toast(`Exported To Dropbox: videos/exports/${name}`);
+      toast(`Exported To ${fsLabel(EXPORT_ROOT)}/${name}`);
     } else {
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -713,10 +743,10 @@ async function exportClipVideo(game, clip) {
 async function exportFrame(game, canvas, freeze) {
   const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
   const name = `${stem(game.name)}-frame-${fmtTime(freeze.t).replace(':', 'm')}s.png`;
-  if (game.source === 'dropbox' && dbxConnected()) {
+  if (game.source !== 'local' && fsConnected()) {
     try {
-      await dbxUpload(`${EXPORT_ROOT}/${name}`, blob);
-      toast(`Frame Saved To Dropbox: videos/exports/${name}`);
+      await fsWrite(`${EXPORT_ROOT}/${name}`, blob);
+      toast(`Frame Saved To ${fsLabel(EXPORT_ROOT)}/${name}`);
       return;
     } catch (e) { console.error(e); }
   }
@@ -829,7 +859,6 @@ const status = null; // recordClip progress hook placeholder
 window.addEventListener('hashchange', () => void go());
 
 (async () => {
-  const justConnected = await dbxFinishAuth().catch(() => false);
-  if (justConnected) toast('Dropbox Connected');
+  await fsInit().catch(() => false);
   await go();
 })();

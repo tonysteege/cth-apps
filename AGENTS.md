@@ -9,7 +9,7 @@ CTH Apps - Tony's web app hub, live at https://apps.coachtonyhockey.com/.
 The repo root `index.html` is the hub (a launcher page listing every app);
 each app lives in its own subfolder and serves at its path. Today there
 are three apps: **Diagrams** at `/diagrams/` (the hockey diagram editor),
-**Clips** at `/clips/` (video tagging and clipping over Dropbox), and
+**Clips** at `/clips/` (video tagging and clipping over Tony's own folder), and
 **Slides** at `/slides/` (Notion pages as film-session slideshows). `/present/`
 is a compatibility redirect that preserves existing `#p=...&s=...` links. Static
 site, no build step: GitHub Pages serves the `main` branch as-is. **Merging
@@ -24,9 +24,31 @@ editor's Back button goes to the home page, and the home page's Back goes
 to the hub. There is NO canvas zoom, on purpose - the stage sizes itself
 to the window. Folders show a folder glyph (`.fic`) in the tree and on the
 home page, matching the Clips tree.
-Diagram "Link" buttons upload a PNG to Dropbox at a stable overwrite path
-(/apps/diagrams/<id>-*.png via ../clips/js/dropbox.js) so a link pasted in
-Notion updates in place on every re-copy.
+Diagram "Save PNG" buttons write the diagram (or one rink) into the CTH
+folder at `/diagrams/<name>-<full|rink-n>.png`, replacing the same file on
+every re-save (2026-08-26). This replaced a Dropbox upload that returned a
+public link: a file on disk has no URL, so there is nothing to paste into
+Notion - the file itself is the deliverable.
+
+**FILES LIVE IN TONY'S OWN `cth` FOLDER, NOT DROPBOX** (2026-08-26, Tony's
+call). `clips/js/localfs.js` is the one file backend for all three apps.
+It uses the File System Access API: Tony picks his `cth` folder once, the
+handle is remembered in the `cth-files` IndexedDB (store `handles`, key
+`root`), and every path stays relative to it -
+
+  /videos, /videos/exports, /videos/recordings, /diagrams
+
+which are the SAME path strings the Dropbox build stored on each game
+record, so an existing library keeps resolving with no migration. Nothing
+is uploaded and no network call is made. Two things only Dropbox could do
+are gone and cannot be rebuilt locally: PUBLIC LINKS for Notion embeds and
+emailed clips (a local file has no URL - `clipEmbedUrl` now throws a
+plain-words error unless the record carries an external URL), and access
+from any machine other than this Mac. `showDirectoryPicker` is Chrome and
+Edge only; Safari and Firefox fall back to the one-file picker the app
+already had (`fsSupported()` gates this). Permission is re-checked at boot
+with `queryPermission`; when it reads `prompt` the app shows a Reconnect
+Folder button, because `requestPermission` only runs from a click.
 
 The old address diagrammer.coachtonyhockey.com is a Cloudflare Worker
 (`redirect-worker/`, deployed with wrangler, not part of the Pages site):
@@ -92,11 +114,17 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
    Film Room exactly. Do not adjust them or swap the rink art casually.
 5. Do not add analytics, external services, accounts, or network calls.
    The app is fully client-side and private by design.
-6. **Saving is manual and must stay that way** (Tony's call 2026-08-24).
-   An edit calls `markDirty()`; nothing writes to IndexedDB until Tony presses
-   Save, hits Cmd+S, or answers the leave prompt. Do not reintroduce an
-   autosave timer. Two guards make that safe and must not be removed: the
-   hashchange prompt and the `beforeunload` handler, both in `js/app.js`.
+6. **Diagrams AUTOSAVES** (Tony's call 2026-08-26, reversing the
+   manual-save rule of 2026-08-24). An edit calls `markDirty()`, which
+   raises the flag and schedules the write; `saveNow()` runs once the edits
+   stop. The timer is DEBOUNCED (`AUTOSAVE_MS`, 1000ms in `js/editor.js`)
+   and must stay that way - every drag step calls `markDirty`, so a fixed
+   interval would run a state clone and a thumbnail render mid-motion. Save
+   and Cmd+S still write immediately. Because the debounce leaves a window,
+   three guards flush or catch it and must not be removed: the
+   `visibilitychange` and `pagehide` handlers (both save) and the
+   `beforeunload` handler, all in `js/app.js`. The hashchange leave sheet
+   stays as well. This reversal is only safe because of rule 7.
 7. **Never cache a dead IndexedDB connection.** `js/store.js` drops its cached
    handle on `close`/`versionchange` and retries once on a closing-connection
    error. Without that, one closed connection makes every later save fail with
@@ -105,16 +133,22 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
 
 ## Clips (/clips/) rules
 
-- Clips reads game film from the user's Dropbox `/videos` folder and writes
-  exports to `/videos/exports`, straight from the browser via OAuth PKCE
-  (`clips/js/dropbox.js`). There is no server. The Dropbox app key is a
-  public identifier; tokens live only in the user's localStorage.
+- Clips reads game film from `/videos` inside the chosen CTH folder and
+  writes exports to `/videos/exports`, through `clips/js/localfs.js`. There
+  is no server, no account and no upload. A video opens as a real `File`,
+  which is also the scrub decoder's fast path (`File.slice` rather than
+  HTTP range requests), so local film scrubs better than Dropbox film did.
+  The legacy `cthc.dbx.v1` localStorage key is dead but is left alone.
 - Marks (clips, tags, freezes) AUTOSAVE to the `cth-clips` IndexedDB - a
   coach tagging at game speed cannot stop for a Save button. Do not copy
   the Diagrams manual-save rule here; they are different by design.
 - The game record shape `{ id, name, path, source, duration, clips,
   freezes }` and the clip shape `{ id, label, color, in, out, tags, note }`
-  are storage formats - additive changes only. `videoTags` (2026-08-25) is
+  are storage formats - additive changes only. `source` is `'local'` (a
+  one-off picked file) or `'folder'` (resolve `path` inside the CTH
+  folder); records written by the Dropbox build say `'dropbox'` and must
+  keep working - readers treat anything that is not `'local'` as
+  folder-backed. `videoTags` (2026-08-25) is
   an optional array of strings on the game record: the VIDEO's own tags,
   shown and edited in the library file tree, distinct from a clip's `tags`.
   Settings gained optional `logW` / `sideW` (the clip log's and tag
@@ -125,9 +159,9 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   the tree has a scope select (Tags + Clips / Tags Only / Clips Only) that
   matches file names, video tags, and the clips inside each game record,
   plus a "Matches Elsewhere In Your Library" section for tagged games
-  outside the open folder (records only - it never walks Dropbox
-  recursively). New Folder creates a real Dropbox folder via
-  `files/create_folder_v2`. Exporting a clip also writes a library record
+  outside the open folder (records only - it never walks the folder tree
+  recursively). New Folder creates a real folder on disk via
+  `fsCreateFolder`. Exporting a clip also writes a library record
   for the exported file carrying the clip's label and tags, so exports
   arrive in the tree already tagged.
 - **The scrub engine is PORTED FROM CTH FILM ROOM** (2026-08-25), from
@@ -153,10 +187,10 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   - THE DECODER IS PORTED TOO (2026-08-25, second pass): `scrubsource.js`
     is Film Room's WebCodecs engine plus its mp4 demuxer, whole - the moov
     sample tables are parsed in the browser (DataView instead of Buffer)
-    and frame bytes come from `File.slice` for a locally opened video or
-    HTTP Range requests against the Dropbox temp link (the same URL the
-    <video> streams from; a server answering 200 to a Range request is
-    refused and the engine falls back). While a gesture runs, decoded
+    and frame bytes come from `File.slice` - which every video now takes,
+    since they all open as real files (the HTTP Range path against a remote
+    URL is still in the code for externally linked media; a server
+    answering 200 to a Range request is refused and the engine falls back). While a gesture runs, decoded
     frames paint onto a `.scrub-paint` overlay canvas over the video, so a
     step costs ~2ms instead of a ~28ms element seek; on release the element
     takes the exact final frame and the overlay drops only once it has it.
@@ -220,15 +254,19 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
 - Slide links come from a Notion FORMULA property (name: Slides):
   `"https://apps.coachtonyhockey.com/slides/#p=" + id()` - the app also
   accepts any pasted Notion URL. The #p=<id>&s=<n> hash format is public.
-- Clips embed URLs, Dropbox links, uploaded video files and external video
-  URLs all render as the scrubbable in-slide player (media.js); telestration
-  reuses /diagrams/js/flat.js. Screen recording and the Dropbox upload of
-  recordings reuse ../clips/js/dropbox.js (same origin, same tokens).
+- Clips embed URLs, uploaded video files and external video URLs all render
+  as the scrubbable in-slide player (media.js); telestration reuses
+  /diagrams/js/flat.js. Screen recordings save into the CTH folder at
+  `/videos/recordings` through ../clips/js/localfs.js (same origin, same
+  folder handle), with Download always offered alongside.
 
 ## Verifying a change
 
 There is no CI test suite. Before opening a PR, reason through: does the
 change touch the storage format, the PNG format, or the render pair
 (drawEl/svgEl)? If yes, re-read rules 1-3. If you can run a browser, load
-the app, create a drill, place a few elements, press Save, reload (the
-saved work must survive), and export a PNG.
+the app, create a drill, place a few elements, wait a second for autosave
+(the status word goes Unsaved then Saved), reload (the saved work must
+survive), and export a PNG. Check the editor at a narrow window too: the
+rink stage scrolls vertically only, and a sideways scrollbar anywhere is a
+bug (`.ed-stagewrap` is `overflow-x: hidden`, `html, body` are capped).

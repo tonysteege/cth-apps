@@ -379,20 +379,20 @@ function stopRecord() {
 
 async function offerRecording(blob, name) {
   const mins = Math.round(blob.size / 1e6);
-  let dbx = null;
+  let fs = null;
   try {
-    dbx = await import('../../clips/js/dropbox.js');
-    if (!dbx.dbxConnected()) dbx = null;
-  } catch (_) { dbx = null; }
+    fs = await import('../../clips/js/localfs.js');
+    if (!fs.fsSupported()) fs = null;
+  } catch (_) { fs = null; }
   const wrap = document.createElement('div');
   wrap.className = 'sheet-veil';
   wrap.innerHTML = `
     <div class="sheet" role="dialog" aria-modal="true">
       <h3>Recording Ready</h3>
-      <p>${esc(name)} (about ${mins} MB). ${dbx ? 'Save it to Dropbox for the team, or download it.' : 'Download it below.'}</p>
+      <p>${esc(name)} (about ${mins} MB). ${fs ? 'Save it into your cth folder under videos/recordings, or download it.' : 'Download it below.'}</p>
       <div class="sheet-row">
         <button class="btn" data-x="dl">Download</button>
-        ${dbx ? '<button class="btn btn-ink" data-x="dbx">Save To Dropbox</button>' : ''}
+        ${fs ? '<button class="btn btn-ink" data-x="dbx">Save To Folder</button>' : ''}
       </div>
     </div>`;
   document.body.appendChild(wrap);
@@ -408,14 +408,16 @@ async function offerRecording(blob, name) {
   const up = wrap.querySelector('[data-x="dbx"]');
   if (up) {
     up.onclick = async () => {
-      up.textContent = 'Uploading…';
+      up.textContent = 'Saving…';
       try {
-        await dbx.dbxUpload(`/videos/recordings/${name}`, blob);
-        toast('Saved To Dropbox: videos/recordings');
+        if (!fs.fsConnected()) await (fs.fsRemembered() ? fs.fsReconnect() : fs.fsConnect());
+        await fs.fsWrite(`${fs.RECORDING_ROOT}/${name}`, blob);
+        toast(`Saved To ${fs.fsLabel(fs.RECORDING_ROOT)}`);
         done();
       } catch (e) {
+        if (e && e.name === 'AbortError') { up.textContent = 'Save To Folder'; return; }
         console.error(e);
-        toast('Upload Failed - Downloading Instead', true);
+        toast('Could Not Save - Downloading Instead', true);
         wrap.querySelector('[data-x="dl"]').click();
       }
     };

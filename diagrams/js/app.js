@@ -501,7 +501,7 @@ async function showEditor(id) {
           <button class="btn" id="edRedo" title="Redo (Shift+Cmd+Z)">Redo</button>
           <span class="ed-sep"></span>
           <button class="btn" id="edRinks" hidden title="Copy, Print Or Export Chosen Rinks From This Sequence">Rinks</button>
-          <button class="btn" id="edLink" title="Copy A Notion Embed Link For The Whole Diagram - Paste It Into Any Notion Page">Link</button>
+          <button class="btn" id="edSaveImg" title="Save This Diagram As A PNG In Your cth/diagrams Folder">Save PNG</button>
           <button class="btn" id="edCopy" title="Copy The Finished Picture To The Clipboard">Copy</button>
           <button class="btn" id="edPrint" title="Print This Diagram">Print</button>
           <button class="btn btn-ink" id="edPng" title="Download As PNG - The File Reopens Fully Editable Here And In CTH Film Room">Download PNG</button>
@@ -550,10 +550,10 @@ async function showEditor(id) {
       const b = $('#edRinks');
       if (b) b.hidden = info.seq < 2;
     },
-    onRinkLink: (k) => void copyEmbedLink(drill, k),
-    // Saving is manual, so the Save button has to SHOW there is something to
-    // save. Without that the only cue would be the small status word, which
-    // is hidden entirely on narrow screens.
+    onRinkLink: (k) => void savePngToFolder(drill, k),
+    // Autosave writes on its own, but the Save button still lights while
+    // there is something outstanding - on narrow screens the status word is
+    // hidden, so this is the only cue that a write is still pending.
     onDirty: (dirty) => {
       const b = $('#edSave');
       if (b) b.classList.toggle('btn-ink', dirty);
@@ -599,7 +599,7 @@ async function showEditor(id) {
     printCanvas(await renderFlat(), drill.name);
   };
   $('#edRinks').onclick = () => showRinksSheet(drill);
-  $('#edLink').onclick = () => void copyEmbedLink(drill, null);
+  $('#edSaveImg').onclick = () => void savePngToFolder(drill, null);
 
   document.addEventListener('cthd:shortcuts', showShortcuts);
 }
@@ -624,33 +624,39 @@ function printCanvas(canvas, name) {
   w.document.close();
 }
 
-// A Notion embed link: the diagram (or one rink) rendered to PNG, pushed
-// to Dropbox at a STABLE path, and its permanent direct link copied. Repeat
-// copies overwrite the same file, so a link already pasted in Notion shows
-// the latest version. Needs the Dropbox connection made in the Clips app.
-async function copyEmbedLink(drill, k) {
-  let dbx;
+// The diagram (or one rink) rendered to PNG and written into Tony's own
+// cth/diagrams folder at a STABLE name, so re-saving replaces the same file
+// and anything already pointing at it picks up the new version.
+// (2026-08-26: this replaced a Dropbox upload that returned a public link.
+// A file on disk has no public URL, so there is no link to copy - use the
+// file itself.)
+async function savePngToFolder(drill, k) {
+  let fs;
   try {
-    dbx = await import('../../clips/js/dropbox.js');
-  } catch (e) { toast('Could Not Load The Dropbox Module', true); return; }
-  if (!dbx.dbxConnected()) {
-    toast('Connect Dropbox In The Clips App First - The Link Needs A Home For The Image', true);
+    fs = await import('../../clips/js/localfs.js');
+  } catch (e) { toast('Could Not Load The Files Module', true); return; }
+  if (!fs.fsSupported()) {
+    toast('This Browser Cannot Write To A Folder - Use Download PNG Instead', true);
     return;
   }
   try {
+    if (!fs.fsConnected()) {
+      // Needs a click, and this handler is one.
+      await (fs.fsRemembered() ? fs.fsReconnect() : fs.fsConnect());
+    }
     await saveNow();
     const full = await renderFlat();
     const canvas = k == null ? full : sliceFrames(full, [k]);
     const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
     const tag = k == null ? 'full' : `rink-${k + 1}`;
-    const path = `/apps/diagrams/${drill.id}-${tag}.png`;
-    await dbx.dbxUpload(path, blob, { mode: 'overwrite' });
-    const url = await dbx.dbxStreamLink(path);
-    await navigator.clipboard.writeText(url);
-    toast('Link Copied - Paste It In Notion And Choose Embed Or Image. Re-Copying Updates The Same Link');
+    const slug = (drill.name || 'diagram').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'diagram';
+    const path = `${fs.DIAGRAM_ROOT}/${slug}-${tag}.png`;
+    await fs.fsWrite(path, blob);
+    toast(`Saved To ${fs.fsLabel(path)}`);
   } catch (e) {
+    if (e && e.name === 'AbortError') return;
     console.error(e);
-    toast(`Could Not Make The Link (${e.message || 'Error'})`, true);
+    toast(`Could Not Save The PNG (${e.message || 'Error'})`, true);
   }
 }
 
@@ -827,9 +833,17 @@ window.addEventListener('hashchange', async () => {
   await go();
 });
 
-// The browser's own prompt. It cannot be worded or given a Save button - the
-// spec only allows a generic dialog - so the in-app sheet above is the one
-// that does the real work. This is the backstop for closing the tab.
+// Autosave is debounced, so a tab going away inside that window still has
+// work in memory. Hiding the tab (app switch, tab switch, phone lock) is the
+// last reliable moment to write, and pagehide covers the close itself.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && isDirty()) void saveNow();
+});
+window.addEventListener('pagehide', () => { if (isDirty()) void saveNow(); });
+
+// The browser's own prompt, kept as a final backstop for the rare case where
+// a save is still in flight as the tab closes. It cannot be worded or given
+// a Save button - the spec only allows a generic dialog.
 window.addEventListener('beforeunload', (e) => {
   if (!isDirty()) return;
   e.preventDefault();

@@ -11,16 +11,16 @@ lives in a subfolder and serves at its own path.
   stay editable.
 - **Slides** (`/slides/`) - any Notion page as a film-session slideshow:
   dark logo cover, light slides cut at every H2 and divider, scrubbable
-  in-slide video (Clips embeds, Dropbox, uploads), telestration on every
-  slide, overview grid, blackout, built-in screen recording with Dropbox
-  save. Links come from one Notion formula property; content is always
+  in-slide video (Clips embeds, uploads, external links), telestration on
+  every slide, overview grid, blackout, built-in screen recording saved
+  into the CTH folder. Links come from one Notion formula property; content is always
   live, so nothing ever needs republishing.
 - `/present/` remains a compatibility redirect that preserves existing slide links.
-- **Clips** (`/clips/`) - video tagging and clipping: game film streamed
-  from Dropbox /videos, two-tier tag buttons with hotkeys and lead/lag,
-  trackpad scrubbing, a filterable clip log, live freeze-frames with
-  diagram-style annotation, per-clip Notion embeds and parent email, and
-  real video exports back to Dropbox. Local files work without Dropbox.
+- **Clips** (`/clips/`) - video tagging and clipping: game film read
+  straight from the CTH folder's `videos` (pick the folder once), two-tier
+  tag buttons with hotkeys and lead/lag, trackpad scrubbing, a filterable
+  clip log, live freeze-frames with diagram-style annotation, and real
+  video exports back into `videos/exports`. Nothing is uploaded anywhere.
 
 ## What It Does
 

@@ -363,7 +363,7 @@ input:focus, select:focus, textarea:focus { outline: none; }
 }
 
 /* ---------------------------------------------------------- editor */
-.ed { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+.ed { display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow-x: hidden; }
 .ed-head {
   display: flex;
   align-items: center;
@@ -396,18 +396,23 @@ input:focus, select:focus, textarea:focus { outline: none; }
 .ed-sep { width: 1px; height: 20px; background: var(--edge); margin: 0 2px; }
 
 /* The canvas: pure white, the rink sits directly on it - no card, no
-   shadow, no border. Scrolls both ways; pinch to zoom. */
+   shadow, no border. There is no canvas zoom (AGENTS.md): the stage sizes
+   itself to the window, so this scrolls VERTICALLY ONLY. A sideways
+   scrollbar at any width means something is overflowing and is a bug -
+   the 320px floor that used to sit on .ed-zoom was exactly that. */
 .ed-stagewrap {
   flex: 1;
   min-width: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-x: none;
   position: relative;
   background: var(--cloud);
   padding: clamp(10px, 2vw, 28px) clamp(10px, 3vw, 40px) 120px;
 }
 .ed-zoom {
   width: 100%;
-  min-width: 320px;
+  min-width: 0;
   margin: 0 auto;
 }
 .ed-stage { width: 100%; }
@@ -487,7 +492,7 @@ input:focus, select:focus, textarea:focus { outline: none; }
 .ed-flabelwrap:hover .ed-flabel { fill: var(--ink); }
 
 /* ---------------------------------------------- in-editor diagram tree */
-.ed-main { flex: 1; display: flex; min-height: 0; }
+.ed-main { flex: 1; display: flex; min-height: 0; min-width: 0; }
 .ed-side {
   width: 220px;
   flex-shrink: 0;
@@ -915,3 +920,31 @@ input:focus, select:focus, textarea:focus { outline: none; }
 .move-menu .ctx-danger { color: var(--danger); }
 .move-menu .ctx-danger:hover { background: var(--danger-soft); color: var(--danger); }
 .eside-list { min-height: 120px; }
+
+/* Below this width the editor's file tree stops being a COLUMN and becomes
+   an overlay drawer. As a column it took 220px off a 375px window and left
+   the rink 155px, which - now that the stage cannot scroll sideways - meant
+   the rink was clipped instead of merely cramped. As an overlay the stage
+   always gets the full window, so the rink fits at every size. The header
+   toggle and its saved open/closed state keep working untouched. */
+@media (max-width: 860px) {
+  .ed-main { position: relative; }
+  .ed-side {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 30;
+    width: min(272px, 82vw);
+    background: var(--cloud);
+    border-right: 1px solid var(--edge);
+    box-shadow: var(--shadow-3);
+  }
+}
+
+/* No sideways scroll anywhere in the suite (2026-08-26, Tony's call). The
+   scrollers that ARE meant to move sideways - the toolbar, the recents
+   rails, the library tree on phones - are their own elements with their own
+   overflow-x, so capping the document does not touch them. */
+html, body { overflow-x: hidden; max-width: 100%; }
+.app { min-width: 0; max-width: 100%; }
