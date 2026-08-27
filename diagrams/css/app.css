@@ -981,6 +981,17 @@ input:focus, select:focus, textarea:focus { outline: none; }
   background: var(--sunken); border-radius: var(--r-sm); padding: 10px 12px; margin: 0 0 12px;
 }
 .ph-formula code { flex: 1; font-size: 12.5px; overflow-x: auto; white-space: nowrap; }
+
+/* A SETTINGS FORM, shared (2026-08-27). These four were defined only in
+   bots/css/app.css until Clips grew a settings sheet of its own; a rule
+   two apps need belongs in the base both import. Per-app field sizing
+   still lives with the app. */
+.bs-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; font-size: 13px; }
+.bs-row > span:first-child { flex: none; width: 128px; color: var(--mist); font-size: 12px; font-weight: 500; }
+.bs-note { margin: 8px 0 0; color: var(--soft); font-size: 12px; line-height: 1.5; }
+.bs-empty { margin: 0; padding: 8px 2px; color: var(--soft); font-size: 12.5px; }
+.bs-styleadd { display: flex; gap: 8px; margin-top: 10px; }
+.bs-styleadd .mini:disabled { opacity: 0.4; cursor: default; }
 .keys-grid {
   display: grid;
   grid-template-columns: auto 1fr;

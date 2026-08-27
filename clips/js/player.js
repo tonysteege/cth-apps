@@ -691,7 +691,7 @@ function keyBadge(k) { return k ? `<span class="tag-key">${esc(k.toUpperCase())}
 // the button list grows. The panel resizes by its own drag bar, collapses
 // from the header Tags button, and its buttons drag to reorder (within
 // their own section - a clip button and a tag button are different things).
-function paintBar() {
+export function paintBar() {
   const bar = el('vpSide');
   if (!bar || !cur) return;
   const c = selClip();
@@ -710,8 +710,13 @@ function paintBar() {
     ${panelItems(1).map(item).join('')}
     <div class="side-label">Tags</div>
     ${panelItems(2).map(item).join('')}
+    <div class="side-label">Players</div>
+    <button class="tag-btn tag-btn-players" data-act="players" style="--c:#f97316;--fg:#fff" title="Tag The Players In This Clip (P)">
+      <span class="tag-btn-word">Players</span><span class="tag-key">P</span>
+    </button>
     ${cur.clipMode ? `<button class="tag-btn tag-btn-mode on" data-act="exitClip">Playing Clip - Esc Exits</button>` : ''}
     <button class="tag-btn tag-edit" data-act="editPanel" title="Edit Buttons, Keys, Colors, Lead And Lag">Edit Buttons</button>`;
+  bar.querySelector('[data-act="players"]').onclick = () => openPlayers();
   bar.querySelectorAll('[data-clipbtn]').forEach((b) => {
     b.onclick = () => pressClipButton(cur.settings.panel.buttons.find((x) => x.id === b.dataset.clipbtn));
   });
@@ -827,6 +832,89 @@ export const normTag = (raw) => (raw || '').trim().replace(/^#+/, '').replace(/\
 // on the left, then the clip's tags as chips with a write-in box, actions on
 // the right. The rail's stacked two-line rows wasted the one thing tags
 // need, which is width.
+// ---- players ---------------------------------------------------------
+//
+// P pauses the video and opens the roster. A player is tagged by clicking
+// the name or by pressing the single key assigned to them in Settings -
+// every key is shown on its row, because a shortcut nobody can see is not
+// a shortcut. The tag is the player's FIRST name, lowercased through
+// normTag, so it behaves like every other tag in the log.
+//
+// Closing resumes whatever the video was doing when it opened: the point
+// is to tag without losing the run of play.
+
+export function openPlayers() {
+  if (document.getElementById('vpPlayers')) return;
+  const c = selClip();
+  if (!c) { toast('Select A Clip First - Players Tag A Clip', true); return; }
+  const v = video();
+  const wasPlaying = !v.paused;
+  v.pause();
+
+  const roster = (cur.settings.players || []).filter((p) => p.first);
+  const veil = document.createElement('div');
+  veil.id = 'vpPlayers';
+  veil.className = 'sheet-veil';
+  const row = (p) => {
+    const tag = normTag(p.first);
+    return `<button class="pl-row${(c.tags || []).includes(tag) ? ' on' : ''}" data-pid="${esc(p.id)}">
+      <span class="pl-num">${esc(p.num || '')}</span>
+      <span class="pl-who"><b>${esc(p.first)}</b>${p.last ? ` ${esc(p.last)}` : ''}</span>
+      ${p.key ? `<span class="pl-key">${esc(String(p.key).toUpperCase())}</span>` : ''}
+    </button>`;
+  };
+  veil.innerHTML = `
+    <div class="sheet sheet-wide" role="dialog" aria-modal="true" aria-label="Tag Players">
+      <h3>Players</h3>
+      <p>Click a name or press its key. Return, Escape or Done saves and plays on.</p>
+      <div class="pl-grid">${roster.map(row).join('')
+        || '<p class="pl-empty">No players yet. Add them in Settings - number, first name, last name and a single key each.</p>'}</div>
+      <div class="sheet-row">
+        <button class="btn" data-x="settings">Edit Roster</button>
+        <span class="vp-flex"></span>
+        <button class="btn btn-ink" data-x="done">Done</button>
+      </div>
+    </div>`;
+  document.body.appendChild(veil);
+
+  const toggle = (p) => {
+    const tag = normTag(p.first);
+    if (!tag) return;
+    pushUndo({ kind: 'tags', id: c.id, tags: [...(c.tags || [])] });
+    c.tags = (c.tags || []).includes(tag)
+      ? c.tags.filter((t) => t !== tag)
+      : [...(c.tags || []), tag];
+    veil.querySelector(`[data-pid="${p.id}"]`)?.classList.toggle('on', c.tags.includes(tag));
+    scheduleSave();
+    paintLog();
+    drawTimeline();
+  };
+  veil.querySelectorAll('[data-pid]').forEach((b) => {
+    b.onclick = () => toggle(roster.find((p) => p.id === b.dataset.pid));
+  });
+
+  const close = (openSettings = false) => {
+    document.removeEventListener('keydown', onPlayerKey, true);
+    veil.remove();
+    paintBar();
+    if (openSettings) { if (hooks.onSettings) hooks.onSettings('players'); return; }
+    if (wasPlaying) v.play().catch(() => {});
+  };
+  function onPlayerKey(e) {
+    if (e.key === 'Escape' || e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); close(); return; }
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const p = roster.find((x) => x.key && x.key.toLowerCase() === e.key.toLowerCase());
+    if (!p) return;
+    e.preventDefault();
+    e.stopPropagation();
+    toggle(p);
+  }
+  document.addEventListener('keydown', onPlayerKey, true);
+  veil.addEventListener('mousedown', (e) => { if (e.target === veil) close(); });
+  veil.querySelector('[data-x="done"]').onclick = () => close();
+  veil.querySelector('[data-x="settings"]').onclick = () => close(true);
+}
+
 // ---- filter menus ---------------------------------------------------
 // Multi-select with a count beside every option, so the menu doubles as a
 // summary of what the game holds.
@@ -1403,6 +1491,9 @@ function onKey(e) {
   // text undo, which is what anyone typing expects.
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undoLast(); return; }
   if (e.metaKey || e.ctrlKey) return;
+  // P opens the roster. It sits above the panel's own key lookup so a tag
+  // button can never quietly claim the key.
+  if (e.key.toLowerCase() === 'p') { e.preventDefault(); openPlayers(); return; }
   const k = e.key.toLowerCase();
   const stop = () => e.preventDefault();
 

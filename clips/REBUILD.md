@@ -40,7 +40,7 @@ Status key: `[ ]` not started, `[~]` in progress, `[x]` done and verified.
       minimum.
 - [x] 15. Labels read "Clips" and "Tags" in black bold Title Case.
 - [x] 16. The grey-brown tag buttons become steel grey.
-- [ ] 17. A PLAYERS button in orange, shortcut `p`: pauses the video and
+- [x] 17. A PLAYERS button in orange, shortcut `p`: pauses the video and
       opens a dialogue listing players (number, first, last - editable in
       Settings), each with its own single-key shortcut shown as a
       tooltip. Clicking or typing appends that player's first name as a
@@ -75,7 +75,7 @@ Status key: `[ ]` not started, `[~]` in progress, `[x]` done and verified.
 
 ## Phase 4 - Freeze, Pull, Record
 
-- [ ] 34. Record and Pull sit beside Freeze in the top bar.
+- [~] 34. Record and Pull sit beside Freeze in the top bar.
 - [ ] 35. FREEZE opens the annotation toolbar; Done (or Return) exports
       the clip with a 3-second freeze (or whatever the toolbar is set to)
       at the playhead, annotations baked in. It is NOT written to the Clip
@@ -110,9 +110,9 @@ Status key: `[ ]` not started, `[~]` in progress, `[x]` done and verified.
       itself editable in Settings.
 - [ ] 41. Exports are SILENT: no progress dialogue, no indicator. The file
       simply appears. A failure, and only a failure, raises a notice.
-- [ ] 42. A Settings sheet covering as much as is reasonable: players,
+- [x] 42. A Settings sheet covering as much as is reasonable: players,
       the cursor highlight, the naming pattern, buffers, shortcuts.
-- [ ] 43. Remove the Email function.
+- [x] 43. Remove the Email function.
 - [ ] 44. Timeline: freeze marks go. Every tag timecode gets a clickable
       marker that jumps there. The timeline zooms and scrolls from the
       trackpad.

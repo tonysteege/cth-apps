@@ -17,8 +17,19 @@ import {
 } from './localfs.js';
 import { listGames, getGame, putGame, deleteGame, getSettings, putSettings, uid } from './store.js';
 import {
-  openPlayer, closePlayer, playClip, recordClip, grabFrame, fmtTime, clipName,
-  updateFreeze, playerGame, playerSettings, video, normTag,
+  openPlayer,
+  closePlayer,
+  playClip,
+  recordClip,
+  grabFrame,
+  fmtTime,
+  clipName,
+  updateFreeze,
+  playerGame,
+  playerSettings,
+  video,
+  normTag,
+  paintBar,
 } from './player.js';
 import { openAnnotate } from './annotate.js';
 import { toast, esc, confirmSheet, fmtDate } from './ui.js';
@@ -415,7 +426,10 @@ async function showPlayer(id) {
         <span class="ed-status" id="vpStatus">Saved</span>
         <div class="ed-head-actions">
           <button class="btn" id="vpFreeze" title="Freeze This Frame And Draw On It (F)">Freeze</button>
-          <button class="btn" id="vpEmail" title="Email Clips To A Group">Email</button>
+          <button class="btn" id="vpPull" title="Export The Clip Around The Playhead (Right-Click To Set The Buffer)">Pull</button>
+          <button class="btn" id="vpRecord" title="Record The Player With Your Voice And Drawings">Record</button>
+          <span class="ed-sep"></span>
+          <button class="btn" id="vpSettings" title="Clips Settings">Settings</button>
           <button class="btn" id="vpLogBtn" title="Show Or Hide The Clip Log">Clips</button>
           <button class="btn" id="vpSideBtn" title="Show Or Hide The Tag Panel">Tags</button>
         </div>
@@ -457,10 +471,15 @@ async function showPlayer(id) {
   $('#vpBack').onclick = () => { location.hash = '#/'; };
   $('#vpLogBtn').onclick = () => { document.querySelector('.vp').classList.toggle('log-hidden'); };
   $('#vpSideBtn').onclick = () => { document.querySelector('.vp').classList.toggle('side-hidden'); };
-  $('#vpEmail').onclick = () => openEmailSheet(game);
+  $('#vpSettings').onclick = () => openClipSettings();
+  // Wired for real in the export phase. A button that silently does
+  // nothing is the dead control this suite keeps learning not to ship.
+  $('#vpPull').onclick = () => toast('Pull Export Lands In The Next Phase', true);
+  $('#vpRecord').onclick = () => toast('Record Lands In The Next Phase', true);
   wirePanels();
 
   await openPlayer(game, src, {
+    onSettings: (focus) => openClipSettings(focus),
     // Every video now arrives as a real File, so the decoder always takes
     // its fast path: bytes sliced straight off the file, no range requests.
     scrubFile: localFiles.get(id) || null,
@@ -750,7 +769,6 @@ function openShareMenu(game, clip, anchor) {
         await copyText(await clipEmbedUrl(game, clip), 'Clip Link Copied - It Plays Just This Clip');
       } catch (e) { toast(e.message, true); }
     }],
-    ['Email This Clip', () => openEmailSheet(game, [clip.id])],
     ['Export Video To Folder', () => void exportClipVideo(game, clip)],
   ]);
 }
@@ -825,80 +843,141 @@ async function sendFrameToDiagrams(game, canvas) {
   toast('Opened In Diagrams - The Frame Is The Background');
 }
 
-// ------------------------------------------------------------- email
-
-async function openEmailSheet(game, preselect = null) {
-  const settings = playerSettings() || await getSettings();
-  const clips = (playerGame() || game).clips || [];
-  if (!clips.length) { toast('No Clips To Email Yet', true); return; }
-  document.querySelector('.sheet-veil')?.remove();
-  const wrap = document.createElement('div');
-  wrap.className = 'sheet-veil';
-  const picked = new Set(preselect || clips.map((c) => c.id));
-  wrap.innerHTML = `
-    <div class="sheet sheet-wide" role="dialog" aria-modal="true">
-      <h3>Email Clips</h3>
-      <div class="em-groups">
-        ${Object.keys(settings.groups).map((gn) => `<button class="mini em-group" data-g="${esc(gn)}">${esc(gn)}</button>`).join('')}
-        <button class="mini" data-editgroups title="Edit The Saved Address Groups">Edit Groups</button>
-      </div>
-      <input id="emTo" placeholder="To: parent@email.com, parent2@email.com" value="">
-      <div class="rink-list em-list">
-        ${clips.map((c) => `<label class="rink-row"><input type="checkbox" data-c="${c.id}" ${picked.has(c.id) ? 'checked' : ''}> ${esc(clipName(c))} <span class="em-time">${fmtTime(c.in)}</span></label>`).join('')}
-      </div>
-      <p class="em-note">Each picked clip becomes a link that plays just that clip. Opens your mail app with everything filled in.</p>
-      <div class="sheet-row">
-        <button class="btn" data-x="cancel">Cancel</button>
-        <button class="btn btn-ink" data-x="send">Open Email</button>
-      </div>
-    </div>`;
-  document.body.appendChild(wrap);
-  const done = () => wrap.remove();
-  wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) done(); });
-  wrap.querySelector('[data-x="cancel"]').onclick = done;
-  wrap.querySelectorAll('.em-group').forEach((b) => {
-    b.onclick = () => {
-      const cur = $('#emTo').value.trim();
-      const add = settings.groups[b.dataset.g] || '';
-      if (!add.trim()) { toast(`The "${b.dataset.g}" Group Is Empty - Use Edit Groups`, true); return; }
-      $('#emTo').value = cur ? `${cur}, ${add}` : add;
-    };
-  });
-  wrap.querySelector('[data-editgroups]').onclick = async () => {
-    for (const gn of Object.keys(settings.groups)) {
-      const v = prompt(`${gn} Emails (Comma-Separated)`, settings.groups[gn] || '');
-      if (v != null) settings.groups[gn] = v.trim();
-    }
-    await putSettings(settings);
-    toast('Groups Saved');
-  };
-  wrap.querySelector('[data-x="send"]').onclick = async () => {
-    const to = $('#emTo').value.trim();
-    const ids = [...wrap.querySelectorAll('[data-c]:checked')].map((i) => i.dataset.c);
-    if (!ids.length) { toast('Pick At Least One Clip', true); return; }
-    try {
-      const lines = [`Clips From ${game.name}:`, ''];
-      for (const cid of ids) {
-        const c = clips.find((x) => x.id === cid);
-        lines.push(`${clipName(c)} (${fmtTime(c.in)})`);
-        lines.push(await clipEmbedUrl(game, c));
-        lines.push('');
-      }
-      lines.push('- Coach Tony');
-      const mail = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(`${game.name} - Clips`)}&body=${encodeURIComponent(lines.join('\n'))}`;
-      done();
-      location.href = mail;
-    } catch (e) {
-      toast(e.message || 'Could Not Build The Links', true);
-    }
-  };
-}
 
 const status = null; // recordClip progress hook placeholder
 
 // ------------------------------------------------------------- boot
 
 window.addEventListener('hashchange', () => void go());
+
+// ------------------------------------------------------------- settings
+//
+// One sheet for everything the app lets Tony set. It writes the SAME
+// settings record the panel editor uses (store.js, additive only), so a
+// field added here is a field every future session inherits.
+
+const NAME_TOKENS = [
+  ['{name}', 'the clip name'],
+  ['{tags}', 'its tags, in log order, joined by -'],
+  ['{hhmmss}', 'its timecode'],
+  ['{label}', 'the button that made it'],
+  ['{date}', "today's date"],
+];
+
+export async function openClipSettings(focus = null) {
+  const s = playerSettings() || await getSettings();
+  document.querySelector('.sheet-veil')?.remove();
+  const veil = document.createElement('div');
+  veil.className = 'sheet-veil';
+  const num = (k, label, v, min, max, hint = '') => `
+    <label class="bs-row"><span>${label}</span>
+      <input type="number" data-k="${k}" value="${v}" min="${min}" max="${max}">
+      ${hint ? `<em class="cs-hint">${hint}</em>` : ''}
+    </label>`;
+  veil.innerHTML = `
+    <div class="sheet sheet-pe cs-sheet" role="dialog" aria-modal="true">
+      <div class="pe-top">
+        <h3>Clips Settings</h3>
+        <p>Everything here is remembered with this library, not with one video.</p>
+      </div>
+      <div class="pe-body">
+        <section class="pe-section">
+          <div class="pe-title">Players</div>
+          <div class="cs-players" data-players></div>
+          <div class="bs-styleadd"><button class="mini" data-addplayer>+ Player</button></div>
+          <p class="bs-note">A player's FIRST name becomes the tag. The key is one character, pressed inside the Players dialogue.</p>
+        </section>
+        <section class="pe-section">
+          <div class="pe-title">Export</div>
+          <label class="bs-row"><span>File Name</span>
+            <input type="text" data-k="naming" value="${esc(s.naming)}" spellcheck="false">
+          </label>
+          <p class="bs-note">${NAME_TOKENS.map(([t, w]) => `<code>${t}</code> ${w}`).join(' &middot; ')}</p>
+          ${num('freezeBuf.before', 'Freeze In', s.freezeBuf.before, 0, 60, 'seconds before the playhead')}
+          ${num('freezeBuf.after', 'Freeze Out', s.freezeBuf.after, 1, 120, 'seconds after')}
+          ${num('holdSec', 'Freeze Hold', s.holdSec, 1, 15, 'how long the frame holds')}
+          ${num('pullBuf.before', 'Pull In', s.pullBuf.before, 0, 60, 'seconds before the playhead')}
+          ${num('pullBuf.after', 'Pull Out', s.pullBuf.after, 1, 120, 'seconds after')}
+        </section>
+        <section class="pe-section">
+          <div class="pe-title">Recording</div>
+          <label class="bs-row"><span>Highlight Cursor</span>
+            <input type="checkbox" data-k="cursorHi.on"${s.cursorHi.on ? ' checked' : ''}>
+          </label>
+          <label class="bs-row"><span>Highlight Colour</span>
+            <input type="color" data-k="cursorHi.color" value="${esc(s.cursorHi.color)}">
+          </label>
+          ${num('cursorHi.size', 'Highlight Size', s.cursorHi.size, 16, 120, 'pixels across')}
+        </section>
+        <section class="pe-section">
+          <div class="pe-title">Scrubbing</div>
+          ${num('scrubSensitivity', 'Sensitivity', s.scrubSensitivity || 1, 1, 400, 'percent of normal, 100 is default')}
+          <label class="bs-row"><span>Reverse Direction</span>
+            <input type="checkbox" data-k="scrubReverse"${s.scrubReverse ? ' checked' : ''}>
+          </label>
+        </section>
+      </div>
+      <div class="sheet-row pe-foot">
+        <span class="vp-flex"></span>
+        <button class="btn" data-x="cancel">Cancel</button>
+        <button class="btn btn-ink" data-x="save">Save Settings</button>
+      </div>
+    </div>`;
+  document.body.appendChild(veil);
+
+  // ---- roster
+  const box = veil.querySelector('[data-players]');
+  let roster = (s.players || []).map((p) => ({ ...p }));
+  const paintRoster = () => {
+    box.innerHTML = roster.map((p) => `
+      <div class="cs-player" data-pid="${esc(p.id)}">
+        <input data-f="num" value="${esc(p.num || '')}" placeholder="#" maxlength="3" aria-label="Number">
+        <input data-f="first" value="${esc(p.first || '')}" placeholder="First" aria-label="First Name">
+        <input data-f="last" value="${esc(p.last || '')}" placeholder="Last" aria-label="Last Name">
+        <input data-f="key" value="${esc(p.key || '')}" placeholder="Key" maxlength="1" aria-label="Shortcut Key">
+        <button class="mini mini-danger" data-rm aria-label="Remove">&times;</button>
+      </div>`).join('') || '<p class="bs-empty">No players yet.</p>';
+    box.querySelectorAll('.cs-player').forEach((row) => {
+      const p = roster.find((x) => x.id === row.dataset.pid);
+      row.querySelectorAll('[data-f]').forEach((i) => {
+        i.oninput = () => { p[i.dataset.f] = i.dataset.f === 'key' ? i.value.toLowerCase() : i.value; };
+      });
+      row.querySelector('[data-rm]').onclick = () => { roster = roster.filter((x) => x.id !== p.id); paintRoster(); };
+    });
+  };
+  paintRoster();
+  veil.querySelector('[data-addplayer]').onclick = () => {
+    roster.push({ id: uid(), num: '', first: '', last: '', key: '' });
+    paintRoster();
+    box.querySelector('.cs-player:last-child [data-f="num"]')?.focus();
+  };
+  if (focus === 'players') box.scrollIntoView({ block: 'nearest' });
+
+  const close = () => veil.remove();
+  veil.addEventListener('mousedown', (e) => { if (e.target === veil) close(); });
+  veil.querySelector('[data-x="cancel"]').onclick = close;
+  veil.querySelector('[data-x="save"]').onclick = async () => {
+    const next = { ...s };
+    veil.querySelectorAll('[data-k]').forEach((i) => {
+      const raw = i.type === 'checkbox' ? i.checked
+        : i.type === 'number' ? Math.max(Number(i.min), Math.min(Number(i.max), Number(i.value) || Number(i.min)))
+        : i.value;
+      // Dotted keys write into their nested object.
+      const path = i.dataset.k.split('.');
+      let node = next;
+      while (path.length > 1) { const k = path.shift(); node[k] = { ...(node[k] || {}) }; node = node[k]; }
+      node[path[0]] = raw;
+    });
+    // A player with no first name is nothing to tag with.
+    next.players = roster.filter((p) => (p.first || '').trim());
+    await putSettings(next);
+    const live = playerSettings();
+    if (live) Object.assign(live, next);
+    close();
+    toast('Settings Saved');
+    paintBar();
+  };
+}
 
 (async () => {
   await fsInit().catch(() => false);
