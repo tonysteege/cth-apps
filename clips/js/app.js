@@ -484,11 +484,19 @@ async function showPlayer(id) {
     // its fast path: bytes sliced straight off the file, no range requests.
     scrubFile: localFiles.get(id) || null,
     onShare: (clip, anchor) => openShareMenu(game, clip, anchor),
-    onAnnotate: (freeze) => {
+    onAnnotate: async (freeze) => {
+      const st = playerSettings() || await getSettings();
       openAnnotate(freeze, grabFrame(), {
-        onDone: (f) => { updateFreeze(f); toast('Freeze Saved - Playback Pauses Here'); },
+        keys: st.toolKeys,
+        // A rebound key is written straight back to settings, so it holds
+        // across sessions the way every other preference here does.
+        onKeys: async (keys) => {
+          const live = playerSettings();
+          if (live) live.toolKeys = keys;
+          await putSettings({ ...(live || st), toolKeys: keys });
+        },
+        onDone: (f) => { updateFreeze(f); },
         onExport: (canvas, f) => void exportFrame(game, canvas, f),
-        onSend: (canvas) => void sendFrameToDiagrams(game, canvas),
       });
     },
   });
@@ -818,30 +826,6 @@ async function exportFrame(game, canvas, freeze) {
 }
 
 // The freeze-frame lands in the Diagrams app as a new diagram whose
-// background is the frame - same origin, same IndexedDB, zero export steps.
-async function sendFrameToDiagrams(game, canvas) {
-  const scale = Math.min(1, 1920 / canvas.width);
-  let out = canvas;
-  if (scale < 1) {
-    out = document.createElement('canvas');
-    out.width = Math.round(canvas.width * scale);
-    out.height = Math.round(canvas.height * scale);
-    out.getContext('2d').drawImage(canvas, 0, 0, out.width, out.height);
-  }
-  const bg = out.toDataURL('image/jpeg', 0.92);
-  const drill = {
-    id: drillUid(),
-    name: `${game.name} Frame`,
-    notes: '',
-    folder: '',
-    created: Date.now(),
-    state: { v: 1, w: out.width, h: out.height, bg, seq: 1, elements: [] },
-    thumb: null,
-  };
-  await putDrill(drill);
-  window.open(`../diagrams/#/drill/${drill.id}`, '_blank');
-  toast('Opened In Diagrams - The Frame Is The Background');
-}
 
 
 const status = null; // recordClip progress hook placeholder

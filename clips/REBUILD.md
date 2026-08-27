@@ -48,30 +48,30 @@ Status key: `[ ]` not started, `[~]` in progress, `[x]` done and verified.
 
 ## Phase 3 - Annotation toolbar
 
-- [ ] 18. The selected tool STAYS selected until Escape or another tool.
-- [ ] 19. One-key shortcut per tool, customisable from a right-click menu
+- [x] 18. The selected tool STAYS selected until Escape or another tool.
+- [x] 19. One-key shortcut per tool, customisable from a right-click menu
       on the tool itself.
-- [ ] 20. Resize handles on shapes; anchor points on lines and arrows to
+- [x] 20. Resize handles on shapes; anchor points on lines and arrows to
       move and curve them, the way Diagrams does it.
-- [ ] 21. Rubber-band drag selects several placed objects.
-- [ ] 22. Selection chrome uses the Diagrams cyan.
-- [ ] 23. Remove the Diagram button.
-- [ ] 24. Text tool: no black border. A white pill with a shadow/lift
+- [x] 21. Rubber-band drag selects several placed objects.
+- [x] 22. Selection chrome uses the Diagrams cyan.
+- [x] 23. Remove the Diagram button.
+- [x] 24. Text tool: no black border. A white pill with a shadow/lift
       tuned to sit on video.
-- [ ] 25. The text box looks IDENTICAL while typing and after committing -
+- [x] 25. The text box looks IDENTICAL while typing and after committing -
       nothing should appear to happen but the loss of selection.
-- [ ] 26. Text boxes 25% smaller.
-- [ ] 27. Shortcuts: Clear `x`, Export `e`, Done `Enter`.
-- [ ] 28. Red stays the default; add yellow and blue, both tuned for
+- [x] 26. Text boxes 25% smaller.
+- [x] 27. Shortcuts: Clear `x`, Export `e`, Done `Enter`.
+- [x] 28. Red stays the default; add yellow and blue, both tuned for
       telestration over ice and video.
-- [ ] 29. Remove the dot-in-circle tool. The circle tool always draws a
+- [x] 29. Remove the dot-in-circle tool. The circle tool always draws a
       true circle.
-- [ ] 30. The select tool (`v`) shows the ordinary arrow cursor.
+- [x] 30. The select tool (`v`) shows the ordinary arrow cursor.
 - [ ] 31. SIDE-BY-SIDE: pull a second video from the library alongside the
       current one, each with its own scrub and timeline.
-- [ ] 32. JOINT ANGLE tool: endpoint handles, and an always-visible
+- [x] 32. JOINT ANGLE tool: endpoint handles, and an always-visible
       readout of the true angle.
-- [ ] 33. No tooltip on pressing Freeze, and none on Done.
+- [x] 33. No tooltip on pressing Freeze, and none on Done.
 
 ## Phase 4 - Freeze, Pull, Record
 
