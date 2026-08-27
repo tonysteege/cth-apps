@@ -55,6 +55,23 @@ async function go() {
 // ------------------------------------------------------------- library
 
 let browsePath = VIDEO_ROOT;
+
+// The folder trail as a BoardUI breadcrumb: every ancestor is a real
+// button that jumps straight there (the old label plus the Up row made
+// deep folders a climb), the current folder is quiet text at the end.
+function crumbsHtml() {
+  const segs = browsePath === VIDEO_ROOT ? [] : browsePath.replace(`${VIDEO_ROOT}/`, '').split('/');
+  const parts = [{ label: 'videos', path: VIDEO_ROOT }];
+  let acc = VIDEO_ROOT;
+  for (const seg of segs) { acc += `/${seg}`; parts.push({ label: seg, path: acc }); }
+  const items = parts.map((x, i) => (i === parts.length - 1
+    ? `<span class="crumb crumb-cur">${esc(x.label)}</span>`
+    : `<button class="crumb" data-cd="${esc(x.path)}">${esc(x.label)}</button>`));
+  return `<nav class="crumbs" aria-label="Folder Path">
+    <span class="crumb crumb-root">${esc(fsRootName() || 'Folder')}</span>
+    ${items.join('<span class="crumb-sep" aria-hidden="true"></span>')}
+  </nav>`;
+}
 // The library search: what to look through is a scope, because "find the
 // video tagged powerplay" and "find the game with a powerplay clip in it"
 // are different questions with the same word in them.
@@ -104,7 +121,7 @@ async function showLibrary() {
               <span class="recent-del" data-forget="${esc(g.id)}" title="Forget This Video's Marks">&times;</span>
             </button>`).join('')}
         </div>` : ''}
-      <div class="clib-title">${esc(fsRootName() || 'Folder')} &middot; ${esc(browsePath === VIDEO_ROOT ? 'videos' : browsePath.replace(VIDEO_ROOT + '/', 'videos/'))}</div>
+      ${crumbsHtml()}
       ${fsConnected() ? `
       <div class="clib-tools">
         <input id="clibSearch" type="search" placeholder="Search Videos, Tags, Clips…" value="${esc(libView.q)}" autocomplete="off">
@@ -120,6 +137,9 @@ async function showLibrary() {
     <input type="file" id="libFile" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.m4v,.webm" hidden>`;
 
   $('#libHome').onclick = () => { location.href = '../'; };
+  document.querySelectorAll('.crumbs [data-cd]').forEach((b) => {
+    b.onclick = () => { browsePath = b.dataset.cd; void showLibrary(); };
+  });
   $('#libLocal').onclick = () => $('#libFile').click();
   const up = $('#libUpload');
   if (up) up.onclick = () => openUploadSheet();
@@ -588,12 +608,13 @@ function openUploadSheet() {
   const destLabel = browsePath === VIDEO_ROOT ? 'videos' : browsePath.replace(`${VIDEO_ROOT}/`, 'videos/');
   wrap.innerHTML = `
     <div class="sheet" role="dialog" aria-modal="true">
-      <h3>Upload A Clip</h3>
+      <h3>Add A Video</h3>
       <p>Lands in <strong>${esc(destLabel)}</strong> - the folder open in the tree. Compressed matches the CTH Compressor: H.264, 1080p, about 4 Mbps.</p>
-      <div class="up-row">
-        <button class="btn" id="upPick">Choose Video…</button>
-        <span class="up-name" id="upName">No File Chosen</span>
-      </div>
+      <button type="button" class="up-drop" id="upDrop" aria-label="Choose Or Drop A Video">
+        <span class="up-drop-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V5.5"/><path d="m7.5 9.5 4.5-4.5 4.5 4.5"/><path d="M4.5 16.5v1.75A1.75 1.75 0 0 0 6.25 20h11.5a1.75 1.75 0 0 0 1.75-1.75V16.5"/></svg></span>
+        <span class="up-drop-main" id="upName">Drop A Video Here, Or Click To Choose</span>
+        <span class="up-drop-sub" id="upSub">MP4, MOV, M4V or WebM</span>
+      </button>
       <div class="up-row">
         <label class="up-label" for="upQ">Quality</label>
         <select id="upQ">
@@ -617,17 +638,29 @@ function openUploadSheet() {
   const done = () => { if (!busy) wrap.remove(); };
   wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) done(); });
   wrap.querySelector('[data-x="cancel"]').onclick = done;
-  wrap.querySelector('#upPick').onclick = () => wrap.querySelector('#upFile').click();
-  wrap.querySelector('#upFile').onchange = (e) => {
-    file = e.target.files[0] || null;
-    const nameEl = wrap.querySelector('#upName');
-    nameEl.textContent = file
-      ? `${file.name} (${file.size >= 1e9 ? `${(file.size / 1e9).toFixed(1)} GB` : `${Math.round(file.size / 1e6)} MB`})`
-      : 'No File Chosen';
-    // A chosen file reads as content; the placeholder stays muted.
-    nameEl.classList.toggle('has-file', !!file);
+  const drop = wrap.querySelector('#upDrop');
+  const setFile = (f) => {
+    file = f || null;
+    wrap.querySelector('#upName').textContent = file
+      ? file.name
+      : 'Drop A Video Here, Or Click To Choose';
+    wrap.querySelector('#upSub').textContent = file
+      ? (file.size >= 1e9 ? `${(file.size / 1e9).toFixed(1)} GB` : `${Math.round(file.size / 1e6)} MB`)
+      : 'MP4, MOV, M4V or WebM';
+    drop.classList.toggle('has-file', !!file);
     wrap.querySelector('#upGo').disabled = !file;
   };
+  drop.onclick = () => wrap.querySelector('#upFile').click();
+  drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', (e) => {
+    e.preventDefault();
+    drop.classList.remove('over');
+    const f = e.dataTransfer.files?.[0];
+    if (f && /\.(mp4|mov|m4v|webm)$/i.test(f.name)) setFile(f);
+    else if (f) toast('That Is Not A Video File', true);
+  });
+  wrap.querySelector('#upFile').onchange = (e) => setFile(e.target.files[0]);
   const bar = wrap.querySelector('#upBar');
   const fill = wrap.querySelector('#upFill');
   const say = (msg) => { wrap.querySelector('#upStatus').textContent = msg; };

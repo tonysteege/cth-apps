@@ -559,7 +559,7 @@
    forms now.
    ============================================================ */
 
-/* ---- Add Video ---------------------------------------------------- */
+/* ---- Add A Video --------------------------------------------------- */
 .up-row {
   display: flex; align-items: center; gap: 10px;
   margin-top: 12px; flex-wrap: wrap;
@@ -568,12 +568,52 @@
   flex: none; width: 62px;
   font-size: 12px; font-weight: 500; color: var(--mist);
 }
-.up-name {
-  flex: 1; min-width: 0;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-size: 13px; color: var(--mist);
+
+/* The BoardUI file-upload dropzone (Pro): a rounded-2xl n-100 surface with
+   a dashed 2px perimeter that darkens on hover and while a drag is over
+   it, and the upload-icon disc on the quaternary tokens. */
+.up-drop {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px;
+  width: 100%; min-height: 128px;
+  margin-top: 14px; padding: 18px;
+  border: none; border-radius: 16px;
+  background: var(--n-100);
+  cursor: pointer;
+  font: inherit;
+  transition: background var(--dur) ease;
 }
-.up-name.has-file { color: var(--ink); font-weight: 500; }
+.up-drop::before {
+  content: '';
+  position: absolute; inset: 0;
+  border: 2px dashed var(--n-300);
+  border-radius: 16px;
+  pointer-events: none;
+  transition: border-color var(--dur) ease;
+}
+.up-drop:hover::before, .up-drop.over::before { border-color: var(--n-400); }
+.up-drop.over { background: var(--a-50); }
+.up-drop.over::before { border-color: var(--a-400); }
+.up-drop-ic {
+  display: flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; margin-bottom: 4px;
+  border-radius: 50%;
+  background: var(--n-300);
+  color: var(--n-500);
+  transition: color var(--dur) ease;
+}
+.up-drop:hover .up-drop-ic { color: var(--n-600); }
+.up-drop-ic svg { width: 20px; height: 20px; }
+.up-drop-main {
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 13px; font-weight: 500; color: var(--n-700);
+}
+.up-drop-sub { font-size: 12px; color: var(--soft); }
+.up-drop.has-file { background: var(--a-50); }
+.up-drop.has-file::before { border-color: var(--a-300); }
+.up-drop.has-file .up-drop-ic { background: var(--a-100); color: var(--a-600); }
+.up-drop.has-file .up-drop-main { color: var(--ink); }
 #upQ {
   flex: 1; min-width: 0; height: 34px; padding: 0 8px;
   font: inherit; font-size: 13px; color: var(--ink);
@@ -657,4 +697,47 @@
 .em-note {
   margin: 12px 0 0;
   font-size: 12px; line-height: 1.5; color: var(--mist);
+}
+
+
+/* ---- BoardUI breadcrumb (the library's folder trail) ---------------- */
+.crumbs {
+  display: flex; align-items: center; gap: 10px;
+  margin: 22px 4px 10px;
+  min-width: 0; flex-wrap: wrap;
+}
+.crumbs:first-child { margin-top: 0; }
+.crumb {
+  display: inline-flex; align-items: center;
+  border: none; background: none; padding: 2px 6px; margin: 0 -2px;
+  border-radius: 6px;
+  font: inherit; font-size: 12px; font-weight: 500;
+  color: var(--soft); white-space: nowrap;
+  transition: color var(--dur) ease, background var(--dur) ease;
+}
+button.crumb { cursor: pointer; }
+button.crumb:hover { color: var(--mist); background: var(--n-100); }
+.crumb-cur { color: var(--mist); }
+.crumb-root { color: var(--soft); padding-right: 0; }
+.crumb-root::after {
+  content: ''; display: inline-block; width: 1px; height: 12px;
+  background: var(--n-300); margin-left: 10px;
+}
+.crumb-sep {
+  width: 12px; height: 12px; flex: none;
+  background: var(--soft);
+  -webkit-mask: url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22 fill=%22none%22 stroke=%22black%22 stroke-width=%221.6%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22m6 4 4 4-4 4%22/%3E%3C/svg%3E') center / contain no-repeat;
+  mask: url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22 fill=%22none%22 stroke=%22black%22 stroke-width=%221.6%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22m6 4 4 4-4 4%22/%3E%3C/svg%3E') center / contain no-repeat;
+}
+
+/* ---- BoardUI neutral chips for the counts --------------------------- */
+.clib-count, .log-count {
+  display: inline-flex; align-items: center;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: var(--n-200);
+  color: var(--n-500);
+  font-size: 11px; font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }

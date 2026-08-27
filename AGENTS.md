@@ -332,6 +332,24 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
     hairline top and bottom, quiet 500-weight text in n-400, no uppercase.
   - Buttons: medium is 36px / radius 10 / shadow-card; secondary hovers to
     n-100 bg + n-300 border, active n-200 + n-400, press scale(0.98).
+- **Pro components in service** (2026-08-26, after Tony bought BoardUI
+  Pro; recipes from the updated cth-boardui-starter):
+  - TOASTS are the notification card: white radius-16 surface, dropdown
+    elevation, and a leading status disc (blue info pair; rose error pair
+    for `.err`) drawn with masked inline SVGs - no assets, no network.
+  - CHECKBOXES (`.rink-row input`, used by the Rinks sheet and Email
+    sheet) are the BoardUI checkbox: white bordered box, and the accent
+    gradient with the checkbox-selected inner highlight when checked.
+    Radios get the round variant automatically.
+  - The Add Video sheet leads with the FILE-UPLOAD dropzone (`.up-drop`):
+    rounded-2xl n-100 surface, dashed perimeter that answers hover and
+    drag-over, upload-icon disc on the quaternary tokens, real
+    drag-and-drop wired in `showUpload` (`setFile`).
+  - The Clips library folder trail is a BREADCRUMB (`crumbsHtml()` in
+    app.js): every ancestor is a clickable jump, the current folder is
+    quiet text, chevron separators are masked SVGs.
+  - COUNTS (`.clib-count`, `.log-count`, `.eside-count`) are neutral
+    chips: n-200 surface, n-500 medium text, radius 6.
 - **Type ramp.** Chrome tops out at 600 (400 body / 500 labels / 600
   headings). 700 is used only for SLIDE CONTENT, which is read across a
   room. 800 is NOT in the BoardUI ramp and survives in exactly four places,
