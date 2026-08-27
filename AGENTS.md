@@ -8,9 +8,10 @@ GitHub-connected agents). Read this fully before changing anything.
 CTH Apps - Tony's web app hub, live at https://apps.coachtonyhockey.com/.
 The repo root `index.html` is the hub (a launcher page listing every app);
 each app lives in its own subfolder and serves at its path. Today there
-are three apps: **Diagrams** at `/diagrams/` (the hockey diagram editor),
+are four apps: **Diagrams** at `/diagrams/` (the hockey diagram editor),
 **Clips** at `/clips/` (video tagging and clipping over Tony's own folder), and
-**Slides** at `/slides/` (Notion pages as film-session slideshows). `/present/`
+**Slides** at `/slides/` (Notion pages as film-session slideshows), and
+**Bots** at `/bots/` (a board of small single-purpose AI helpers). `/present/`
 is a compatibility redirect that preserves existing `#p=...&s=...` links. Static
 site, no build step: GitHub Pages serves the `main` branch as-is. **Merging
 to `main` IS the deploy** - the live site updates within about a minute.
@@ -112,8 +113,15 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
 4. **Rink geometry is measured, not designed.** The landmark coordinates in
    `js/rink.js` are measured off `assets/rink.png` (3200x1600) and match
    Film Room exactly. Do not adjust them or swap the rink art casually.
-5. Do not add analytics, external services, accounts, or network calls.
-   The app is fully client-side and private by design.
+5. Do not add analytics, accounts, or third-party embeds; there is no
+   sign-in anywhere and no telemetry, ever. Diagrams and Clips remain
+   FULLY CLIENT-SIDE - they must never gain a network call. Network access
+   is confined to the two apps that cannot work without it, and only
+   through the CTH Worker in `present-worker/`: Slides fetches Notion, and
+   Bots (2026-08-27, Tony's call) calls the model providers. Provider keys
+   are WORKER SECRETS and never touch this repo or the browser. Adding a
+   third destination to that Worker needs the same bar: Tony's ask, a
+   locked CORS origin list, no stored state, no logged prompts.
 6. **Diagrams AUTOSAVES** (Tony's call 2026-08-26, reversing the
    manual-save rule of 2026-08-24). An edit calls `markDirty()`, which
    raises the flag and schedules the write; `saveNow()` runs once the edits
@@ -419,6 +427,37 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
 - Pages with their own inline `<style>` (`index.html`, `clips/embed.html`,
   `present/index.html`) carry a copy of the few tokens they need. Keep them
   in step with `diagrams/css/app.css` by hand.
+
+## Bots (/bots/) rules
+
+- Bots is a BOARD of small single-purpose helpers, not a chat app. Cards
+  drag to reorder, resize across a 1-2 column by 1-2 row grid, take a
+  per-bot colour and hide from the board; the layout lives in the
+  `cth-bots` IndexedDB under `board`/`layout`.
+- **ADDING A BOT IS ADDING ONE OBJECT** to `BOTS` in `js/registry.js`:
+  id, name, blurb, icon, colour, kind ('text' or 'image'), its `inputs`,
+  its `settings` schema and its `system` instruction plus a `prompt()`
+  builder. Nothing else needs editing - the board, the runner, the
+  settings sheet and the history all read that shape. Never rename an
+  existing bot `id`: it is the key its saved settings live under.
+- Per-bot settings (counts, style lists, save folder, and the INSTRUCTION
+  itself) live in the `configs` store keyed by bot id, merged over the
+  registry defaults. Storage is additive-only like every other CTH app.
+- Image bots carry an editable STYLE list. Add From Image sends a
+  screenshot to `/ai/vision` and saves the style description it reads
+  back, which is how a style seen on YouTube becomes a reusable option.
+  Best asks the text model to pick or invent the strongest style for that
+  subject before generating.
+- Results save into the CTH folder through `clips/js/localfs.js` at each
+  bot's configured folder (`/visuals`, `/thumbnails`), download fallback.
+  Refine re-runs with a region hint derived from a box drawn on the
+  option - it is prompt text, not inpainting, and must not claim to be.
+- The model calls go to the SAME Worker Slides uses: `/ai/text`,
+  `/ai/vision`, `/ai/image` on apps-api.coachtonyhockey.com. Setup is
+  `wrangler secret put ANTHROPIC_API_KEY` (text and vision),
+  `wrangler secret put OPENAI_API_KEY` (images), then `wrangler deploy`.
+  A missing key or an undeployed Worker must surface as a plain-words
+  error with a Setup button - never a silent failure or a dead spinner.
 
 ## Verifying a change
 
