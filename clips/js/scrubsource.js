@@ -353,7 +353,13 @@ async function indexVideo(provider) {
 // so the first read lands in a fraction of a second on rink wifi.
 
 const CACHE_BYTES = 640 * 1024 * 1024;
-const CACHE_MAX_W = 1280;
+// Decoded frames are cached at up to this width. Raised 1280 -> 1920 on
+// 2026-08-26: game film is 1080p, and capping at 1280 meant every scrubbed
+// frame was a downscale of the source. The byte budget below is unchanged,
+// so a 1080p file now caches ~77 frames instead of ~173 - still far more
+// than a gesture needs, and each one is now pixel-for-pixel the source.
+// 4K still caps here on purpose; caching 33MB frames would buy 19 of them.
+const CACHE_MAX_W = 1920;
 const MAX_LAG = 900;
 const WINDOW_FRAMES = 480;
 const QUEUE_DEPTH = 48;

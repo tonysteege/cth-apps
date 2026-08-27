@@ -239,9 +239,20 @@ function startPaint(source) {
     c.className = 'scrub-paint';
     stage.insertBefore(c, v.nextSibling);
   }
-  if (c.width !== source.width || c.height !== source.height) { c.width = source.width; c.height = source.height; }
+  // THE OVERLAY IS SIZED TO THE VIDEO, NOT TO THE DECODER (2026-08-26).
+  // It used to take the decoder cache's dimensions, which are capped for
+  // memory - so the first thing every gesture did was copy the full-res
+  // <video> frame DOWN to 1280 wide and show that. On a 1080p or 4K game
+  // that is visibly softer than the file, and since the overlay is up for
+  // the whole gesture and the moment after it, scrubbing looked like the
+  // video itself had lost quality. Painting at native size costs one
+  // full-frame buffer (8MB at 1080p) and nothing per step.
+  const vw = v.videoWidth || source.width;
+  const vh = v.videoHeight || source.height;
+  if (c.width !== vw || c.height !== vh) { c.width = vw; c.height = vh; }
   paint = c;
   pctx = c.getContext('2d', { alpha: false });
+  pctx.imageSmoothingQuality = 'high';
   try { pctx.drawImage(v, 0, 0, c.width, c.height); } catch (_) { paint = null; pctx = null; return false; }
   lastPaintT = v.currentTime;
   c.classList.add('on');

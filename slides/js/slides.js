@@ -1,34 +1,55 @@
 // Slide grammar and block rendering. The deck is cut from a Notion page's
 // block stream exactly like the old Film Room presenter cut markdown:
-//   - the page itself is a dark TITLE slide (logo, icon, title)
+//   - the page itself is a dark TITLE slide (logo, title, subtitle)
 //   - every heading_2 starts a new slide, led by that header
 //   - every divider starts a new slide too, carrying the current header
-//   - a heading_1 makes a big centered SECTION slide
+//   - a heading_1 makes a big SECTION slide
 // Everything else renders inside the current slide, media splitting the
 // slide into text + media columns when a slide has exactly one media block.
+//
+// Two additions on 2026-08-26, both driven by the CTH slide template:
+//   - a LEAD PARAGRAPH (a paragraph sitting before any heading) becomes the
+//     cover's subtitle instead of opening the first content slide, which is
+//     what gives the cover its Title / Subtitle pair.
+//   - every content slide carries the name of the SECTION it sits under
+//     (the last heading_1), drawn as the small eyebrow above its header.
+//     Nothing new has to be written on the page for this - it is the
+//     heading_1 that was already there.
 
 import { esc } from './ui.js';
 
 // ------------------------------------------------------------- splitting
 
 export function buildSlides(page) {
-  const slides = [{ kind: 'title', title: page.title, icon: page.icon, cover: page.cover }];
+  const blocks = (page.blocks || []).slice();
+  // The lead paragraph, if the page opens with one, is the cover subtitle.
+  // Only a real paragraph with text qualifies, and only before any heading.
+  let subtitle = '';
+  const lead = blocks[0];
+  if (lead && lead.type === 'paragraph' && plain(lead.rich).trim()) {
+    subtitle = plain(lead.rich).trim();
+    blocks.shift();
+  }
+  const title = { kind: 'title', title: page.title, icon: page.icon, cover: page.cover, subtitle };
+  const slides = [title];
   let curHeader = null;
-  let cur = { kind: 'content', header: null, blocks: [] };
+  let section = '';
+  let cur = { kind: 'content', header: null, section, blocks: [] };
   const flush = () => {
     if (cur.header || cur.blocks.length) slides.push(cur);
-    cur = { kind: 'content', header: curHeader, blocks: [] };
+    cur = { kind: 'content', header: curHeader, section, blocks: [] };
   };
-  for (const b of page.blocks || []) {
+  for (const b of blocks) {
     if (b.type === 'heading_1') {
       flush();
-      slides.push({ kind: 'section', header: b });
+      section = plain(b.rich).trim();
+      slides.push({ kind: 'section', header: b, section });
       curHeader = null;
-      cur = { kind: 'content', header: null, blocks: [] };
+      cur = { kind: 'content', header: null, section, blocks: [] };
     } else if (b.type === 'heading_2') {
       flush();
       curHeader = b;
-      cur = { kind: 'content', header: b, blocks: [] };
+      cur = { kind: 'content', header: b, section, blocks: [] };
     } else if (b.type === 'divider') {
       flush();
     } else {

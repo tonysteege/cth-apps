@@ -184,6 +184,15 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
     the 250ms safety timeout, which is a scrub that moves in lurches.
   - Swipe RIGHT advances (macOS sends negative deltaX; `scrubReverse`
     flips it). The timeline drag rides the same engine via `scrubTo`.
+  - **SCRUB MUST LOOK LIKE THE FILE** (2026-08-26). Two things were quietly
+    downscaling the picture during every gesture, which read as "the video
+    quality is terrible" even though playback itself was untouched: the
+    overlay canvas took the DECODER's dimensions rather than the video's, so
+    the first act of every gesture was copying the full-res frame down to
+    1280 wide; and `CACHE_MAX_W` capped decoded frames at 1280 on 1080p
+    film. The overlay is now sized to `videoWidth`/`videoHeight` and the
+    cache cap is 1920. Keep both: sizing the overlay off the decoder again
+    reintroduces the exact complaint.
   - THE DECODER IS PORTED TOO (2026-08-25, second pass): `scrubsource.js`
     is Film Room's WebCodecs engine plus its mp4 demuxer, whole - the moov
     sample tables are parsed in the browser (DataView instead of Buffer)
@@ -273,6 +282,25 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
 - The slide grammar is a contract with how Tony writes pages: page title =
   dark cover slide, every heading_2 starts a slide, every divider cuts a
   slide (keeping the current header), heading_1 makes a dark section slide.
+  Two additions on 2026-08-26, both from the CTH slide template: a LEAD
+  PARAGRAPH (a paragraph before any heading) becomes the cover's SUBTITLE
+  and no longer opens the first content slide, and every content slide
+  carries the name of the section it sits under (the last heading_1, or the
+  deck title when there is none) as the small eyebrow above its header.
+  Nothing new has to be written on a page for either.
+- **Slide design follows the CTH template** (2026-08-26, Tony's call): the
+  cover is left-aligned with the mark top left, the title on the lower
+  third, the subtitle under it, the credit bottom right and an accent
+  hairline along the foot. Content slides are eyebrow + header, then the
+  body, with one media block sitting in a 4:6 split beside the text.
+- **Rink diagrams read HORIZONTALLY.** A rink is 2:1, so a portrait one is
+  about 0.5 wide-to-tall; any image landing between 0.38 and 0.62 is turned
+  a quarter turn into a landscape box (`.sl-img--turned`, applied from
+  `app.js` once natural dimensions are known). The window is deliberately
+  narrow so an ordinary portrait photo, which starts around 0.66, is never
+  touched. `transform` does not change layout, so the figure keeps its own
+  2:1 box and the image is placed inside it - do not "simplify" that to a
+  bare rotate, the tall footprint comes straight back.
 - Slide links come from a Notion FORMULA property (name: Slides):
   `"https://apps.coachtonyhockey.com/slides/#p=" + id()` - the app also
   accepts any pasted Notion URL. The #p=<id>&s=<n> hash format is public.

@@ -151,6 +151,9 @@ function buildDeck(page, startAt) {
     </div>`;
 
   const stage = $('#prStage');
+  // Every content slide wears the name of the section it sits under; with no
+  // heading_1 above it, the deck's own title does that job.
+  const deckTitle = slides[0]?.title || '';
   const slideEls = slides.map((s, i) => {
     const el = document.createElement('div');
     el.className = `pr-slide ${s.kind === 'content' ? 'light' : 'darkslide'}`;
@@ -158,39 +161,71 @@ function buildDeck(page, startAt) {
     const mediaSlots = [];
     if (s.kind === 'title') {
       el.innerHTML = `
-        <div class="sl-titlewrap"${s.cover ? ` style="background-image:linear-gradient(rgba(10,10,10,.82),rgba(10,10,10,.86)),url('${esc(s.cover)}')"` : ''}>
-          ${s.icon ? `<div class="sl-icon">${esc(s.icon)}</div>` : ''}
-          <h1>${esc(s.title)}</h1>
-          <img class="sl-logo" src="cth-horizontal-white.svg" alt="Coach Tony Hockey">
+        <div class="sl-cover"${s.cover ? ` style="background-image:linear-gradient(rgba(10,10,10,.80),rgba(10,10,10,.88)),url('${esc(s.cover)}')"` : ''}>
+          <img class="sl-cover-logo" src="cth-horizontal-white.svg" alt="Coach Tony Hockey">
+          <div class="sl-cover-body">
+            ${s.icon ? `<div class="sl-icon">${esc(s.icon)}</div>` : ''}
+            <h1 class="sl-cover-title">${esc(s.title)}</h1>
+            ${s.subtitle ? `<p class="sl-cover-sub">${esc(s.subtitle)}</p>` : ''}
+          </div>
+          <span class="sl-copy">&copy; Coach Tony Hockey</span>
         </div>`;
     } else if (s.kind === 'section') {
-      el.innerHTML = `<div class="sl-titlewrap"><h1>${richHtml(s.header.rich)}</h1><img class="sl-logo" src="cth-horizontal-white.svg" alt=""></div>`;
+      el.innerHTML = `
+        <div class="sl-cover sl-cover--section">
+          <img class="sl-cover-logo" src="cth-horizontal-white.svg" alt="">
+          <div class="sl-cover-body">
+            <h1 class="sl-cover-title">${richHtml(s.header.rich)}</h1>
+          </div>
+          <span class="sl-copy">&copy; Coach Tony Hockey</span>
+        </div>`;
     } else {
       const media = s.blocks.filter(isMediaBlock);
       const rest = s.blocks.filter((b) => !isMediaBlock(b));
       // Split layout: one media block beside the text; otherwise flow.
+      const eyebrow = s.section || deckTitle;
+      const head = `
+          <header class="sl-head">
+            ${eyebrow ? `<span class="sl-eyebrow">${esc(eyebrow)}</span>` : ''}
+            ${s.header ? `<h2 class="sl-h">${richHtml(s.header.rich)}</h2>` : ''}
+          </header>`;
+      const foot = `
+          <span class="sl-num">${i + 1}</span>
+          <img class="sl-mark" src="cth-logo-black.svg" alt="">`;
       if (media.length === 1 && rest.length) {
         const slots2 = [];
-        el.innerHTML = `
-          ${s.header ? `<h2 class="sl-h">${richHtml(s.header.rich)}</h2>` : ''}
+        el.innerHTML = `${head}
           <div class="sl-split">
             <div class="sl-text">${renderBlocks(rest, slots2)}</div>
             <div class="sl-media">${renderBlocks(media, slots2)}</div>
-          </div>
-          <span class="sl-num">${i + 1}</span>
-          <img class="sl-mark" src="cth-logo-black.svg" alt="">`;
+          </div>${foot}`;
         el._slots = slots2;
       } else {
-        el.innerHTML = `
-          ${s.header ? `<h2 class="sl-h">${richHtml(s.header.rich)}</h2>` : ''}
-          <div class="sl-flow${media.length && !rest.length ? ' sl-onlymedia' : ''}">${renderBlocks(s.blocks, mediaSlots)}</div>
-          <span class="sl-num">${i + 1}</span>
-          <img class="sl-mark" src="cth-logo-black.svg" alt="">`;
+        el.innerHTML = `${head}
+          <div class="sl-flow${media.length && !rest.length ? ' sl-onlymedia' : ''}">${renderBlocks(s.blocks, mediaSlots)}</div>${foot}`;
         el._slots = mediaSlots;
       }
     }
     stage.appendChild(el);
     return el;
+  });
+
+  // RINK DIAGRAMS READ HORIZONTALLY (2026-08-26, Tony's call). A rink drawn
+  // portrait wastes a 16:9 slide: it lands as a narrow strip with the ice
+  // tiny in the middle. A rink is 2:1, so a portrait one is ~0.5 wide-to-
+  // tall; anything in that band is turned a quarter turn and its box is
+  // swapped, which fills the media column properly. The window is
+  // deliberately narrow so an ordinary portrait photo (0.66 upward) is left
+  // exactly as it was shot.
+  stage.querySelectorAll('.sl-img img').forEach((img) => {
+    const orient = () => {
+      const w = img.naturalWidth;
+      const h = img.naturalHeight;
+      if (!w || !h) return;
+      const ratio = w / h;
+      img.closest('.sl-img')?.classList.toggle('sl-img--turned', ratio > 0.38 && ratio < 0.62);
+    };
+    if (img.complete) orient(); else img.addEventListener('load', orient, { once: true });
   });
 
   // Mount the scrubbable players into their slots.
