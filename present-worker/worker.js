@@ -162,12 +162,65 @@ const ASPECT_WH = {
   '4:5': [896, 1120],
 };
 
+// Workers AI does not answer with one shape, and two of them bit on the
+// first live calls (2026-08-27):
+//   - reading `.response` and calling .trim() threw, because it is not
+//     always a string;
+//   - when the model answers with valid JSON, Workers AI PARSES IT FOR
+//     YOU, so `response` came back as an array of cue objects and a
+//     content-block join flattened it to "".
+// So: a parsed payload is handed back as JSON text for the app's own
+// parser to read, real content blocks are joined, and an empty candidate
+// falls through to the OpenAI-style `choices`. This can never throw.
+function pickText(v) {
+  if (v == null) return '';
+  if (typeof v === 'string') return v.trim();
+  if (Array.isArray(v)) {
+    const isBlocks = v.every((c) => typeof c === 'string'
+      || (c && (typeof c.text === 'string' || typeof c.content === 'string')));
+    if (isBlocks) return v.map((c) => (typeof c === 'string' ? c : c.text ?? c.content ?? '')).join('').trim();
+    try { return JSON.stringify(v); } catch (_) { return ''; }
+  }
+  if (typeof v === 'object') {
+    const inner = v.text ?? v.content ?? v.response;
+    if (typeof inner === 'string') return inner.trim();
+    try { return JSON.stringify(v); } catch (_) { return ''; }
+  }
+  return String(v);
+}
+
+function textOut(r) {
+  if (typeof r === 'string') return r.trim();
+  return pickText(r?.response)
+    || pickText(r?.choices?.[0]?.message?.content)
+    || pickText(r?.result?.response)
+    || pickText(r?.output_text)
+    || '';
+}
+
 const b64 = (buf) => {
   const bytes = new Uint8Array(buf);
   let bin = '';
   for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   return btoa(bin);
 };
+
+// FLUX returns JPEG bytes, not PNG - labelling them image/png produced
+// files saved as .png that were actually JPEGs (caught live 2026-08-27).
+// Sniff the magic number instead of assuming.
+const sniffMime = (buf) => {
+  const b = new Uint8Array(buf);
+  if (b[0] === 0xFF && b[1] === 0xD8) return 'image/jpeg';
+  if (b[0] === 0x89 && b[1] === 0x50) return 'image/png';
+  if (b[0] === 0x52 && b[1] === 0x49) return 'image/webp';
+  return 'image/png';
+};
+const asDataUrl = (buf) => `data:${sniffMime(buf)};base64,${b64(buf)}`;
+// The same sniff for a model that hands back base64 directly: FLUX does,
+// which is the branch that was still mislabelling JPEGs as PNG.
+const sniffB64 = (b) => (b.startsWith('/9j/') ? 'image/jpeg'
+  : b.startsWith('iVBOR') ? 'image/png'
+  : b.startsWith('UklGR') ? 'image/webp' : 'image/png');
 
 // FLUX.2 takes multipart form data even for a bare prompt, and answers with
 // the image bytes as a stream. FormData will not hand over its own boundary,
@@ -184,10 +237,10 @@ async function fluxImage(env, model, prompt, aspect) {
   });
   // Depending on the model the binding gives back a stream, a plain
   // ArrayBuffer, or an object carrying base64 - accept all three.
-  if (out && typeof out.getReader === 'function') return `data:image/png;base64,${b64(await new Response(out).arrayBuffer())}`;
-  if (out instanceof ArrayBuffer) return `data:image/png;base64,${b64(out)}`;
-  if (out && out.image) return `data:image/png;base64,${out.image}`;
-  if (out && out.body) return `data:image/png;base64,${b64(await new Response(out.body).arrayBuffer())}`;
+  if (out && typeof out.getReader === 'function') return asDataUrl(await new Response(out).arrayBuffer());
+  if (out instanceof ArrayBuffer) return asDataUrl(out);
+  if (out && typeof out.image === 'string') return `data:${sniffB64(out.image)};base64,${out.image}`;
+  if (out && out.body) return asDataUrl(await new Response(out.body).arrayBuffer());
   throw new Error('The image model returned nothing usable');
 }
 
@@ -210,7 +263,8 @@ async function handleAi(request, env, path) {
         ],
         max_tokens: 1200,
       });
-      return json(request, { text: (r?.response || '').trim() });
+      if (body.debug) return json(request, { raw: r, keys: r && typeof r === 'object' ? Object.keys(r) : typeof r });
+      return json(request, { text: textOut(r) });
     }
 
     if (path === '/ai/vision') {
@@ -227,7 +281,7 @@ async function handleAi(request, env, path) {
         }],
         max_tokens: 700,
       });
-      return json(request, { text: (r?.response || '').trim() });
+      return json(request, { text: textOut(r) });
     }
 
     if (path === '/ai/image') {
@@ -240,8 +294,14 @@ async function handleAi(request, env, path) {
       );
       const images = settled.filter((x) => x.status === 'fulfilled').map((x) => x.value);
       if (!images.length) {
-        const why = settled.find((x) => x.status === 'rejected')?.reason;
-        return json(request, { error: 'model', message: String(why?.message || why || 'Image generation failed') }, 502);
+        const why = String(settled.find((x) => x.status === 'rejected')?.reason?.message || 'Image generation failed');
+        // Workers AI runs a safety filter and answers 3030 when it trips.
+        // It is prompt-dependent and often catches innocuous wording, so
+        // say what to do rather than showing the raw code.
+        if (/3030|flagged/i.test(why)) {
+          return json(request, { error: 'flagged', message: 'The image service blocked that wording. Reword the brief and try again.' }, 422);
+        }
+        return json(request, { error: 'model', message: why }, 502);
       }
       return json(request, { images });
     }

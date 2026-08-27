@@ -625,18 +625,22 @@ async function saveImage(cfg, run, i, quiet = false) {
   try {
     const res = await fetch(run.images[i]);
     const blob = await res.blob();
+    // The extension follows the ACTUAL bytes: FLUX hands back JPEG, so a
+    // hardcoded .png wrote mislabelled files.
+    const ext = (blob.type || '').includes('jpeg') ? 'jpg'
+      : (blob.type || '').includes('webp') ? 'webp' : 'png';
     const stem = `${run.bot}-${new Date(run.at).toISOString().slice(0, 10)}-${run.id}-${i + 1}`;
     const fs = await import('../../clips/js/localfs.js');
     if (fs.fsSupported() && (fs.fsConnected() || fs.fsRemembered())) {
       if (!fs.fsConnected()) await fs.fsReconnect();
-      const path = `${cfg.folder || '/visuals'}/${stem}.png`;
+      const path = `${cfg.folder || '/visuals'}/${stem}.${ext}`;
       await fs.fsWrite(path, blob);
       if (!quiet) toast(`Saved To ${fs.fsLabel(path)}`);
       return;
     }
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `${stem}.png`;
+    a.download = `${stem}.${ext}`;
     a.click();
     if (!quiet) toast('Downloaded');
   } catch (e) {

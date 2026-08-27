@@ -481,6 +481,23 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   inference bills to the Cloudflare account the Worker already runs on,
   which is also why the bots work with the laptop shut: the work happens
   at the edge, not on the Mac. Setup is one `wrangler deploy`, no secret.
+  THREE THINGS THE FIRST LIVE CALLS TAUGHT (2026-08-27, all fixed in
+  `present-worker/worker.js` - do not regress them):
+  1. A text run's shape varies. `.response` is not always a string, and
+     WHEN THE MODEL ANSWERS WITH VALID JSON, WORKERS AI PARSES IT FOR YOU -
+     so `response` arrives as an array of objects. `pickText`/`textOut`
+     hand a parsed payload back as JSON text for the app's own parser,
+     join real content blocks, and fall through an empty candidate to the
+     OpenAI-style `choices`. Never call `.trim()` on `.response` directly.
+  2. FLUX returns JPEG BYTES, not PNG, and hands them back as
+     `{ image: base64 }`. The mime is sniffed from the magic number
+     (`sniffB64` / `sniffMime`) and the app takes its file extension from
+     the blob type - a hardcoded `.png` writes mislabelled files.
+  3. Workers AI runs a safety filter that answers `3030 flagged` on
+     innocuous wording. That is surfaced as a 422 with "reword the brief",
+     not as a raw model error.
+  `{ debug: true }` on `/ai/text` echoes the raw model response - the
+  fastest way to see a shape rather than guess at one.
   Speed is the tie-break: images use the four-step FLUX.2 klein models
   (`flux-2-klein-4b` fast, `-9b` on `quality: true`), text uses the fast
   Llama build, vision uses llama-4-scout, and a run's options generate in

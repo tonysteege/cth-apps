@@ -39,8 +39,9 @@ async function post(path, body, signal) {
   if (!r.ok) {
     if (r.status === 404) throw new AiError('The CTH Worker Needs One Deploy Before The Bots Can Run', 'missing');
     if (r.status === 503) throw new AiError('Workers AI Is Not Bound Yet - Redeploy The CTH Worker', 'missing');
+    if (r.status === 422) throw new AiError(data?.message || 'That Wording Was Blocked - Reword The Brief', 'flagged');
     if (r.status === 429) throw new AiError('Rate Limited By The Model Provider - Try Again In A Moment', 'rate');
-    throw new AiError(data?.error || `The AI Service Returned ${r.status}`, 'http');
+    throw new AiError(data?.message || data?.error || `The AI Service Returned ${r.status}`, 'http');
   }
   return data;
 }
