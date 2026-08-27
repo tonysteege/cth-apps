@@ -469,6 +469,16 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   `wrangler secret put OPENAI_API_KEY` (images), then `wrangler deploy`.
   An undeployed Worker must surface as a plain-words error with a Setup
   button - never a silent failure or a dead spinner.
+- **THE RUN BUTTON IS ALWAYS CALLED "RUN"** (2026-08-27, Tony's call) -
+  for these bots and every future one. Not Generate, not Create.
+- Cards carry NO description text: the board packs four or more columns
+  across a normal window (`minmax(268px, 1fr)`) and vertical space is
+  worth more than a blurb. A bot's `blurb` still exists in the registry
+  for the settings sheet.
+- STYLE CHIPS ARE TAGS, NOT ACTIONS: small, flat, no shadow, and selected
+  with a soft tint of THAT BOT'S OWN COLOUR (`color-mix` on `--bot`), so
+  the only strong button on a card is Run and a chip never fights it or
+  shows the wrong bot's colour.
 - **ONE PAGE** (2026-08-27, Tony's call). A card is not a link to a bot:
   the card IS the bot, holding its own inputs, Run button, results and
   recent runs. There is no second route in this app and no `location.hash`

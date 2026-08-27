@@ -59,7 +59,6 @@ function cardHtml(bot, cfg, sz, hidden) {
         <button class="bc-icon" data-cfg title="Bot Settings" aria-label="Bot Settings">${GEAR}</button>
         <span class="bot-grip" title="Drag To Rearrange" aria-hidden="true"></span>
       </header>
-      <p class="bot-blurb">${esc(bot.blurb)}</p>
       <div class="bc-form">
         ${(bot.inputs || []).map((f) => `
           <label class="run-field">
@@ -77,7 +76,7 @@ function cardHtml(bot, cfg, sz, hidden) {
             </div>
           </div>` : ''}
         <div class="bc-go">
-          <button class="btn btn-ink" data-run>${esc(bot.kind === 'image' ? 'Generate' : 'Run')}</button>
+          <button class="btn btn-ink" data-run>Run</button>
           <span class="run-status" data-status aria-live="polite"></span>
           <span class="bot-flex"></span>
           <button class="mini" data-stop hidden>Stop</button>

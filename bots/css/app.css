@@ -10,7 +10,7 @@
 .bot-board {
   flex: 1;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
   align-items: start;
   gap: 16px;
   align-content: start;
@@ -22,12 +22,12 @@
 
 .bot-card {
   --bot: var(--a-500);
-  --out-max: 300px;
+  --out-max: 260px;
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 16px 16px 18px;
+  gap: 9px;
+  padding: 14px 14px 16px;
   background: var(--cloud);
   border: 1px solid var(--edge);
   border-radius: 16px;
@@ -53,14 +53,13 @@
 .bc-head { display: flex; align-items: center; gap: 10px; }
 .bot-ic {
   display: flex; align-items: center; justify-content: center;
-  width: 34px; height: 34px; flex: none;
-  border-radius: 10px;
+  width: 30px; height: 30px; flex: none;
+  border-radius: 9px;
   background: color-mix(in srgb, var(--bot) 12%, transparent);
   color: var(--bot);
 }
-.bot-ic svg { width: 19px; height: 19px; }
-.bot-name { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
-.bot-blurb { margin: -4px 0 0; color: var(--mist); font-size: 12px; line-height: 1.45; }
+.bot-ic svg { width: 18px; height: 18px; }
+.bot-name { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
 .bot-flex { flex: 1; }
 .bc-icon {
   display: inline-flex; align-items: center; justify-content: center;
@@ -82,7 +81,7 @@
 .bot-card:hover .bot-grip { opacity: 1; }
 .bot-grip:active { cursor: grabbing; }
 
-.bc-form { display: flex; flex-direction: column; gap: 10px; }
+.bc-form { display: flex; flex-direction: column; gap: 9px; }
 .bc-go { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .bc-go .btn { height: 32px; padding: 0 14px; font-size: 13px; }
 .bot-card .btn-ink {
@@ -134,22 +133,25 @@
 .run-field textarea:hover:not(:focus), .run-field input:hover:not(:focus) { box-shadow: var(--field-ring-hover); }
 .run-field textarea:focus, .run-field input:focus { outline: none; box-shadow: var(--field-ring-focus); }
 
-.run-styles { display: flex; flex-wrap: wrap; gap: 6px; }
+.run-styles { display: flex; flex-wrap: wrap; gap: 4px; }
+/* A style is a TAG, not an action: small, flat, no shadow, and selected
+   with a soft tint of the bot's own colour rather than a filled gradient -
+   so the only strong button on the card stays Run. */
 .style-chip {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 5px 12px;
-  border: 1px solid var(--edge); border-radius: 999px;
-  background: var(--cloud); color: var(--n-700);
-  font: inherit; font-size: 12.5px; font-weight: 500;
-  box-shadow: var(--shadow-card);
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 8px;
+  border: 1px solid var(--edge); border-radius: 6px;
+  background: var(--cloud); color: var(--mist);
+  font: inherit; font-size: 11px; font-weight: 500;
   transition: background var(--dur) ease, border-color var(--dur) ease, color var(--dur) ease;
 }
-.style-chip svg { width: 14px; height: 14px; }
-.style-chip:hover { border-color: var(--n-300); background: var(--n-100); }
+.style-chip svg { width: 11px; height: 11px; }
+.style-chip:hover { border-color: var(--n-300); background: var(--n-100); color: var(--n-700); }
 .style-chip.on {
-  background-image: var(--grad-primary);
-  border-color: transparent; color: #fff;
-  box-shadow: var(--shadow-nav);
+  background: color-mix(in srgb, var(--bot) 13%, transparent);
+  border-color: color-mix(in srgb, var(--bot) 32%, transparent);
+  color: color-mix(in oklab, var(--bot) 78%, #000);
+  font-weight: 600;
 }
 .run-go { display: flex; align-items: center; gap: 12px; }
 .run-status { font-size: 12.5px; color: var(--mist); }
@@ -267,7 +269,7 @@
 .bs-system:focus { outline: none; box-shadow: var(--field-ring-focus); }
 .bs-note { margin: 8px 0 0; color: var(--soft); font-size: 12px; line-height: 1.5; }
 
-@media (max-width: 620px) {
+@media (max-width: 640px) {
   .bot-board { grid-template-columns: 1fr; }
   .bot-card[data-w="2"] { grid-column: auto; }
   .bot-resize { display: none; }

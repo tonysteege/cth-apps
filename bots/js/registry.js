@@ -6,7 +6,10 @@
 //
 //   id        stable key - also the IndexedDB key for its config. Never
 //             rename one: a rename orphans that bot's saved settings.
-//   name      card title.  blurb  one line under it.
+//   name      card title. `blurb` is kept as the bot's one-line
+//             description but is NOT drawn on the card (2026-08-27):
+//             vertical space on the board is worth more. It still serves
+//             the settings sheet and any future listing.
 //   icon      inline SVG (line icons, currentColor, 24-box).
 //   color     default accent hex; Tony recolors per bot on the card.
 //   kind      'text' or 'image' - decides which endpoint runs and how the
