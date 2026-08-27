@@ -478,24 +478,50 @@ async function showSettings(bot) {
     paintKnow();
   };
 
-  veil.querySelector('[data-addnotion]').onclick = async () => {
-    const url = prompt('Paste the Notion page link');
-    if (!url) return;
-    const btn = veil.querySelector('[data-addnotion]');
-    btn.textContent = 'Reading…';
-    btn.disabled = true;
-    try {
-      const page = await notionText(url);
-      const text = [page.title, page.text].filter(Boolean).join('\n').trim();
-      if (!text) throw new AiError('That Notion Page Has No Text In It', 'empty');
-      addKnow({ id: uid(), kind: 'notion', name: page.title || 'Notion Page', url: url.trim(), text: text.slice(0, KNOW_PER_SOURCE), at: Date.now() });
-      toast(`Added "${page.title || 'Notion Page'}"`);
-    } catch (e) {
-      toast(e.message || 'Could Not Read That Page', true);
-    }
-    btn.textContent = '+ Notion Page';
-    btn.disabled = false;
-    paintKnow();
+  // An inline field, not window.prompt: nothing else in this suite opens a
+  // native dialog, and a prompt() cannot be styled, cannot show progress
+  // and cannot report an error where the error belongs.
+  veil.querySelector('[data-addnotion]').onclick = () => {
+    if (knowBox.querySelector('.bs-knowadd')) { knowBox.querySelector('.bs-knowadd input').focus(); return; }
+    const row = document.createElement('div');
+    row.className = 'bs-knowrow bs-knowadd';
+    row.innerHTML = `
+      <span class="bs-knowic">${KNOW_ICON.notion}</span>
+      <input type="url" placeholder="https://www.notion.so/..." aria-label="Notion Page Link">
+      <button class="mini" data-kgo>Add</button>
+      <button class="mini" data-kcancel>Cancel</button>`;
+    knowBox.querySelector('.bs-empty')?.remove();
+    knowBox.appendChild(row);
+    const input = row.querySelector('input');
+    input.focus();
+    const go = row.querySelector('[data-kgo]');
+    row.querySelector('[data-kcancel]').onclick = () => { row.remove(); paintKnow(); };
+    const submit = async () => {
+      const url = input.value.trim();
+      if (!url) { input.focus(); return; }
+      go.textContent = 'Reading…';
+      go.disabled = true;
+      input.disabled = true;
+      try {
+        const page = await notionText(url);
+        const text = [page.title, page.text].filter(Boolean).join('\n').trim();
+        if (!text) throw new AiError('That Notion Page Has No Text In It', 'empty');
+        row.remove();
+        addKnow({ id: uid(), kind: 'notion', name: page.title || 'Notion Page', url, text: text.slice(0, KNOW_PER_SOURCE), at: Date.now() });
+        toast(`Added "${page.title || 'Notion Page'}"`);
+      } catch (e) {
+        toast(e.message || 'Could Not Read That Page', true);
+        go.textContent = 'Add';
+        go.disabled = false;
+        input.disabled = false;
+        input.focus();
+      }
+    };
+    go.onclick = submit;
+    input.onkeydown = (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); submit(); }
+      if (e.key === 'Escape') { e.preventDefault(); row.remove(); paintKnow(); }
+    };
   };
 
   veil.querySelector('[data-addfile]').onclick = () => {

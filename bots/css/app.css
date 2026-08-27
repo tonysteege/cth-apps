@@ -370,6 +370,17 @@
 .bs-knowname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 .bs-knowsize { flex: none; color: var(--soft); font-size: 11.5px; font-variant-numeric: tabular-nums; }
 .bs-empty { margin: 0; padding: 8px 2px; color: var(--soft); font-size: 12.5px; }
+.bs-knowadd input {
+  flex: 1; min-width: 0; height: 28px; padding: 0 9px;
+  font: inherit; font-size: 12.5px;
+  border: none; border-radius: var(--r-sm);
+  background: var(--field-soft); color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--n-200);
+  transition: box-shadow var(--dur) ease;
+}
+.bs-knowadd input:hover:not(:focus) { box-shadow: inset 0 0 0 1px var(--n-300); }
+.bs-knowadd input:focus { outline: none; box-shadow: var(--field-ring-focus); }
+.bs-knowadd input:disabled { opacity: 0.6; }
 
 .bs-styleadd { display: flex; gap: 8px; margin-top: 10px; }
 .bs-styleadd .mini:disabled { opacity: 0.4; cursor: default; }
