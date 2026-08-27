@@ -101,6 +101,7 @@ function setSel(id) {
   if (cur.clipMode && cur.clipMode.id !== id) cur.clipMode = null;
   paintLog();
   paintBar();
+  paintPRail();
   drawTimeline();
 }
 
@@ -780,6 +781,116 @@ export function keyLabel(k) {
   return k !== k.toLowerCase() ? `⇧${k}` : k.toUpperCase();
 }
 function keyBadge(k) { return k ? `<span class="tag-key">${esc(keyLabel(k))}</span>` : ''; }
+
+// ------------------------------------------------------------- player rail
+//
+// A slim column of white buttons beside the tag panel, one per player, each
+// showing a number and a first name (2026-08-27, Tony's spec). It exists so
+// "who was that" costs one keystroke at game speed instead of a dialog: the
+// Players sheet is still there for editing and for a considered pass, but it
+// stops the video and takes over the screen, which is the wrong trade in the
+// middle of a period.
+//
+// TAGS ARE KEYED ON THE FIRST NAME, not the number, because that is what the
+// Players sheet has always written (`normTag(p.first)`) and a clip tagged
+// from the rail must be the same clip tagged from the sheet.
+
+// Number capture: press the trigger, then type a jersey number. `pending` is
+// what has been typed so far, `timer` is the window closing.
+let cap = null;
+
+export function captureState() {
+  return cap ? { typed: cap.typed, msLeft: Math.max(0, cap.until - Date.now()) } : null;
+}
+
+function railPlayers() {
+  return (cur?.settings.players || []).filter((p) => p.first);
+}
+
+function endCapture(why = '') {
+  if (!cap) return;
+  clearTimeout(cap.timer);
+  cap = null;
+  document.querySelector('.vp-prail')?.classList.remove('arming');
+  paintPRail();
+  if (why) toast(why, true);
+}
+
+function startCapture() {
+  const roster = railPlayers();
+  if (!roster.length) { toast('No Players Yet - Add Them In Settings', true); return; }
+  if (!selClip()) { toast('Select A Clip First - Players Tag A Clip', true); return; }
+  if (cap) { endCapture(); return; }
+  const ms = cur.settings.playerWindow || 3000;
+  cap = { typed: '', until: Date.now() + ms, timer: 0 };
+  cap.timer = setTimeout(() => endCapture('No Number Typed'), ms);
+  document.querySelector('.vp-prail')?.classList.add('arming');
+  paintPRail();
+}
+
+// A digit arrived while armed. Resolve as soon as the answer is certain: with
+// numbers 1, 12 and 15 on the roster a lone "1" is still ambiguous and has to
+// wait for the second key, but if nothing else starts with 1 there is nothing
+// to wait for and holding the coach up for three seconds would be silly.
+function feedCapture(d) {
+  const roster = railPlayers();
+  const typed = cap.typed + d;
+  const exact = roster.find((p) => String(p.num) === typed);
+  const longer = roster.filter((p) => String(p.num).startsWith(typed) && String(p.num) !== typed);
+  if (exact && !longer.length) { const p = exact; endCapture(); tagPlayer(p); return; }
+  if (!exact && !longer.length) { endCapture(`No Player Number ${typed}`); return; }
+  if (typed.length >= 2) {
+    if (exact) { const p = exact; endCapture(); tagPlayer(p); }
+    else endCapture(`No Player Number ${typed}`);
+    return;
+  }
+  cap.typed = typed;
+  paintPRail();
+}
+
+export function tagPlayer(p) {
+  const c = selClip();
+  if (!c) { toast('Select A Clip First - Players Tag A Clip', true); return; }
+  const tag = normTag(p.first);
+  const has = (c.tags || []).includes(tag);
+  pushUndo({ kind: 'tags', id: c.id, tags: [...(c.tags || [])] });
+  c.tags = has ? c.tags.filter((t) => t !== tag) : [...(c.tags || []), tag];
+  paintLog();
+  drawTimeline();
+  paintPRail();
+  scheduleSave();
+  toast(has ? `${p.num ? `#${p.num} ` : ''}${p.first} Removed` : `${p.num ? `#${p.num} ` : ''}${p.first} Added`);
+}
+
+export function paintPRail() {
+  const rail = document.querySelector('.vp-prail');
+  if (!rail || !cur) return;
+  const roster = railPlayers();
+  const c = selClip();
+  if (!roster.length) {
+    rail.innerHTML = '<div class="prail-empty">No players yet.<br><button class="mini" data-act="roster">Add Roster</button></div>';
+    rail.querySelector('[data-act="roster"]').onclick = () => hooks.onSettings?.('players');
+    return;
+  }
+  // While armed, a player whose number cannot still be reached by the next
+  // keystroke is dimmed, so the shortlist narrows in front of you.
+  const live = (p) => !cap || String(p.num).startsWith(cap.typed);
+  rail.innerHTML = `
+    <div class="prail-head">${cap ? `Number… <b>${esc(cap.typed || '_')}</b>` : 'Players'}</div>
+    ${roster.map((p) => `
+      <button class="prail-btn${(c?.tags || []).includes(normTag(p.first)) ? ' on' : ''}${live(p) ? '' : ' dim'}" data-pid="${esc(p.id)}" title="Tag ${esc(p.first)}${p.num ? ` (#${esc(String(p.num))})` : ''}">
+        <span class="prail-num">${esc(String(p.num ?? ''))}</span>
+        <span class="prail-name">${esc(p.first)}</span>
+      </button>`).join('')}`;
+  rail.querySelectorAll('[data-pid]').forEach((b) => {
+    b.onclick = () => {
+      const p = roster.find((x) => x.id === b.dataset.pid);
+      if (!p) return;
+      endCapture();
+      tagPlayer(p);
+    };
+  });
+}
 
 // Duplicate keys, said once per key per session. A panel saved before the
 // editor started preventing them can still hold a pair, and the symptom -
@@ -1706,6 +1817,19 @@ function onKey(e) {
   // A key typed into the editor is an explicit instruction and outranks a
   // built-in default. The editor flags the collision as you type, so taking
   // a transport key over is a choice, never a surprise.
+  // PLAYER CAPTURE RUNS BEFORE THE PANEL. While the window is open every
+  // digit belongs to the jersey number being typed, so a clip button on 1 or
+  // 2 must not eat it - that is the whole point of arming first. Outside the
+  // window those digits go back to their buttons untouched.
+  if (cap) {
+    if (e.key === 'Escape') { stop(); endCapture(); return; }
+    if (/^[0-9]$/.test(e.key)) { stop(); feedCapture(e.key); return; }
+    stop(); endCapture(); return;
+  }
+  // The trigger also outranks the panel, so it keeps working even when a tag
+  // button holds the same key. The editor's duplicate warning names the clash.
+  if (e.key === (cur.settings.playerTrigger || '0')) { stop(); startCapture(); return; }
+
   // Matched against e.key EXACTLY, not the lowercased k, so `g` and `G` are
   // two different shortcuts. Shift is therefore a whole second alphabet and
   // nobody has to fight over a letter.
@@ -1863,7 +1987,11 @@ export async function openPlayer(game, videoUrl, h = {}) {
     paintClock();
   }, { once: true });
   wireOnce();
+  // The rail's open state is a preference, so restore it before the first
+  // paint rather than letting it flash open and then close.
+  document.querySelector('.vp')?.classList.toggle('rail-hidden', cur.settings.railOpen === false);
   paintBar();
+  paintPRail();
   paintLog();
   status('Saved');
   // Say it on open rather than waiting for the key to be pressed: a dead

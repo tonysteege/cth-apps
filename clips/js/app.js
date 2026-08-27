@@ -438,6 +438,7 @@ async function showPlayer(id) {
           <button class="btn" id="vpSettings" title="Clips Settings">Settings</button>
           <button class="btn" id="vpLogBtn" title="Show Or Hide The Clip Log">Clips</button>
           <button class="btn" id="vpSideBtn" title="Show Or Hide The Tag Panel">Tags</button>
+          <button class="btn" id="vpRailBtn" title="Show Or Hide The Player Rail">Players</button>
         </div>
       </header>
       <div class="vp-main">
@@ -445,6 +446,7 @@ async function showPlayer(id) {
         <div class="vp-grip" id="vpGripLog" title="Drag To Resize - Double-Click Resets"><span></span></div>
         <aside class="vp-side" id="vpSide"></aside>
         <div class="vp-grip" id="vpGripSide" title="Drag To Resize - Double-Click Resets"><span></span></div>
+        <aside class="vp-prail" id="vpPRail"></aside>
         <div class="vp-stagecol">
           <div class="vp-stage" id="vpStage">
             <video id="vpVideo" playsinline crossorigin="anonymous"></video>
@@ -477,6 +479,13 @@ async function showPlayer(id) {
   $('#vpBack').onclick = () => { location.hash = '#/'; };
   $('#vpLogBtn').onclick = () => { document.querySelector('.vp').classList.toggle('log-hidden'); };
   $('#vpSideBtn').onclick = () => { document.querySelector('.vp').classList.toggle('side-hidden'); };
+  $('#vpRailBtn').onclick = async () => {
+    const vp = document.querySelector('.vp');
+    vp.classList.toggle('rail-hidden');
+    const st = playerSettings() || await getSettings();
+    st.railOpen = !vp.classList.contains('rail-hidden');
+    await putSettings(st);
+  };
   $('#vpSettings').onclick = () => openClipSettings();
   $('#vpPull').onclick = () => void runPull(game, video().currentTime);
   $('#vpPull').oncontextmenu = (e) => { e.preventDefault(); void editBuffer('pullBuf', 'Pull'); };

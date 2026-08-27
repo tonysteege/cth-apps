@@ -138,6 +138,14 @@ const DEFAULT_SETTINGS = () => ({
   cursorHi: { on: true, color: '#ef4444', size: 46, opacity: 0.32 },
   toolKeys: { select: 'v', pen: 'd', arrow: 'a', box: 'b', circle: 'c', text: 't', angle: 'g' },
   recordArea: null,
+  // The player rail (2026-08-27). `playerTrigger` arms number capture: press
+  // it, then type a jersey number within `playerWindow` ms. Both are settings
+  // rather than constants because 0 is a perfectly good tag key someone may
+  // already be using - Tony had it on ozfo - and three seconds is a guess at
+  // how fast a coach types under game pressure.
+  playerTrigger: '0',
+  playerWindow: 3000,
+  railOpen: true,
 });
 
 // A panel saved before Players became a real button gets one inserted where

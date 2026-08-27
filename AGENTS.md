@@ -349,6 +349,28 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   you type - `pe-key--dup` (danger ring: two buttons on one letter, only the
   first fires) and `pe-key--takes` (grey ring: this button takes a transport
   key over) - so a takeover is a choice, never a surprise.
+- **THE PLAYER RAIL** (`.vp-prail`, 2026-08-27, Tony's spec): a slim column
+  beside the tag panel, one white button per player showing NUMBER AND FIRST
+  NAME ONLY. It is a smaller `.btn` (28px, white, hairline, n-700 text), NOT a
+  restyled tag button - the tag panel is a field of colour and the roster has
+  to read as a different kind of thing. Rules:
+  - TAGS ARE KEYED ON THE FIRST NAME (`normTag(p.first)`), the same string the
+    Players sheet has always written. A clip tagged from the rail and one
+    tagged from the sheet must be the same clip.
+  - `settings.playerTrigger` (default `0`) ARMS NUMBER CAPTURE for
+    `settings.playerWindow` ms (default 3000): type a jersey number and the
+    player is tagged. Both are settings, not constants, because `0` is a
+    perfectly good tag key someone may already hold - Tony had it on `ozfo`.
+  - CAPTURE OUTRANKS THE PANEL in `onKey`. While the window is open every
+    digit belongs to the number being typed, so a clip button on 1 or 2 must
+    not eat it; outside the window those digits go straight back to it.
+  - IT RESOLVES AS SOON AS THE ANSWER IS CERTAIN, not on a fixed two digits.
+    With 1, 12 and 15 on the roster a lone `1` waits; with only #7 starting
+    with 7, `7` fires immediately rather than holding a coach up for three
+    seconds. Buttons still reachable by the next keystroke stay lit and the
+    rest dim - the list narrows in front of you instead of reflowing.
+  - The Players SHEET stays. It stops the video and takes the screen, which is
+    right for editing and a considered pass and wrong mid-period.
 - **KEYS ARE CASE-SENSITIVE: a capital means Shift** (2026-08-27, Tony's
   call). `g` and `G` are two different shortcuts, which takes the key space
   from 26 to 52 and is the answer to a panel with twenty buttons on it.
