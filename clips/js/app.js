@@ -620,9 +620,12 @@ function openUploadSheet() {
   wrap.querySelector('#upPick').onclick = () => wrap.querySelector('#upFile').click();
   wrap.querySelector('#upFile').onchange = (e) => {
     file = e.target.files[0] || null;
-    wrap.querySelector('#upName').textContent = file
+    const nameEl = wrap.querySelector('#upName');
+    nameEl.textContent = file
       ? `${file.name} (${file.size >= 1e9 ? `${(file.size / 1e9).toFixed(1)} GB` : `${Math.round(file.size / 1e6)} MB`})`
       : 'No File Chosen';
+    // A chosen file reads as content; the placeholder stays muted.
+    nameEl.classList.toggle('has-file', !!file);
     wrap.querySelector('#upGo').disabled = !file;
   };
   const bar = wrap.querySelector('#upBar');

@@ -1,5 +1,7 @@
 /* CTH Clips - styles on top of the shared diagrammer stylesheet (loaded
-   first), same CTH greyscale system. Only what Clips adds lives here. */
+   first), which carries the BoardUI tokens for the whole suite. Only what
+   Clips adds lives here. Chrome type tops out at 600; the one exception is
+   `.an-textinput`, which mirrors DIAGRAM CONTENT and keeps its 800. */
 
 /* ---------------------------------------------------------- library */
 .clib { flex: 1; padding: 24px clamp(16px, 3vw, 40px); background: var(--page); overflow-y: auto; }
@@ -13,16 +15,17 @@
   position: relative; flex-shrink: 0; text-align: left;
   border: 1px solid var(--edge); border-radius: var(--r-md);
   background: var(--cloud); padding: 13px 38px 13px 15px; min-width: 200px;
-  box-shadow: var(--shadow-1); transition: box-shadow .15s, border-color .15s;
+  box-shadow: var(--shadow-card);
+  transition: box-shadow var(--dur) ease, border-color var(--dur) ease, transform var(--dur) ease;
 }
 .recent-card:hover { box-shadow: var(--shadow-2); border-color: var(--n-300); transform: translateY(-1px); }
-.recent-name { display: block; font-weight: 800; font-size: 14px; margin-bottom: 3px; }
+.recent-name { display: block; font-weight: 600; font-size: 14px; margin-bottom: 3px; }
 .recent-meta { color: var(--mist); font-size: 12px; }
 .recent-del {
   position: absolute; top: 8px; right: 8px; color: var(--soft);
   padding: 2px 7px; border-radius: 6px; font-weight: 500;
 }
-.recent-del:hover { background: rgba(180, 35, 24, .08); color: var(--danger); }
+.recent-del:hover { background: var(--danger-soft); color: var(--danger); }
 
 /* Full width (2026-08-25, Tony's call): a video row now carries its tag log
    beside the name, and tags need the one thing a 760px cap was spending -
@@ -41,7 +44,10 @@
 #clibScope {
   height: 34px; font: inherit; font-size: 12.5px; color: var(--graphite);
   border: 1px solid var(--edge); border-radius: var(--r-sm); background: var(--cloud); padding: 0 6px;
+  transition: border-color var(--dur) ease, box-shadow var(--dur) ease;
 }
+#clibScope:hover { border-color: var(--n-300); }
+#clibScope:focus { outline: none; border-color: var(--a-500); box-shadow: var(--ring); }
 .clib-row {
   display: flex; align-items: center; gap: 11px; text-align: left;
   border: none; background: none; border-radius: var(--r-sm);
@@ -75,13 +81,13 @@
   color: var(--graphite); background: var(--sunken); white-space: nowrap;
 }
 .tag-chip button { color: var(--soft); font-size: 12px; line-height: 1; padding: 1px 3px; border-radius: 50%; }
-.tag-chip button:hover { color: var(--danger); background: rgba(180, 35, 24, .08); }
+.tag-chip button:hover { color: var(--danger); background: var(--danger-soft); }
 .tag-chip[data-qtag] { cursor: pointer; }
 .tag-chip[data-qtag]:hover { border-color: var(--n-300); color: var(--ink); }
 
 .dbx-card {
   max-width: 620px; border: 1px solid var(--edge); border-radius: var(--r-lg);
-  padding: 22px 26px; box-shadow: var(--shadow-1);
+  padding: 22px 26px; box-shadow: var(--shadow-card); background: var(--cloud);
 }
 .dbx-card h2 { margin: 0 0 8px; font-size: 18px; }
 .dbx-card p, .dbx-card li { color: var(--mist); line-height: 1.55; font-size: 13.5px; }
@@ -102,7 +108,7 @@
 
 /* ---------------------------------------------------------- player */
 .vp { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
-.vp-title { flex: 1; min-width: 120px; font-size: 16px; font-weight: 800; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vp-title { flex: 1; min-width: 120px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vp-main { flex: 1; display: flex; min-height: 0; }
 .vp-stagecol { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--cloud); }
 
@@ -128,6 +134,7 @@
 .an-hold input { width: 44px; height: 28px; border: 1px solid var(--edge); border-radius: 6px; text-align: center; font: inherit; }
 .an-textinput {
   position: absolute; z-index: 6; transform: translate(-4px, -1.1em);
+  /* 800 on purpose: this field mirrors a committed diagram element. */
   font-weight: 800; border: 2px solid var(--select); border-radius: 8px;
   background: #fff; padding: 2px 6px; outline: none; min-width: 80px;
 }
@@ -183,7 +190,7 @@
   display: flex; gap: 8px; padding: 4px 10px;
   position: sticky; top: 0; z-index: 1;
   background: var(--sunken); border-bottom: 1px solid var(--edge);
-  font-size: 9.5px; font-weight: 700; letter-spacing: 0.07em;
+  font-size: 9.5px; font-weight: 600; letter-spacing: 0.07em;
   text-transform: uppercase; color: var(--soft);
 }
 .log-cols .c-time { width: 58px; flex-shrink: 0; }
@@ -238,7 +245,7 @@
   padding: 8px 7px 12px; background: var(--cloud);
 }
 .side-label {
-  font-size: 9px; font-weight: 700; text-transform: uppercase;
+  font-size: 9px; font-weight: 600; text-transform: uppercase;
   letter-spacing: 0.1em; color: var(--soft); margin: 7px 2px 2px;
 }
 .side-label:first-child { margin-top: 0; }
@@ -286,7 +293,7 @@
 }
 .tag-edit:hover { filter: none; background: var(--n-50); border-color: var(--n-300); color: var(--ink); box-shadow: var(--shadow-card); }
 .tag-key {
-  margin-left: auto; font-size: 8.5px; font-weight: 700;
+  margin-left: auto; font-size: 8.5px; font-weight: 600;
   color: color-mix(in srgb, var(--fg, #fff) 60%, transparent);
   flex-shrink: 0; font-variant-numeric: tabular-nums;
 }
@@ -320,7 +327,7 @@
 .tbtn-play { background-image: var(--grad-primary); color: #fff; width: 33px; box-shadow: inset 0 1px 0 0 rgba(255,255,255,.12); }
 .tbtn-play:hover { background-image: var(--grad-primary-hover); color: #fff; }
 .tbtn-play:active { background-image: var(--grad-primary-active); }
-.tbtn-word { width: auto; padding: 0 8px; font-size: 11px; font-weight: 700; }
+.tbtn-word { width: auto; padding: 0 8px; font-size: 11px; font-weight: 600; }
 
 /* ---------------------------------------------------------- responsive */
 /* Below 1100px the two side panels stack UNDER the video rather than
@@ -520,4 +527,113 @@
   .pe-list--clip .pe-row .pe-acts { grid-column: span 2; justify-content: flex-end; }
   .pe-list .pe-row--div { grid-template-columns: 18px minmax(0, 1fr) auto; }
   .pe-list--tag .pe-row { grid-template-columns: 18px 34px minmax(0, 1fr) 40px auto; }
+}
+
+/* ============================================================
+   TWO DIALOGS THAT HAD NO STYLESHEET (2026-08-26)
+
+   Same bug the panel editor had: `player.js` and `app.js` emit these
+   classes and nothing defined them, so the Add Video sheet showed a raw
+   file row, an unstyled native select and an INVISIBLE progress bar (the
+   fill had no height, width or colour), and the Email sheet showed an
+   unstyled recipient field and an unbounded clip list. Both are BoardUI
+   forms now.
+   ============================================================ */
+
+/* ---- Add Video ---------------------------------------------------- */
+.up-row {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 12px; flex-wrap: wrap;
+}
+.up-label {
+  flex: none; width: 62px;
+  font-size: 12px; font-weight: 500; color: var(--mist);
+}
+.up-name {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 13px; color: var(--mist);
+}
+.up-name.has-file { color: var(--ink); font-weight: 500; }
+#upQ {
+  flex: 1; min-width: 0; height: 34px; padding: 0 8px;
+  font: inherit; font-size: 13px; color: var(--ink);
+  border: 1px solid var(--edge); border-radius: var(--r-sm);
+  background: var(--cloud); cursor: pointer;
+  transition: border-color var(--dur) ease, box-shadow var(--dur) ease;
+}
+#upQ:hover { border-color: var(--n-300); }
+#upQ:focus { outline: none; border-color: var(--a-500); box-shadow: var(--ring); }
+
+/* The progress bar. It existed in the markup and was invisible. */
+.up-bar {
+  height: 6px; margin-top: 14px;
+  border-radius: 999px;
+  background: var(--n-200);
+  overflow: hidden;
+}
+.up-bar[hidden] { display: none; }
+.up-bar > span {
+  display: block; width: 0; height: 100%;
+  border-radius: inherit;
+  background-image: var(--grad-primary);
+  transition: width 180ms ease;
+}
+.up-status {
+  margin-top: 8px; min-height: 16px;
+  font-size: 12px; color: var(--mist); font-variant-numeric: tabular-nums;
+}
+
+/* ---- Email Clips --------------------------------------------------- */
+.em-groups { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 10px; }
+.em-group, .em-groups .mini {
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  padding: 4px 11px;
+  background: var(--cloud);
+  color: var(--n-700);
+  transition: border-color var(--dur) ease, background var(--dur) ease, color var(--dur) ease;
+}
+.em-group:hover, .em-groups .mini:hover {
+  border-color: var(--a-300); background: var(--a-50); color: var(--a-700);
+}
+#emTo {
+  width: 100%; height: 36px; padding: 0 12px;
+  font: inherit; font-size: 13px;
+  border: 1px solid var(--edge); border-radius: var(--r-sm);
+  background: var(--cloud); color: var(--ink);
+  transition: border-color var(--dur) ease, box-shadow var(--dur) ease;
+}
+#emTo::placeholder { color: var(--soft); }
+#emTo:focus { outline: none; border-color: var(--a-500); box-shadow: var(--ring); }
+
+/* A game can hold dozens of clips, so this list has to be bounded and
+   scroll rather than push the dialog past the bottom of the screen. */
+.em-list {
+  max-height: min(46dvh, 340px);
+  overflow-y: auto;
+  margin-top: 12px;
+  padding: 5px;
+  border: 1px solid var(--edge);
+  border-radius: var(--r-md);
+  background: var(--n-50);
+  gap: 3px;
+}
+.em-list .rink-row {
+  border-color: transparent;
+  background: var(--cloud);
+  font-size: 13px;
+  padding: 7px 10px;
+}
+.em-list .rink-row:hover { border-color: var(--n-300); }
+.em-list .rink-row:has(input:checked) {
+  border-color: var(--a-200); background: var(--a-50); color: var(--a-700);
+}
+.em-time {
+  margin-left: auto; flex: none;
+  font-size: 11.5px; color: var(--mist); font-variant-numeric: tabular-nums;
+}
+.em-note {
+  margin: 12px 0 0;
+  font-size: 12px; line-height: 1.5; color: var(--mist);
 }

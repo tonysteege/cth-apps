@@ -1,11 +1,20 @@
-/* CTH Slides - styles on top of the shared diagrammer + clips sheets.
-   Light chrome on the home screen; the deck itself is a black stage with
-   letterboxed 16:9 slides: dark title/section slides, light content. */
+/* CTH Slides - styles on top of the shared diagrammer + clips sheets,
+   which carry the BoardUI tokens. Light chrome on the home screen; the deck
+   itself is a black stage with letterboxed 16:9 slides: dark title/section
+   slides, light content.
+
+   TWO TYPE RAMPS ON PURPOSE. Chrome (the home screen, the presenter bar,
+   the overview grid, the readouts) tops out at 600 like every other CTH
+   app. SLIDE CONTENT - the headings, quotes and toggles rendered from the
+   Notion page - runs at 700, the top of the BoardUI ramp, because it is
+   read from across a room. Neither uses 800; that weight is not in the
+   system and only diagram content keeps it. */
 
 body.dark { background: #0b0b0b; }
 
 /* ---------------------------------------------------------- home */
-.ph { flex: 1; padding: 26px clamp(16px, 3vw, 40px); background: var(--cloud); overflow-y: auto; max-width: 860px; }
+.ph { flex: 1; padding: 26px clamp(16px, 3vw, 40px); background: var(--page); overflow-y: auto; }
+.ph > * { max-width: 860px; }
 .ph-open { display: flex; gap: 10px; flex-wrap: wrap; }
 #phUrl {
   flex: 1; min-width: 240px; height: 42px; padding: 0 14px;
@@ -13,11 +22,11 @@ body.dark { background: #0b0b0b; }
 }
 #phUrl:focus { border-color: var(--a-500); box-shadow: var(--ring); }
 .ph-title {
-  font-size: 10.5px; font-weight: 800; text-transform: uppercase;
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
   letter-spacing: .09em; color: var(--soft); margin: 26px 4px 10px;
 }
 .ph-recents { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 6px; }
-.ph-card { border: 1px solid var(--edge); border-radius: var(--r-lg); padding: 18px 22px; box-shadow: var(--shadow-1); }
+.ph-card { border: 1px solid var(--edge); border-radius: var(--r-lg); padding: 18px 22px; box-shadow: var(--shadow-card); background: var(--cloud); }
 .ph-card p { color: var(--mist); line-height: 1.6; font-size: 13.5px; margin: 0 0 12px; }
 .ph-card p:last-child { margin: 0; }
 .ph-formula {
@@ -39,8 +48,9 @@ body.dark { background: #0b0b0b; }
 .pr-chrome.hidden { opacity: 0; pointer-events: none; }
 .pr-chrome .btn { background: rgba(255, 255, 255, .09); border-color: rgba(255, 255, 255, .18); color: #fff; box-shadow: none; }
 .pr-chrome .btn:hover { border-color: rgba(255, 255, 255, .45); color: #fff; }
-.pr-chrome .btn-rec { background: #dc2626; border-color: #dc2626; }
-.pr-title { color: #fff; font-weight: 800; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pr-chrome .btn-rec { background: var(--danger); border-color: var(--danger); color: #fff; }
+.pr-chrome .btn-rec:hover { background: var(--danger); border-color: #fff; color: #fff; }
+.pr-title { color: #fff; font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pr-flex { flex: 1; }
 
 .pr-stagebox { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; padding: 0; }
@@ -56,7 +66,7 @@ body.dark { background: #0b0b0b; }
 #prProgressFill { height: 100%; background: var(--a-400); width: 0; transition: width .2s; }
 .pr-counter {
   position: fixed; right: 14px; bottom: 12px; z-index: 41;
-  color: rgba(255, 255, 255, .55); font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, .55); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums;
 }
 .pr-black { position: fixed; inset: 0; background: #000; z-index: 60; }
 .pr-black[hidden], .pr-grid[hidden] { display: none; }
@@ -70,9 +80,9 @@ body.dark { background: #0b0b0b; }
   background: rgba(255, 255, 255, .05); color: #fff; padding: 14px;
 }
 .prg-card:hover { border-color: rgba(255, 255, 255, .5); }
-.prg-card.on { border-color: #fff; background: rgba(255, 255, 255, .12); }
-.prg-n { display: block; color: rgba(255, 255, 255, .45); font-size: 11px; font-weight: 800; margin-bottom: 5px; }
-.prg-t { font-weight: 800; font-size: 14px; }
+.prg-card.on { border-color: var(--a-400); background: color-mix(in srgb, var(--a-500) 22%, transparent); }
+.prg-n { display: block; color: rgba(255, 255, 255, .45); font-size: 11px; font-weight: 600; margin-bottom: 5px; font-variant-numeric: tabular-nums; }
+.prg-t { font-weight: 600; font-size: 14px; }
 
 /* ---------------------------------------------------------- slides */
 .pr-slide { position: absolute; inset: 0; display: none; }
@@ -84,18 +94,18 @@ body.dark { background: #0b0b0b; }
   background: linear-gradient(180deg, #101010, #0a0a0a); background-size: cover; background-position: center;
   padding: 0 6vw;
 }
-.pr-slide.darkslide h1 { color: #fff; font-size: clamp(28px, 5.4vw, 64px); font-weight: 800; letter-spacing: -0.02em; margin: 0; }
+.pr-slide.darkslide h1 { color: #fff; font-size: clamp(28px, 5.4vw, 64px); font-weight: 700; letter-spacing: -0.02em; margin: 0; }
 .sl-icon { font-size: clamp(38px, 6vw, 72px); }
 .sl-logo { position: absolute; bottom: 5vh; left: 50%; transform: translateX(-50%); height: clamp(16px, 2.6vh, 26px); opacity: .9; }
 
 .pr-slide.light { background: #fff; color: var(--ink); padding: clamp(18px, 4.5vh, 44px) clamp(20px, 4.5vw, 56px); overflow-y: auto; }
-.sl-h { font-size: clamp(22px, 3.4vw, 40px); font-weight: 800; letter-spacing: -0.02em; margin: 0 0 clamp(10px, 2.4vh, 22px); }
-.sl-flow, .sl-text { font-size: clamp(15px, 1.7vw, 21px); line-height: 1.55; font-weight: 500; }
+.sl-h { font-size: clamp(22px, 3.4vw, 40px); font-weight: 700; letter-spacing: -0.02em; margin: 0 0 clamp(10px, 2.4vh, 22px); }
+.sl-flow, .sl-text { font-size: clamp(15px, 1.7vw, 21px); line-height: 1.55; font-weight: 400; }
 .sl-flow p, .sl-text p { margin: 0 0 .7em; }
-.sl-flow h3, .sl-text h3 { font-size: 1.15em; font-weight: 800; margin: 1em 0 .4em; }
+.sl-flow h3, .sl-text h3 { font-size: 1.15em; font-weight: 700; margin: 1em 0 .4em; }
 .sl-flow ul, .sl-flow ol, .sl-text ul, .sl-text ol { margin: 0 0 .7em; padding-left: 1.3em; }
 .sl-flow li, .sl-text li { margin-bottom: .3em; }
-blockquote { border-left: 4px solid var(--ink); margin: 0 0 .8em; padding: .2em 0 .2em .8em; font-weight: 800; }
+blockquote { border-left: 3px solid var(--a-500); margin: 0 0 .8em; padding: .2em 0 .2em .8em; font-weight: 500; color: var(--n-700); }
 .sl-callout {
   display: flex; gap: 12px; background: var(--sunken); border: 1px solid var(--edge-soft);
   border-radius: 12px; padding: 12px 16px; margin: 0 0 .8em;
@@ -105,11 +115,11 @@ blockquote { border-left: 4px solid var(--ink); margin: 0 0 .8em; padding: .2em 
 .sl-check {
   width: 1.05em; height: 1.05em; flex-shrink: 0; align-self: center;
   border: 2px solid var(--ink); border-radius: 5px; font-size: .8em;
-  display: inline-flex; align-items: center; justify-content: center; font-weight: 800;
+  display: inline-flex; align-items: center; justify-content: center; font-weight: 700;
 }
 .sl-todo.done .sl-check { background: var(--ink); color: #fff; }
 .sl-todo.done > span:last-child { color: var(--mist); text-decoration: line-through; }
-.sl-toggle-head { font-weight: 800; margin-bottom: .35em; }
+.sl-toggle-head { font-weight: 700; margin-bottom: .35em; }
 .sl-code { background: #14161a; color: #e5e7eb; border-radius: 10px; padding: 14px 16px; font-size: .8em; overflow-x: auto; }
 .sl-img { margin: 0 0 .8em; text-align: center; }
 .sl-img img { max-width: 100%; max-height: 52vh; border-radius: 10px; }
@@ -117,7 +127,7 @@ blockquote { border-left: 4px solid var(--ink); margin: 0 0 .8em; padding: .2em 
 .sl-bookmark { color: var(--ink); word-break: break-all; }
 .sl-embed { position: relative; aspect-ratio: 16/9; margin: 0 0 .8em; }
 .sl-embed iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; border-radius: 10px; }
-.sl-num { position: absolute; right: 18px; bottom: 12px; color: var(--soft); font-size: 12px; font-weight: 800; }
+.sl-num { position: absolute; right: 18px; bottom: 12px; color: var(--soft); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .sl-mark { position: absolute; left: 18px; bottom: 12px; height: 16px; opacity: .55; }
 
 .sl-split { display: flex; gap: clamp(16px, 2.5vw, 32px); align-items: stretch; height: calc(100% - clamp(40px, 8vh, 76px)); }
@@ -138,8 +148,8 @@ blockquote { border-left: 4px solid var(--ink); margin: 0 0 .8em; padding: .2em 
 .pv-play { width: 30px; height: 30px; border: none; border-radius: 8px; background: rgba(255, 255, 255, .16); color: #fff; display: inline-flex; align-items: center; justify-content: center; }
 .pv-play svg { width: 15px; height: 15px; }
 .pv-strip { flex: 1; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, .25); cursor: pointer; }
-.pv-fill { height: 100%; border-radius: 3px; background: #fff; width: 0; }
-.pv-clock { color: #fff; font-size: 11.5px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.pv-fill { height: 100%; border-radius: 3px; background: var(--a-400); width: 0; }
+.pv-clock { color: #fff; font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .pv-title { color: rgba(255, 255, 255, .7); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 34%; }
 
 /* ---------------------------------------------------------- telestration rail */
@@ -168,3 +178,93 @@ blockquote { border-left: 4px solid var(--ink); margin: 0 0 .8em; padding: .2em 
   .pr-chrome .btn { padding: 0 10px; }
   #prFull { display: none; }
 }
+
+/* ============================================================
+   RENDERERS THAT HAD NO STYLESHEET (2026-08-26)
+
+   `slides.js` emits `.sl-toggle`, `.sl-subpage` and `.pv-slot`, and
+   `media.js` toggles `.playing` on the play button. None of the four were
+   defined anywhere. The visible consequences: a Notion toggle rendered as
+   an unindented run of text with no relationship to its heading, a
+   sub-page link looked like a stray paragraph, an empty video slot
+   collapsed to nothing while its file loaded, and THE PLAY BUTTON NEVER
+   CHANGED - it showed a play triangle the whole time the clip was
+   playing, because the class that says "playing" styled nothing.
+   ============================================================ */
+
+/* A Notion toggle: its children belong to its heading, so indent them
+   behind a rule rather than letting them run flush like body copy. */
+.sl-toggle {
+  margin: 0 0 .8em;
+  padding-left: .9em;
+  border-left: 2px solid var(--edge);
+}
+.sl-toggle .sl-toggle-head { color: var(--ink); }
+.sl-toggle > *:last-child { margin-bottom: 0; }
+
+/* A sub-page reference. It is a pointer to somewhere else, not prose. */
+.sl-subpage {
+  display: inline-flex; align-items: center; gap: .45em;
+  margin: 0 0 .8em;
+  padding: .3em .7em .3em .55em;
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  background: var(--sunken);
+  color: var(--n-700);
+  font-size: .8em; font-weight: 500;
+}
+.sl-subpage::before {
+  content: ''; flex: none;
+  width: .85em; height: .85em;
+  border: 1.5px solid var(--soft);
+  border-radius: 3px;
+}
+
+/* The video slot before its player mounts. Without a reserved box the
+   slide reflowed the moment the file resolved. */
+.pv-slot {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  margin: 0 0 .8em;
+  border-radius: 12px;
+  background: var(--n-200);
+  overflow: hidden;
+}
+.pv-slot.pv { background: #000; aspect-ratio: auto; }
+.pv-slot:not(.pv)::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgb(255 255 255 / 0.45) 50%, transparent 100%);
+  animation: pv-wait 1.4s ease-in-out infinite;
+}
+@keyframes pv-wait { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) {
+  .pv-slot:not(.pv)::after { animation: none; }
+}
+
+/* THE PLAY BUTTON'S TWO STATES. Playing swaps the triangle for a pause
+   pair; the SVG is hidden rather than replaced so media.js keeps its one
+   line of markup. */
+.pv-play { position: relative; transition: background var(--dur) ease; }
+.pv-play:hover { background: rgb(255 255 255 / 0.28); }
+.pv-play.playing svg { visibility: hidden; }
+.pv-play.playing::before,
+.pv-play.playing::after {
+  content: '';
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 3.5px; height: 13px; border-radius: 1px; background: currentColor;
+}
+.pv-play.playing::before { left: 10px; }
+.pv-play.playing::after { right: 10px; }
+.pv-play:focus-visible { outline: 2px solid var(--a-400); outline-offset: 2px; }
+
+/* The seek strip reads as interactive on hover, and its hit area is taller
+   than the 5px line so it can actually be grabbed. */
+.pv-strip { position: relative; padding: 6px 0; height: auto; background: none; }
+.pv-strip::before {
+  content: ''; display: block; height: 5px; border-radius: 3px;
+  background: rgb(255 255 255 / 0.25);
+}
+.pv-strip .pv-fill { position: absolute; left: 0; top: 6px; height: 5px; }
+.pv-strip:hover .pv-fill { background: var(--a-300); }

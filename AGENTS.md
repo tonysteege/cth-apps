@@ -282,6 +282,30 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   `/videos/recordings` through ../clips/js/localfs.js (same origin, same
   folder handle), with Download always offered alongside.
 
+## Design system rules (suite-wide)
+
+- **Type ramp.** Chrome tops out at 600 (400 body / 500 labels / 600
+  headings). 700 is used only for SLIDE CONTENT, which is read across a
+  room. 800 is NOT in the BoardUI ramp and survives in exactly four places,
+  all of which mirror committed DIAGRAM CONTENT so the editing field
+  matches what `flat.js` draws: `.ed-input`, `.ed-input-chip`,
+  `.ed-input-flabel` and `.pmenu-chip` (plus `.an-textinput` in Clips).
+  Do not "tidy" those to 600.
+- **Colour.** The neutral ramp plus ONE accent. Danger is `--danger` /
+  `--danger-soft`; no raw `#dc2626` or `rgba(180, 35, 24, ...)`.
+- **Motion.** `var(--dur)` (150ms), never loose `.12s` / `.15s` values.
+- **EVERY CLASS THE JS EMITS MUST HAVE A RULE.** Four separate dialogs
+  shipped unstyled because `player.js` and `app.js` emitted class names no
+  stylesheet defined: the panel editor, the Add Video sheet (its progress
+  bar was literally invisible), the Email sheet, and three Slides
+  renderers plus the video play button, whose `.playing` class styled
+  nothing so the button never changed while a clip played. Before shipping
+  UI, diff the classes the JS emits against the classes the CSS defines -
+  a missing rule is silent, and the browser just renders raw inputs.
+- Pages with their own inline `<style>` (`index.html`, `clips/embed.html`,
+  `present/index.html`) carry a copy of the few tokens they need. Keep them
+  in step with `diagrams/css/app.css` by hand.
+
 ## Verifying a change
 
 There is no CI test suite. Before opening a PR, reason through: does the

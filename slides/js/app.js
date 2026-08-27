@@ -75,7 +75,7 @@ function showHome() {
       <div class="ph-card">
         <p>Add one formula property (name it <strong>Slides</strong>) to any database, and every row gets its own always-current slide link - new rows included, nothing to sync or update:</p>
         <div class="ph-formula"><code>${esc(FORMULA)}</code><button class="mini" id="phCopy">Copy</button></div>
-        <p>Slides come straight from the page: the title makes the dark cover slide, every <strong>H2 heading</strong> starts a slide, and every <strong>divider</strong> cuts a new one. Videos on the page (Clips embeds, Dropbox links, or uploaded files) become scrubbable players, and you can draw on any slide while presenting.</p>
+        <p>Slides come straight from the page: the title makes the dark cover slide, every <strong>H2 heading</strong> starts a slide, and every <strong>divider</strong> cuts a new one. Videos on the page (Clips embeds, uploaded files, or any video link) become scrubbable players, and you can draw on any slide while presenting.</p>
         <p class="ph-note">If a page will not open, share its database with the CTH Notion integration (page menu &rarr; Connections).</p>
       </div>
     </main>`;

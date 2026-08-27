@@ -4,35 +4,85 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CTH Clip</title>
+  <meta name="theme-color" content="#0a0a0a">
   <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
+    /* The Notion-embeddable single-clip player. It is its own page inside an
+       iframe, so it carries the handful of BoardUI tokens it needs rather
+       than pulling the app stylesheet. It declared Inter and never loaded
+       it (2026-08-26), so every embed rendered in the fallback face. */
+    :root {
+      --n-100: #f7f7f7; --n-400: #a3a3a3; --n-700: #404040;
+      --n-800: #262626; --n-900: #171717; --n-950: #0a0a0a;
+      --a-400: #3392ff; --a-500: #2b7fff; --a-600: #155dfc;
+      --dur: 150ms;
+    }
     * { box-sizing: border-box; }
-    body { margin: 0; background: #0b0b0b; font-family: 'Inter', -apple-system, sans-serif; }
-    .wrap { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; }
-    video { flex: 1; width: 100%; min-height: 0; object-fit: contain; background: #0b0b0b; }
+    body {
+      margin: 0; background: var(--n-950);
+      font-family: 'Inter', -apple-system, 'Helvetica Neue', sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrap { position: relative; width: 100vw; height: 100dvh; display: flex; flex-direction: column; }
+    video { flex: 1; width: 100%; min-height: 0; object-fit: contain; background: var(--n-950); }
     .bar {
       display: flex; align-items: center; gap: 10px;
-      padding: 8px 12px; color: #fff; background: #161616; font-size: 13px; font-weight: 500;
+      padding: 8px 12px; color: #fff;
+      background: var(--n-900);
+      border-top: 1px solid rgb(255 255 255 / 0.08);
+      font-size: 13px; font-weight: 400;
     }
-    .bar b { font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bar b {
+      font-weight: 600; min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
     .bar button {
-      border: 1px solid #3a3a3a; background: #1f1f1f; color: #fff; font: inherit;
-      border-radius: 7px; padding: 4px 12px; cursor: pointer;
+      flex: none;
+      border: 1px solid rgb(255 255 255 / 0.16);
+      background: rgb(255 255 255 / 0.06);
+      color: #fff; font: inherit; font-weight: 500;
+      border-radius: 8px; padding: 5px 12px; cursor: pointer;
+      transition: background var(--dur) ease, border-color var(--dur) ease, transform 420ms cubic-bezier(0.4, 0, 0.2, 1);
     }
-    .bar button.on { background: #2b7fff; color: #fff; border-color: #2b7fff; }
-    .bar button:focus-visible { outline: 2px solid #2b7fff; outline-offset: 2px; }
+    .bar button:hover { background: rgb(255 255 255 / 0.12); border-color: rgb(255 255 255 / 0.3); }
+    .bar button:active { transform: scale(0.98); }
+    .bar button.on {
+      background-image: linear-gradient(180deg, var(--a-500) 0%, var(--a-600) 100%);
+      border-color: transparent;
+      box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.14);
+    }
+    .bar button:focus-visible { outline: 2px solid var(--a-400); outline-offset: 2px; }
     .spacer { flex: 1; }
-    .mark { color: #969696; font-size: 11.5px; }
+    .mark { flex: none; color: var(--n-400); font-size: 11.5px; }
+    /* A clip whose source has gone (a moved file, an expired link) used to
+       show a black rectangle and nothing else. */
+    .oops {
+      position: absolute; inset: 0; display: none;
+      flex-direction: column; align-items: center; justify-content: center;
+      gap: 6px; padding: 24px; text-align: center; color: var(--n-400);
+    }
+    .oops strong { color: #fff; font-weight: 600; font-size: 15px; }
+    .oops p { margin: 0; font-size: 13px; line-height: 1.5; max-width: 34ch; }
+    body.failed .oops { display: flex; }
+    body.failed video { visibility: hidden; }
+    @media (prefers-reduced-motion: reduce) { .bar button { transition: none; } }
   </style>
 </head>
 <body>
   <div class="wrap">
     <video id="v" playsinline controls></video>
+    <div class="oops">
+      <strong>This Clip Will Not Play</strong>
+      <p>The video it points at has moved or is no longer shared. Re-copy the link from CTH Clips.</p>
+    </div>
     <div class="bar">
       <b id="t">Clip</b>
       <span class="spacer"></span>
       <button id="replay">Replay</button>
-      <button id="loop">Loop</button>
+      <button id="loop" aria-pressed="false">Loop</button>
       <span class="mark">CTH Clips</span>
     </div>
   </div>
@@ -47,6 +97,8 @@
     document.getElementById('t').textContent = q.get('t') || 'Clip';
     document.title = (q.get('t') || 'Clip') + ' - CTH Clips';
     v.src = q.get('v') || '';
+    if (!q.get('v')) document.body.classList.add('failed');
+    v.addEventListener('error', () => document.body.classList.add('failed'));
     const toIn = () => { v.currentTime = IN; };
     v.addEventListener('loadedmetadata', toIn);
     v.addEventListener('timeupdate', () => {
@@ -56,7 +108,11 @@
     });
     v.addEventListener('play', () => { if (OUT > IN && (v.currentTime < IN - 0.5 || v.currentTime >= OUT)) toIn(); });
     document.getElementById('replay').onclick = () => { toIn(); v.play(); };
-    document.getElementById('loop').onclick = (e) => { loop = !loop; e.target.classList.toggle('on', loop); };
+    document.getElementById('loop').onclick = (e) => {
+      loop = !loop;
+      e.target.classList.toggle('on', loop);
+      e.target.setAttribute('aria-pressed', String(loop));
+    };
   </script>
 </body>
 </html>
