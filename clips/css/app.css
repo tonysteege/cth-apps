@@ -456,6 +456,45 @@
 }
 .rec-presets { display: flex; flex-wrap: wrap; gap: 6px; }
 
+/* ---- side by side --------------------------------------------------- */
+.cmp-root {
+  position: absolute; inset: 0; z-index: 8;
+  display: flex; flex-direction: column;
+  background: #0b0b0b;
+}
+.cmp-panes { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--n-800); }
+.cmp-pane { min-width: 0; display: flex; flex-direction: column; background: #0b0b0b; }
+.cmp-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; background: var(--cloud);
+  font-size: 12px; color: var(--graphite);
+}
+.cmp-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.cmp-clock { font-variant-numeric: tabular-nums; color: var(--mist); font-size: 11.5px; }
+.cmp-stage { flex: 1; min-height: 0; position: relative; touch-action: none; }
+.cmp-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.cmp-tl { display: block; width: 100%; height: 22px; background: var(--cloud); cursor: pointer; }
+.cmp-bar {
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+  padding: 6px; background: var(--cloud); border-top: 1px solid var(--edge);
+}
+.cmp-foot {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; background: var(--cloud); border-top: 1px solid var(--edge);
+}
+#cmpLink.on { background-image: var(--grad-primary); color: #fff; border-color: transparent; box-shadow: var(--shadow-nav); }
+.cmp-list {
+  display: flex; flex-direction: column; gap: 4px;
+  max-height: 40vh; overflow-y: auto; margin: 12px 0 4px;
+}
+.cmp-pick {
+  text-align: left; padding: 7px 10px; border-radius: var(--r-sm);
+  border: 1px solid var(--edge); background: var(--cloud);
+  font: inherit; font-size: 12.5px; color: var(--graphite); cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cmp-pick:hover { background: var(--n-100); border-color: var(--n-300); color: var(--ink); }
+
 .bs-note code {
   background: var(--n-100); border: 1px solid var(--n-200);
   border-radius: 4px; padding: 0 4px; font-size: 11.5px;
@@ -599,6 +638,43 @@
 @media (max-width: 560px) {
   .vp-transport { gap: 2px; padding: 3px 6px; }
   .vp-tc { min-width: 50px; font-size: 10px; }
+}
+
+/* THE REBUILD'S OWN RESPONSIVE PASS (2026-08-27). Everything added to the
+   Clip Log and the toolbars this week was drawn for a desktop column; each
+   rule below is a specific thing that broke below it. */
+@media (max-width: 1100px) {
+  /* The log becomes a short wide strip, so the header's three filter pills
+     have room but the bulk bar must not push the rows off it. */
+  .log-bulk { padding: 4px 8px; }
+  .log-bulk .mini { height: 20px; padding: 0 6px; font-size: 10.5px; }
+  /* Side by side stacks: two 16:9 panes beside each other on a tablet give
+     each about 300px, which is not a comparison, it is two thumbnails. */
+  .cmp-panes { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+}
+@media (max-width: 760px) {
+  /* The annotation toolbar is the widest fixed thing in the app. Let it
+     wrap rather than run off the frame, and drop the printed shortcuts -
+     there is no keyboard on the device that gets this width. */
+  .an-tb { flex-wrap: wrap; max-width: calc(100vw - 16px); justify-content: center; }
+  .an-tb .tb-key { display: none; }
+  .an-tb .tb-word { padding-right: 12px; }
+  /* Players and the record picker are grids built for a sheet. */
+  .pl-grid { grid-template-columns: 1fr; }
+  .rec-presets .mini { flex: 1 1 auto; }
+  .cs-player { flex-wrap: wrap; }
+  .cs-player [data-f="first"], .cs-player [data-f="last"] { flex: 1 1 44%; }
+}
+@media (max-width: 560px) {
+  /* At phone width the log's tag line and the clip name fight over the
+     same few characters. The tags drop to their own line under the name
+     rather than both ellipsizing to nothing. */
+  .log-row { flex-wrap: wrap; padding: 4px 8px; }
+  .log-row .log-name { flex: 1 1 auto; }
+  .log-tagline { flex: 1 1 100%; margin-left: 66px; }
+  .log-head { flex-wrap: wrap; }
+  .log-filters { flex: 1 1 100%; }
+  .cmp-foot { flex-wrap: wrap; }
 }
 
 /* ============================================================

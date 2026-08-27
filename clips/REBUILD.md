@@ -67,7 +67,7 @@ Status key: `[ ]` not started, `[~]` in progress, `[x]` done and verified.
 - [x] 29. Remove the dot-in-circle tool. The circle tool always draws a
       true circle.
 - [x] 30. The select tool (`v`) shows the ordinary arrow cursor.
-- [ ] 31. SIDE-BY-SIDE: pull a second video from the library alongside the
+- [x] 31. SIDE-BY-SIDE: pull a second video from the library alongside the
       current one, each with its own scrub and timeline.
 - [x] 32. JOINT ANGLE tool: endpoint handles, and an always-visible
       readout of the true angle.
@@ -116,4 +116,4 @@ Status key: `[ ]` not started, `[~]` in progress, `[x]` done and verified.
 - [x] 44. Timeline: freeze marks go. Every tag timecode gets a clickable
       marker that jumps there. The timeline zooms and scrolls from the
       trackpad.
-- [ ] 45. Tablet and mobile keep up with all of the above.
+- [x] 45. Tablet and mobile keep up with all of the above.

@@ -35,6 +35,7 @@ import {
 } from './player.js';
 import { openAnnotate, annotationElements } from './annotate.js';
 import { recordRange, deliver, fileStem, CROP_PRESETS, openMic } from './export.js';
+import { openCompare, closeCompare, comparing } from './compare.js';
 import { drawEl } from '/diagrams/js/flat.js';
 import { toast, esc, confirmSheet, fmtDate } from './ui.js';
 import { putDrill, uid as drillUid } from '/diagrams/js/store.js';
@@ -432,6 +433,7 @@ async function showPlayer(id) {
           <button class="btn" id="vpFreeze" title="Freeze This Frame And Draw On It (F)">Freeze</button>
           <button class="btn" id="vpPull" title="Export The Clip Around The Playhead (Right-Click To Set The Buffer)">Pull</button>
           <button class="btn" id="vpRecord" title="Record The Player With Your Voice And Drawings">Record</button>
+          <button class="btn" id="vpCompare" title="Put A Second Video Beside This One">Compare</button>
           <span class="ed-sep"></span>
           <button class="btn" id="vpSettings" title="Clips Settings">Settings</button>
           <button class="btn" id="vpLogBtn" title="Show Or Hide The Clip Log">Clips</button>
@@ -480,6 +482,7 @@ async function showPlayer(id) {
   $('#vpPull').oncontextmenu = (e) => { e.preventDefault(); void editBuffer('pullBuf', 'Pull'); };
   $('#vpFreeze').oncontextmenu = (e) => { e.preventDefault(); void editBuffer('freezeBuf', 'Freeze'); };
   $('#vpRecord').onclick = () => void openRecord(game);
+  $('#vpCompare').onclick = () => void openCompare({ name: game.name, url: src, startAt: video().currentTime });
   wirePanels();
 
   await openPlayer(game, src, {

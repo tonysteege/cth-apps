@@ -333,6 +333,71 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
 - IndexedDB helpers in both apps' store.js: a `get` on a missing key must
   return undefined, never the raw IDBRequest (that bug shipped once).
 
+## Clips rebuild (2026-08-27)
+
+Tony specified a 45-item rebuild in one message; `clips/REBUILD.md` tracked
+it and every item is shipped. The rules worth keeping:
+
+- **EXPORTS LAND BESIDE THEIR SOURCE**, in the folder the video itself is
+  in - not `/videos/exports`, which is where they used to go. Names come
+  from a pattern in Settings (`{name} {tags} {hhmmss} {label} {date}`) and
+  a missing token collapses WITHOUT the dash that joined it, so a clip
+  with no tags is `Goal-1-001240` and never `Goal-1--001240`.
+- **EXPORTING IS SILENT.** No progress bar, no sheet, no success toast -
+  the file appearing is the report. Only a failure speaks, and it names
+  the file AND the folder it could not write to, because "export failed"
+  alone is not actionable.
+- **EVERYTHING IS COMPOSITED THROUGH A CANVAS** (`clips/js/export.js`),
+  never captured off the video element. `video.captureStream()` hands you
+  the picture and nothing drawn over it, so an annotation could not
+  otherwise reach the file. The canvas takes the video's own pixels - the
+  same "look like the file" rule the scrub engine had to learn.
+- **FREEZE EXPORTS, IT DOES NOT SAVE.** Done exports the window around the
+  playhead with the frame held and the drawings baked into the HELD FRAMES
+  ONLY; an annotation floating over live action reads as a glitch. Nothing
+  is written to the Clip Log. Right-click Freeze or Pull to set its
+  buffer; both default to 5s before, 10s after.
+- **RECORD CAPTURES A REGION OF THE VIDEO, NOT THE DESKTOP.** That is a
+  deliberate reading of "record the screen" and the better one here:
+  compositing from the video means the cursor ring and the annotations are
+  already in frame, the toolbar can never be, no screen-picker interrupts
+  the take, and the region is remembered across sessions. `getDisplayMedia`
+  can do none of those. Do not "upgrade" this to a screen grab.
+- **THE ANNOTATION POINTER MAPS TO THE PICTURE, NOT THE ELEMENT.**
+  `object-fit: contain` letterboxes the bitmap inside the canvas box, so
+  `getBoundingClientRect()` is not the picture. Mapping against it put
+  every click off by the letterbox offset (a handle click landed 18 video
+  pixels high). `viewBox()` in annotate.js is the fix; anything that turns
+  a pointer into video coordinates must go through it.
+- **A TOOL STAYS ARMED** until Escape or another tool. Escape disarms
+  first and only closes once nothing is armed, so a stray Escape
+  mid-drawing cannot throw the session away.
+- The joint angle is drawn in `annotate.js`, NOT in `flat.js`: flat.js is
+  an interchange contract with Film Room and must not grow a Clips-only
+  element type. `drawAny()` routes it and delegates everything else.
+- **TIMELINE**: a marker per TAGGED CLIP, coloured by its rating, that
+  jumps there when clicked. Freeze marks are gone - freezes are exports
+  now and those marks pointed at nothing. Pinch/wheel zooms about the
+  pointer, swipe scrolls, double-click fits. `tl.span === 0` MEANS FIT and
+  must stay 0 until something zooms: clamping a span before the file's
+  duration is known pinned it at the 2-second floor and opened every
+  video zoomed into its first two seconds.
+- **CLIP LOG**: tags are one editable line, not pills; three rating dots
+  (good/bad/star) are the only colour on a row; search is an icon;
+  Clips/Tags are multi-select menus with counts, and ticking two tags
+  WIDENS the view; the table headers sort; rows carry checkboxes for bulk
+  Pull, Tag, Rename and Delete; right-click gives the full suite; Cmd+Z
+  undoes the last tag or clip and must sit ABOVE onKey's modifier bail
+  and BELOW its input guard.
+- **PLAYERS** (`p`) pauses and opens the roster from Settings. Every
+  player's key is printed on its row - a shortcut nobody can see is not a
+  shortcut. The tag is the player's FIRST name through `normTag`.
+- Email is gone; exported clips get mailed from the Finder.
+- Side by side (`compare.js`) is a PLAYER MODE, not a drawing tool: two
+  elements, two timelines, two transports. It imports `scrubDeltaSeconds`
+  and `scrubMotionStep` rather than reimplementing them - that curve was
+  tuned against Film Room and is the one thing here that must not drift.
+
 ## Slides (/slides/) rules
 
 - Slides renders a LIVE Notion page as slides through the Worker in
