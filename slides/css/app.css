@@ -33,11 +33,7 @@ body.dark { background: #0b0b0b; }
 .ph-card { border: 1px solid var(--edge); border-radius: 16px; padding: 18px 22px; box-shadow: var(--shadow-card); background: var(--cloud); }
 .ph-card p { color: var(--mist); line-height: 1.6; font-size: 13.5px; margin: 0 0 12px; }
 .ph-card p:last-child { margin: 0; }
-.ph-formula {
-  display: flex; align-items: center; gap: 10px;
-  background: var(--sunken); border-radius: var(--r-sm); padding: 10px 12px; margin: 0 0 12px;
-}
-.ph-formula code { flex: 1; font-size: 12.5px; overflow-x: auto; white-space: nowrap; }
+/* .ph-formula now lives in the shared base (diagrams/css/app.css). */
 .ph-note { font-size: 12.5px; }
 
 /* ---------------------------------------------------------- deck shell */

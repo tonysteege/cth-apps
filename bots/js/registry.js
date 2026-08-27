@@ -15,7 +15,11 @@
 //   kind      'text' or 'image' - decides which endpoint runs and how the
 //             results render.
 //   inputs    the fields on the run sheet: {key,label,type,placeholder}
-//             where type is 'textarea' | 'text' | 'url'.
+//             where type is 'textarea' | 'text' | 'url'. A field may also
+//             carry `reads: 'notion'`: the runner then fetches that page
+//             before the run and hands the prompt `<key>Text`. A field
+//             with no `reads` and no use in prompt() is a dead control -
+//             `source` was exactly that until 2026-08-27.
 //   settings  the per-bot settings schema: {key,label,type,...} where type
 //             is 'number' | 'select' | 'text' | 'textarea' | 'styles' |
 //             'folder'. Values live in the bot's saved config.
@@ -93,7 +97,7 @@ export const BOTS = [
     kind: 'image',
     inputs: [
       { key: 'brief', label: 'What The Visual Should Show', type: 'textarea', placeholder: 'e.g. the three lanes of a breakout, with the strong-side winger on the wall' },
-      { key: 'source', label: 'Notion Page Link (Optional)', type: 'url', placeholder: 'https://www.notion.so/...' },
+      { key: 'source', label: 'Notion Page Link (Optional)', type: 'url', placeholder: 'https://www.notion.so/...', reads: 'notion' },
     ],
     settings: [
       { key: 'count', label: 'Options Per Run', type: 'number', min: 1, max: 4, def: 3 },
@@ -104,10 +108,13 @@ export const BOTS = [
     system: 'You write image-generation prompts for a hockey coach\'s teaching visuals. The result must teach at a glance on a phone or a projector: one idea, clear hierarchy, readable labels, nothing decorative that does not carry meaning.',
     prompt: (v, c, style) => [
       `Subject: ${v.brief}`,
+      // `sourceText` is filled in by the runner when a page link is given:
+      // `reads: 'notion'` above is what makes that field do something.
+      v.sourceText ? `Source material from the coach's own page - use it for the content, not the wording:\n${String(v.sourceText).slice(0, 1500)}` : '',
       style ? `Style: ${style.prompt}` : 'Style: choose the single most effective style for this subject.',
       `Aspect: ${c.aspect}.`,
       'Ice hockey context. No watermarks, no gibberish text, no stock-photo cliches.',
-    ].join('\n'),
+    ].filter(Boolean).join('\n'),
   },
 
   {

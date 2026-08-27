@@ -464,11 +464,41 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   Refine re-runs with a region hint derived from a box drawn on the
   option - it is prompt text, not inpainting, and must not claim to be.
 - The model calls go to the SAME Worker Slides uses: `/ai/text`,
-  `/ai/vision`, `/ai/image` on apps-api.coachtonyhockey.com. Setup is
-  `wrangler secret put ANTHROPIC_API_KEY` (text and vision),
-  `wrangler secret put OPENAI_API_KEY` (images), then `wrangler deploy`.
-  An undeployed Worker must surface as a plain-words error with a Setup
+  `/ai/vision`, `/ai/image` on apps-api.coachtonyhockey.com. Setup is ONE
+  `wrangler deploy` and NO secret - see the Workers AI rule below; the
+  ANTHROPIC_API_KEY / OPENAI_API_KEY line that stood here described the
+  proxy that lived in this Worker for a few hours and is long gone. An
+  undeployed Worker must surface as a plain-words error with a Setup
   button - never a silent failure or a dead spinner.
+- **EVERY ERROR THE WORKER RETURNS CARRIES A `message`.** A 400 answering
+  `{error:'bad_image'}` alone reached Tony as a toast reading literally
+  "bad_image" (measured live 2026-08-27), because `ai.js` falls back to
+  the machine code when there is no sentence. A code is a dead end; say
+  what to do instead. The vision path also DOWNSCALES in the browser
+  first (`visionDataUrl`, 1600px JPEG), which serves the speed rule and
+  puts the size cap out of reach rather than explaining it.
+- **ONE RUN LOCK PER CARD, AND EVERY RUN GOES THROUGH IT.** `withRun` in
+  app.js owns the AbortController, the disabled Run button, the `is-busy`
+  class and the error painting; it hangs on the card as `card.__run` so
+  Refine uses the same lock. Refine used to bypass it: Run stayed live, a
+  refine could not be stopped, and a failure only toasted - leaving the
+  skeleton grid it had already painted spinning forever. Any future way
+  to start a run goes through `card.__run`, never straight to `runImage`.
+- **NOTHING REBUILDS THE BOARD WHILE A BOT IS RUNNING.** `showBoard()`
+  replaces `#app.innerHTML`, which detaches the card a run is painting
+  into, so the finished result lands off-page and reads as a lost
+  generation - and an image run is 20 to 60 seconds of open window. Hide,
+  Show All, Reset Layout and both settings buttons go through
+  `rerender()`, which refuses while `.bot-card.is-busy` exists and says
+  why. Settings still SAVE mid-run; only the repaint waits.
+- **AN INPUT THAT FEEDS NOTHING IS A BUG.** Visual Aid Bot's "Notion Page
+  Link" was declared in `inputs` and read by nobody, so pasting a page
+  changed the prompt not at all. A field may now carry `reads: 'notion'`:
+  the runner fetches that page through the Worker's existing
+  `/notion/page/<id>` endpoint before the run and hands `prompt()` a
+  `<key>Text` value. A page it cannot read warns and runs on the brief
+  alone - never kills a run the brief alone could do. Before adding an
+  input, check `prompt()` actually consumes it.
 - **THE RUN BUTTON IS ALWAYS CALLED "RUN"** (2026-08-27, Tony's call) -
   for these bots and every future one. Not Generate, not Create.
 - Cards carry NO description text: the board packs four or more columns

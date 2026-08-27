@@ -7,7 +7,7 @@
 
 import { BOTS, botById, defaultsFor, ICONS } from './registry.js';
 import { getConfig, putConfig, getLayout, putLayout, addRun, listRuns, deleteRun, uid } from './store.js';
-import { aiText, aiVision, aiImage, parseJson, AiError } from './ai.js';
+import { aiText, aiVision, aiImage, notionText, parseJson, AiError } from './ai.js';
 import { toast, esc } from '../../diagrams/js/ui.js';
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -37,6 +37,20 @@ async function saveCfg(bot, patch) {
 // working at once, and the board is the whole app.
 
 const DEF_LAYOUT = () => ({ order: BOTS.map((b) => b.id), size: {}, hidden: [] });
+
+// Every rebuild replaces #app.innerHTML, which detaches the card a run is
+// painting into - the finished result then lands in a card that is no
+// longer on the page and reads as a lost generation. Images take 20 to 60
+// seconds, so that window is wide open. Nothing rebuilds while a bot is
+// working (2026-08-27).
+function boardBusy() {
+  return !!document.querySelector('.bot-card.is-busy');
+}
+function rerender(whyBlocked = 'A Bot Is Still Running - Stop It Or Let It Finish') {
+  if (boardBusy()) { toast(whyBlocked, true); return false; }
+  showBoard();
+  return true;
+}
 
 async function layout() {
   const l = (await getLayout()) || DEF_LAYOUT();
@@ -117,8 +131,16 @@ async function showBoard() {
 
   $('#botHome').onclick = () => { location.href = '../'; };
   $('#botSetup').onclick = () => showSetup();
-  $('#botShowAll').onclick = async () => { await putLayout({ ...l, hidden: [] }); showBoard(); };
-  $('#botReset').onclick = async () => { await putLayout(DEF_LAYOUT()); showBoard(); };
+  $('#botShowAll').onclick = async () => {
+    if (boardBusy()) { toast('A Bot Is Still Running - Stop It Or Let It Finish', true); return; }
+    await putLayout({ ...l, hidden: [] });
+    rerender();
+  };
+  $('#botReset').onclick = async () => {
+    if (boardBusy()) { toast('A Bot Is Still Running - Stop It Or Let It Finish', true); return; }
+    await putLayout(DEF_LAYOUT());
+    rerender();
+  };
 
   const board = $('#botBoard');
   for (const el of board.querySelectorAll('.bot-card')) await wireCard(el, l);
@@ -146,28 +168,29 @@ async function wireCard(card, l) {
   });
   q('[data-cfg]').onclick = () => showSettings(bot);
   q('[data-hide]').onclick = async () => {
+    if (boardBusy()) { toast('A Bot Is Still Running - Stop It Or Let It Finish', true); return; }
     const id = bot.id;
     const hidden = l.hidden.includes(id) ? l.hidden.filter((x) => x !== id) : [...l.hidden, id];
     await putLayout({ ...l, hidden });
-    showBoard();
+    rerender();
   };
 
   const go = q('[data-run]');
   const stop = q('[data-stop]');
-  go.onclick = async () => {
-    const vals = {};
-    for (const f of bot.inputs || []) vals[f.key] = q(`[data-in="${f.key}"]`)?.value.trim() || '';
-    const first = bot.inputs?.[0];
-    if (first && !vals[first.key]) { toast(`${first.label} Is Empty`, true); q(`[data-in="${first.key}"]`)?.focus(); return; }
+
+  // ONE lock for every way a run can start. Refine used to bypass this: it
+  // left Run enabled, could not be stopped, and on a failure only toasted -
+  // so the skeleton grid it had already painted spun forever. Everything
+  // goes through here now (2026-08-27).
+  const withRun = async (fn) => {
+    if (ctrl) { toast('This Bot Is Already Running', true); return; }
     ctrl = new AbortController();
     go.disabled = true;
     stop.hidden = false;
-    stop.onclick = () => ctrl.abort();
+    stop.onclick = () => ctrl?.abort();
     card.classList.add('is-busy');
     try {
-      const fresh = await cfgOf(bot);
-      if (bot.kind === 'text') await runText(card, bot, fresh, vals, say, ctrl.signal);
-      else await runImage(card, bot, fresh, vals, style, say, ctrl.signal);
+      await fn(ctrl.signal);
     } catch (e) {
       if (e.name === 'AbortError') { say('Stopped'); q('[data-out]').innerHTML = ''; }
       else { console.error(e); say(''); paintError(card, e); toast(e.message || 'That Run Failed', true); }
@@ -177,8 +200,46 @@ async function wireCard(card, l) {
     card.classList.remove('is-busy');
     ctrl = null;
   };
+  card.__run = withRun;
+  card.__say = say;
+
+  go.onclick = () => {
+    const vals = {};
+    for (const f of bot.inputs || []) vals[f.key] = q(`[data-in="${f.key}"]`)?.value.trim() || '';
+    const first = bot.inputs?.[0];
+    if (first && !vals[first.key]) { toast(`${first.label} Is Empty`, true); q(`[data-in="${first.key}"]`)?.focus(); return; }
+    return withRun(async (signal) => {
+      const fresh = await cfgOf(bot);
+      await hydrateSources(bot, vals, say, signal);
+      if (bot.kind === 'text') await runText(card, bot, fresh, vals, say, signal);
+      else await runImage(card, bot, fresh, vals, style, say, signal);
+    });
+  };
 
   await paintHistory(card, bot);
+}
+
+// An input marked `reads: 'notion'` is fetched before the run and handed
+// to prompt() as `<key>Text`. Until this existed, Visual Aid Bot's "Notion
+// Page Link" field was wired to nothing at all: you could paste a page and
+// the generation never saw a word of it.
+async function hydrateSources(bot, vals, say, signal) {
+  for (const f of bot.inputs || []) {
+    if (f.reads !== 'notion' || !vals[f.key]) continue;
+    say('Reading The Notion Page…');
+    try {
+      const page = await notionText(vals[f.key]);
+      const body = [page.title, page.text].filter(Boolean).join('\n').trim();
+      if (!body) { toast('That Notion Page Is Empty - Running On The Brief Alone', true); continue; }
+      vals[`${f.key}Text`] = body;
+    } catch (e) {
+      if (e.name === 'AbortError') throw e;
+      // A page it cannot read must not kill a run the brief alone can do.
+      console.error(e);
+      toast(`${e.message || 'Could Not Read That Page'} - Running On The Brief Alone`, true);
+    }
+    if (signal?.aborted) throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
+  }
 }
 
 // Drag by the grip only: the card is full of text fields now, and a
@@ -328,12 +389,7 @@ async function showSettings(bot) {
       const btn = veil.querySelector('[data-fromimg]');
       btn.textContent = 'Reading…';
       try {
-        const dataUrl = await new Promise((res, rej) => {
-          const fr = new FileReader();
-          fr.onload = () => res(fr.result);
-          fr.onerror = rej;
-          fr.readAsDataURL(f);
-        });
+        const dataUrl = await visionDataUrl(f);
         const text = await aiVision(
           'Describe this image AS A REUSABLE STYLE for generating new images. Do not describe the specific subject. Cover layout, colour, type treatment, lighting and mood in one dense sentence. Then on a new line give a 2 to 4 word name for the style. Return JSON: {"name":"...","prompt":"..."}',
           dataUrl,
@@ -360,7 +416,7 @@ async function showSettings(bot) {
     cfgCache.delete(bot.id);
     close();
     toast('Settings Reset');
-    showBoard();
+    rerender('Settings Reset - The Card Updates When The Run Finishes');
   };
   veil.querySelector('[data-x="save"]').onclick = async () => {
     const patch = { color };
@@ -379,8 +435,35 @@ async function showSettings(bot) {
     await saveCfg(bot, patch);
     close();
     toast('Settings Saved');
-    showBoard();
+    rerender('Settings Saved - The Card Updates When The Run Finishes');
   };
+}
+
+// Vision wants pixels, not megabytes. Sending the raw file made a style
+// read slower than it needed to be, and a full-display grab sailed past
+// the Worker's size cap and came back as the bare code "bad_image"
+// (measured live 2026-08-27). 1600px of JPEG is more than any style read
+// needs, and it puts the boundary out of reach.
+async function visionDataUrl(file, max = 1600) {
+  let bmp;
+  try {
+    bmp = await createImageBitmap(file);
+  } catch (_) {
+    throw new AiError('That File Could Not Be Read As An Image - Try A PNG Or JPEG', 'badimage');
+  }
+  const scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const w = Math.max(1, Math.round(bmp.width * scale));
+  const h = Math.max(1, Math.round(bmp.height * scale));
+  const cv = document.createElement('canvas');
+  cv.width = w;
+  cv.height = h;
+  const ctx = cv.getContext('2d');
+  // A screenshot with alpha would otherwise flatten onto black.
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(bmp, 0, 0, w, h);
+  bmp.close?.();
+  return cv.toDataURL('image/jpeg', 0.85);
 }
 
 const styleRow = (s) => `
@@ -453,6 +536,7 @@ async function runText(card, bot, cfg, vals, say, signal) {
 function paintText(card, run) {
   const out = card.querySelector('[data-out]');
   if (!out) return;
+  if (!card.isConnected) { toast('That Run Finished - Open It From Recent'); return; }
   out.innerHTML = `
     <div class="run-head"><span class="pe-title">Results</span><span class="bot-flex"></span>
       <button class="mini" data-copyall>Copy All</button></div>
@@ -516,6 +600,9 @@ async function runImage(card, bot, cfg, vals, styleId, say, signal, extra = '') 
 function paintImages(card, bot, cfg, run) {
   const out = card.querySelector('[data-out]');
   if (!out) return;
+  // The board should never rebuild mid-run now, but a result must never
+  // be painted into a card that is no longer on the page either.
+  if (!card.isConnected) { toast('That Run Finished - Open It From Recent'); return; }
   out.innerHTML = `
     <div class="run-head"><span class="pe-title">Results</span>
       <span class="chip-neutral">${esc(run.style)}</span>
@@ -612,11 +699,16 @@ function openRefine(card, bot, cfg, run, i) {
       where = `Focus the change on the ${row} ${col} area of the image. `;
     }
     close();
-    const say = (m) => { const st = card.querySelector('[data-status]'); if (st) st.textContent = m; };
-    try {
-      await runImage(card, bot, cfg, run.input, 'best', say, undefined,
-        `Keep the overall composition of the previous version. ${where}${note ? `Change: ${note}` : 'Produce a stronger variation.'}`);
-    } catch (e) { toast(e.message || 'Refine Failed', true); }
+    const say = card.__say || ((m) => { const st = card.querySelector('[data-status]'); if (st) st.textContent = m; });
+    const extra = `Keep the overall composition of the previous version. ${where}${note ? `Change: ${note}` : 'Produce a stronger variation.'}`;
+    const go = card.__run;
+    // Same lock as the Run button: Run disables, Stop works, and a failure
+    // paints the error instead of leaving the skeletons spinning.
+    if (go) await go((signal) => runImage(card, bot, cfg, run.input, 'best', say, signal, extra));
+    else {
+      try { await runImage(card, bot, cfg, run.input, 'best', say, undefined, extra); }
+      catch (e) { say(''); paintError(card, e); toast(e.message || 'Refine Failed', true); }
+    }
   };
 }
 

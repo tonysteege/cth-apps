@@ -908,6 +908,15 @@ input:focus, select:focus, textarea:focus { outline: none; }
 .sheet h3 { margin: 0 0 8px; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
 .sheet p { margin: 0 0 4px; color: var(--mist); line-height: 1.5; }
 .sheet-row { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+
+/* A shell command shown inside a sheet. Shared (2026-08-27): it lived only
+   in slides/css, so the same markup in Bots rendered as bare body text -
+   the "every class the JS emits must have a rule" case, one app over. */
+.ph-formula {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--sunken); border-radius: var(--r-sm); padding: 10px 12px; margin: 0 0 12px;
+}
+.ph-formula code { flex: 1; font-size: 12.5px; overflow-x: auto; white-space: nowrap; }
 .keys-grid {
   display: grid;
   grid-template-columns: auto 1fr;

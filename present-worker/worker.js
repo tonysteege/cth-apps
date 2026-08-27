@@ -245,13 +245,13 @@ async function fluxImage(env, model, prompt, aspect) {
 }
 
 async function handleAi(request, env, path) {
-  if (request.method !== 'POST') return json(request, { error: 'method' }, 405);
+  if (request.method !== 'POST') return json(request, { error: 'method', message: 'That endpoint only takes a POST.' }, 405);
   if (!env.AI) return json(request, { error: 'no_binding', message: 'Workers AI is not bound to this Worker. Redeploy it.' }, 503);
   let body;
-  try { body = await request.json(); } catch (_) { return json(request, { error: 'bad_json' }, 400); }
+  try { body = await request.json(); } catch (_) { return json(request, { error: 'bad_json', message: 'The request body was not readable JSON.' }, 400); }
   const tier = body.quality ? 'good' : 'fast';
   const prompt = String(body.prompt || '').slice(0, MAX_PROMPT);
-  if (!prompt) return json(request, { error: 'empty' }, 400);
+  if (!prompt) return json(request, { error: 'empty', message: 'Nothing was sent to work from - fill in the brief and run it again.' }, 400);
 
   try {
     if (path === '/ai/text') {
@@ -270,7 +270,11 @@ async function handleAi(request, env, path) {
     if (path === '/ai/vision') {
       const img = String(body.image || '');
       const m2 = img.match(/^data:image\/[a-z+]+;base64,(.+)$/i);
-      if (!m2 || img.length > MAX_IMAGE_IN) return json(request, { error: 'bad_image' }, 400);
+      // Every 400 here carries a `message`. Without one the app fell back
+      // to the machine code and toasted a literal "bad_image" at Tony
+      // (measured live 2026-08-27) - a dead end no reader can act on.
+      if (!m2) return json(request, { error: 'bad_image', message: 'That file was not readable as an image. Try a PNG or a JPEG.' }, 400);
+      if (img.length > MAX_IMAGE_IN) return json(request, { error: 'bad_image', message: 'That image is too large. Use a smaller screenshot.' }, 400);
       const r = await env.AI.run(MODELS.vision[tier], {
         messages: [{
           role: 'user',
