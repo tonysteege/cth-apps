@@ -463,7 +463,10 @@ async function showPlayer(id) {
 const LOG_W_DEFAULT = 300;
 const LOG_W_MIN = 150;
 const SIDE_W_DEFAULT = 124;
-const SIDE_W_MIN = 58;
+// The buttons no longer shrink with the column (2026-08-26, Tony's call), so
+// the column can only go as narrow as a whole button: 7 characters, its key
+// badge and the padding either side. Below this it would clip them.
+const SIDE_W_MIN = 104;
 
 function wireResize({ grip, panel, key, def, min, max }) {
   const h = $(grip);

@@ -45,6 +45,24 @@ export const fmtHMS = (t) => {
 export const BTN_MAX = 7;
 export const btnLabel = (s) => (s || '').slice(0, BTN_MAX);
 
+// A tag button is a SOLID button in its own colour (2026-08-26, Tony's
+// call, replacing the white chip with a colour dot). The label therefore
+// sits on an arbitrary user-picked colour, so the text colour has to be
+// computed rather than fixed: white on Ink, ink on Light Grey. WCAG
+// relative luminance, with the usual 0.5 knee. Handed to CSS as --fg.
+export function btnFg(hex) {
+  const raw = String(hex || '').trim().replace('#', '');
+  const v = raw.length === 3 ? raw.split('').map((c) => c + c).join('') : raw;
+  if (!/^[0-9a-fA-F]{6}$/.test(v)) return '#ffffff';
+  const n = parseInt(v, 16);
+  const lin = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) => {
+    const x = c / 255;
+    return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
+  });
+  const L = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+  return L > 0.5 ? '#0a0a0a' : '#ffffff';
+}
+
 export const video = () => el('vpVideo');
 
 export function clipName(c) {
@@ -666,10 +684,10 @@ function paintBar() {
   const item = (b) => {
     if (b.divider) return `<div class="side-div" data-drag="${b.id}" draggable="true" title="Divider - Drag To Move"><span></span></div>`;
     return b.tier === 1 ? `
-    <button class="tag-btn" draggable="true" data-drag="${b.id}" data-clipbtn="${b.id}" style="--c:${b.color}" title="${esc(b.label)}: Clip ${b.lead}s Before To ${b.lag}s After The Playhead. Drag To Reorder">
+    <button class="tag-btn" draggable="true" data-drag="${b.id}" data-clipbtn="${b.id}" style="--c:${b.color};--fg:${btnFg(b.color)}" title="${esc(b.label)}: Clip ${b.lead}s Before To ${b.lag}s After The Playhead. Drag To Reorder">
       <span class="tag-btn-word">${esc(btnLabel(b.label))}</span>${keyBadge(b.key)}
     </button>` : `
-    <button class="tag-btn tag-btn-tag${c?.tags.includes(b.label) ? ' on' : ''}" draggable="true" data-drag="${b.id}" data-tagbtn="${b.id}" style="--c:${b.color}" title="Toggle #${esc(b.label)} On The Selected Clip. Drag To Reorder">
+    <button class="tag-btn tag-btn-tag${c?.tags.includes(b.label) ? ' on' : ''}" draggable="true" data-drag="${b.id}" data-tagbtn="${b.id}" style="--c:${b.color};--fg:${btnFg(b.color)}" title="Toggle #${esc(b.label)} On The Selected Clip. Drag To Reorder">
       <span class="tag-btn-word">${esc(btnLabel(b.label))}</span>${keyBadge(b.key)}
     </button>`;
   };

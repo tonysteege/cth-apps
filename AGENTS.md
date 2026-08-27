@@ -208,25 +208,34 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
 - **The player layout is mChapters-shaped** (2026-08-25, Tony's call):
   left to right, Clip Log, tag column, video. The log is a striped table
   (sticky TIME | CLIP header, alternating rows, H:MM:SS via `fmtHMS`, ink
-  selection); the tag column is slim with 7-character chips (`btnLabel`,
-  `BTN_MAX`) carrying their colour as a left rule plus a 7% wash. Both
-  panels have a grip and go genuinely narrow (log 150px, tags 58px, where a
-  container query compacts the chips) and both collapse from their header
+  selection); the tag column is slim with 7-character buttons (`btnLabel`,
+  `BTN_MAX`) that are SOLID in their own colour. Both panels have a grip
+  (log minimum 150px, tags 104px - one whole button) and both collapse from their header
   button, which is what gives the video the whole window. Widths persist in
   `settings.logW` / `settings.sideW`. The timeline is a 26px lane on ink
   with the two timecodes in the transport row beneath it, and there is no
   permanent hint text on screen.
-- **Tag and clip buttons are small top-bar buttons** (2026-08-25, Tony's
-  call): the shared `.btn` drawing at chip size - white, hairline border,
-  `--r-sm` radius, `--shadow-1`, tight 3px/7px padding - with a vibrant
-  8px colour dot before the 7-character label. The dot is the button's
-  assigned colour from the panel editor; there is no background wash.
+- **Tag and clip buttons are SOLID COLOURED buttons** (2026-08-26, Tony's
+  call, replacing the white chip with a colour dot). Each one is the
+  BoardUI primary-button recipe at small size, tinted with the button's
+  own assigned colour: a 180deg gradient from the colour to a darker stop,
+  a 1px darker edge, an inset white top highlight, `--r-sm`, 4px/8px
+  padding, 11.5px semibold. The colour IS the button, so the dot is gone.
+  Because the colour is user-picked, the LABEL COLOUR IS COMPUTED, not
+  fixed: `btnFg()` in `player.js` takes WCAG relative luminance and returns
+  ink or white, handed to CSS as `--fg` beside `--c`. Without it the
+  Light Grey preset (which is the default for a new button) would be white
+  on near-white. An applied tag shows an inset ring in `--fg`.
+- **The tag buttons do not resize with the column** (2026-08-26, Tony's
+  call). A container query used to shrink their type and padding under
+  96px, so they moved about while the grip was dragged. That query is
+  gone; the buttons are one fixed size and `SIDE_W_MIN` (app.js) is 104px
+  instead of 58px, which is the narrowest column that holds a whole
+  button. Do not reintroduce a size-reactive rule here.
 - **The tag panel reorders and the editor builds it** (2026-08-25): its own
   vertical drag handle (width persists in `settings.sideW`, double-click
-  resets, 96px minimum where a container query switches the buttons to a
-  compact drawing), a header Tags button to collapse it, and drag-to-
-  reorder within a tier. Buttons wear their assigned colour as a 12%
-  `color-mix` wash. The panel editor has preset swatches (light grey
+  resets, 104px minimum - see the fixed-size rule above), a header Tags
+  button to collapse it, and drag-to-reorder within a tier. The panel editor has preset swatches (light grey
   included, and it is the DEFAULT for a new button), a colour well for
   anything else, Copy to duplicate a button (never its hotkey), dividers,
   and drag-to-reorder. A divider is `{id, tier, divider: true}` in the same
