@@ -15,6 +15,8 @@ import {
   telestrateClear, telestrateArmed,
 } from './telestrate.js';
 import { toast, esc, fmtClock } from './ui.js';
+import { listDecks, getDeck, putDeck, deleteDeck, newDeck, normalizeDeck } from './decks.js';
+import { openEditor, closeEditor, editing, flush, slideHtml, mountSlideVideos, rehydrate } from './editor.js';
 
 const API = 'https://apps-api.coachtonyhockey.com';
 const $ = (s) => document.querySelector(s);
@@ -31,7 +33,14 @@ function remember(id, title) {
 const pageIdFrom = (s) => (s || '').replace(/-/g, '').match(/[0-9a-f]{32}/i)?.[0]?.toLowerCase() || null;
 
 function route() {
-  const q = new URLSearchParams(location.hash.slice(1));
+  const h = location.hash.slice(1);
+  // Authored decks came later than the Notion route and must not disturb
+  // it: `#p=<32hex>` is a public URL format and stays exactly as it was.
+  const edit = h.match(/^\/d\/([a-z0-9]+)$/i);
+  if (edit) return { view: 'edit', id: edit[1] };
+  const present = h.match(/^\/present\/([a-z0-9]+)$/i);
+  if (present) return { view: 'present', id: present[1] };
+  const q = new URLSearchParams(h);
   const id = pageIdFrom(q.get('p') || '');
   return id ? { view: 'deck', id, s: Math.max(0, parseInt(q.get('s') || '0', 10) || 0) } : { view: 'home' };
 }
@@ -42,13 +51,17 @@ async function go() {
   const r = route();
   if (deck && r.view === 'deck' && r.id === deck.id) { show(r.s); return; }
   teardownDeck();
+  if (editing()) closeEditor();
   if (r.view === 'deck') await openDeck(r.id, r.s);
-  else showHome();
+  else if (r.view === 'edit') await openEditor(r.id);
+  else if (r.view === 'present') await presentDeck(r.id);
+  else await showHome();
 }
 
 // ------------------------------------------------------------- home
 
-function showHome() {
+async function showHome() {
+  const decks = await listDecks();
   document.title = 'CTH Slides';
   document.body.classList.remove('dark');
   $('#app').innerHTML = `
@@ -65,6 +78,16 @@ function showHome() {
       <div class="ph-open">
         <input id="phUrl" placeholder="Paste A Notion Page Link (Or Its Slides URL)…" autocomplete="off">
         <button class="btn btn-ink" id="phGo">Open Slides</button>
+      </div>
+      <div class="ph-title">Your Decks</div>
+      <div class="ph-decks">
+        <button class="deck-new" id="phNewDeck">+ New Deck</button>
+        ${decks.map((d) => `
+          <button class="deck-card" data-deck="${esc(d.id)}">
+            <span class="deck-thumb">${slideHtml(normalizeDeck(d).slides[0] || { els: [] })}</span>
+            <span class="deck-name">${esc(d.name)}</span>
+            <span class="deck-meta">${d.slides.length} Slide${d.slides.length === 1 ? '' : 's'} &middot; ${new Date(d.updated || d.created).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>
+          </button>`).join('')}
       </div>
       ${recents().length ? `
         <div class="ph-title">Recent</div>
@@ -89,6 +112,22 @@ function showHome() {
   $('#phUrl').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter' || e.keyCode === 13) open(); });
   $('#phCopy').onclick = async () => { await navigator.clipboard.writeText(FORMULA); toast('Formula Copied - Paste It Into A New Formula Property'); };
   document.querySelectorAll('[data-open]').forEach((b) => { b.onclick = () => { location.hash = `p=${b.dataset.open}`; }; });
+  $('#phNewDeck').onclick = async () => {
+    const d = newDeck();
+    await putDeck(d);
+    location.hash = `/d/${d.id}`;
+  };
+  document.querySelectorAll('[data-deck]').forEach((b) => {
+    b.onclick = () => { location.hash = `/d/${b.dataset.deck}`; };
+    b.oncontextmenu = async (e) => {
+      e.preventDefault();
+      const d = await getDeck(b.dataset.deck);
+      if (!d) return;
+      if (!window.confirm(`Delete "${d.name}"? This cannot be undone.`)) return;
+      await deleteDeck(d.id);
+      void showHome();
+    };
+  });
 }
 
 // ------------------------------------------------------------- deck
@@ -242,6 +281,54 @@ function buildDeck(page, startAt) {
   show(Math.min(startAt, slides.length - 1));
 }
 
+// PRESENTING AN AUTHORED DECK REUSES EVERYTHING (2026-08-27). The chrome,
+// the rail, the counter, the keyboard, the telestration, the screen
+// recording and the video player are all already here and already tuned;
+// only the slide elements come from a different place. Building a second
+// presenter would have been two things to keep in step forever.
+async function presentDeck(id) {
+  const raw = await getDeck(id);
+  if (!raw) { toast('That Deck Is Gone', true); location.hash = ''; return; }
+  const d = await rehydrate(normalizeDeck(raw));
+  document.title = `${d.name} - CTH Slides`;
+  document.body.classList.add('dark');
+  $('#app').innerHTML = `
+    <div class="pr" id="pr">
+      <div class="pr-chrome" id="prChrome">
+        <button class="btn btn-back" id="prBack" title="Back To The Editor">${BACK_ICON}</button>
+        <span class="pr-title">${esc(d.name)}</span>
+        <span class="pr-flex"></span>
+        <button class="btn" id="prEdit" title="Edit This Deck">Edit</button>
+        <button class="btn" id="prRec" title="Record The Screen (R)">Record</button>
+        <button class="btn" id="prGridBtn" title="All Slides (G)">Grid</button>
+        <button class="btn" id="prFull" title="Fullscreen (F)">Fullscreen</button>
+      </div>
+      <div class="pr-stagebox" id="prStageBox">
+        <div class="pr-stage" id="prStage"></div>
+      </div>
+      <div class="pr-rail" id="prRail"></div>
+      <div class="pr-progress"><div id="prProgressFill"></div></div>
+      <div class="pr-counter" id="prCounter"></div>
+      <div class="pr-black" id="prBlack" hidden></div>
+      <div class="pr-grid" id="prGrid" hidden></div>
+    </div>`;
+  const stage = $('#prStage');
+  const slideEls = d.slides.map((sl, i) => {
+    const el = document.createElement('div');
+    el.className = 'pr-slide de-pres';
+    el.dataset.i = i;
+    el.innerHTML = slideHtml(sl);
+    stage.appendChild(el);
+    return el;
+  });
+  mountSlideVideos(stage);
+  deck = { kind: 'authored', id: d.id, page: { title: d.name }, slides: d.slides, els: slideEls, i: -1, tele: null, rec: null };
+  deck.tele = initTelestrate(stage, $('#prRail'));
+  wireDeck();
+  $('#prEdit').onclick = () => { location.hash = `/d/${d.id}`; };
+  show(0);
+}
+
 function show(i) {
   if (!deck) return;
   i = Math.max(0, Math.min(deck.slides.length - 1, i));
@@ -252,10 +339,15 @@ function show(i) {
   telestrateSetSlide(i);
   $('#prCounter').textContent = `${i + 1} / ${deck.slides.length}`;
   $('#prProgressFill').style.width = `${((i + 1) / deck.slides.length) * 100}%`;
-  const q = new URLSearchParams(location.hash.slice(1));
-  q.set('p', deck.id);
-  q.set('s', String(i));
-  history.replaceState(null, '', `#${q.toString()}`);
+  if (deck.kind === 'authored') {
+    // An authored deck's URL is its own; it has no Notion page id to carry.
+    history.replaceState(null, '', `#/present/${deck.id}`);
+  } else {
+    const q = new URLSearchParams(location.hash.slice(1));
+    q.set('p', deck.id);
+    q.set('s', String(i));
+    history.replaceState(null, '', `#${q.toString()}`);
+  }
 }
 
 const next = () => show(deck.i + 1);
@@ -276,8 +368,10 @@ function toggleGrid(force) {
 }
 
 function wireDeck() {
-  $('#prBack').onclick = () => { location.hash = ''; };
-  $('#prRefresh').onclick = async () => {
+  $('#prBack').onclick = () => { location.hash = deck?.kind === 'authored' ? `/d/${deck.id}` : ''; };
+  // Refresh only exists on a Notion deck - an authored one has no page to
+  // pull from, so the button is not rendered and must not be wired.
+  if ($('#prRefresh')) $('#prRefresh').onclick = async () => {
     try {
       const at = deck.i;
       const page = await fetchPage(deck.id, true);

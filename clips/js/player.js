@@ -792,11 +792,23 @@ export function paintBar() {
     <div class="side-label">Clips</div>
     ${panelItems(1).map(item).join('')}
     <div class="side-label">Tags</div>
-    ${panelItems(2).map(item).join('')}
-    <div class="side-label">Players</div>
-    <button class="tag-btn tag-btn-players" data-act="players" style="--c:#f97316;--fg:#fff" title="Tag The Players In This Clip (P)">
-      <span class="tag-btn-word">Players</span><span class="tag-key">P</span>
-    </button>
+    ${(() => {
+      // Players sits directly under the ratings and above every other tag
+      // (2026-08-27, Tony's call): good / bad / star and "who" are the four
+      // things pressed on nearly every clip, so they belong together at the
+      // top of the column rather than past a scroll of situation tags.
+      const items = panelItems(2);
+      const ratings = new Set(['good', 'bad', 'star']);
+      let cut = -1;
+      items.forEach((b, n) => { if (!b.divider && ratings.has(String(b.label).toLowerCase())) cut = n; });
+      const playersBtn = `
+        <button class="tag-btn tag-btn-players" data-act="players" style="--c:#f97316;--fg:#fff" title="Tag The Players In This Clip (P)">
+          <span class="tag-btn-word">Players</span><span class="tag-key">P</span>
+        </button>`;
+      const html = items.map(item);
+      html.splice(cut + 1, 0, playersBtn);
+      return html.join('');
+    })()}
     ${cur.clipMode ? `<button class="tag-btn tag-btn-mode on" data-act="exitClip">Playing Clip - Esc Exits</button>` : ''}
     <button class="tag-btn tag-edit" data-act="editPanel" title="Edit Buttons, Keys, Colors, Lead And Lag">Edit Buttons</button>`;
   bar.querySelector('[data-act="players"]').onclick = () => openPlayers();

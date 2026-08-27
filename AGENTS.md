@@ -438,6 +438,41 @@ it and every item is shipped. The rules worth keeping:
   `/videos/recordings` through ../clips/js/localfs.js (same origin, same
   folder handle), with Download always offered alongside.
 
+## Slides: authored decks (2026-08-27)
+
+Slides has rendered Notion pages since it was built. It now ALSO has decks
+Tony makes himself, on a whiteboard-like canvas modelled on Figma Slides
+after a live inspection of it. The two live side by side.
+
+- **THE NOTION ROUTE IS A PUBLIC URL FORMAT AND DID NOT MOVE.** `#p=<32hex>`
+  and `&s=<n>` parse exactly as before; authored decks took the new shapes
+  `#/d/<id>` to edit and `#/present/<id>` to present.
+- **EVERY COORDINATE IS IN SLIDE SPACE - 1600x900**, the same numbers
+  telestrate.js uses, never screen pixels; text is sized in `cqh` against
+  the stage's container query. That one rule is why ONE record draws the
+  editor, the rail thumbnails, the board, a deck card and the projector
+  with no second layout anywhere. Anything reading a pointer maps back
+  through the stage rect on the way in.
+- **PRESENTING AN AUTHORED DECK REUSES THE WHOLE PRESENTER** - chrome,
+  rail, counter, keyboard, telestration, screen recording and the video
+  player. Only the slide elements come from elsewhere. Do not build a
+  second presenter; two would have to be kept in step forever.
+- **VIDEO ON AN AUTHORED SLIDE IS `mountVideo` FROM media.js**, the same
+  player the Notion decks use, so a clip behaves identically either way.
+- **MEDIA IS A BLOB IN THE `assets` STORE, referenced by an id** - never
+  base64 on the deck record. A deck with an image and a clip on it stays
+  about 1KB, so autosave can rewrite it on every nudge. Object URLs die
+  with the page, so `rehydrate()` rebuilds them before anything renders.
+- **IT SAVES ITSELF** (700ms debounce, flush on the way out). There is no
+  Save button and there must never be one.
+- Selection chrome lives in its OWN layer over the stage: redrawing it
+  must never re-create the elements underneath, which would tear down a
+  mounted video mid-drag. Move and resize only rewrite the boxes for the
+  same reason.
+- A dark layout carries its own text colour. The role defaults are ink,
+  which is right on the white layouts and invisible on a black cover -
+  the first thing a new deck showed was a black title on a black slide.
+
 ## Design system rules (suite-wide)
 
 - **Component recipes are BoardUI's own** (2026-08-26, full-fidelity pass,

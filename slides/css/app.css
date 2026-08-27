@@ -374,3 +374,210 @@ blockquote { border-left: 3px solid var(--a-500); margin: 0 0 .8em; padding: .2e
 }
 .pv-strip .pv-fill { position: absolute; left: 0; top: 6px; height: 5px; }
 .pv-strip:hover .pv-fill { background: var(--a-300); }
+
+/* ============================================================
+   THE DECK EDITOR (2026-08-27)
+
+   A whiteboard-like canvas with slide components, built after an
+   inspection of Figma Slides: a board view holding every slide, a slide
+   view with a numbered rail, contextual properties and a tool bar.
+
+   EVERY ELEMENT IS SIZED IN PERCENT of a 16:9 stage, and text is sized in
+   `cqh` against that stage's container query. That is the whole reason one
+   record can draw the editor, a thumbnail, the board and the projector
+   without a second layout ever being written.
+   ============================================================ */
+
+.de { display: flex; flex-direction: column; height: 100dvh; background: var(--page); }
+.de-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px clamp(12px, 2vw, 20px);
+  background: var(--cloud); border-bottom: 1px solid var(--edge);
+  flex-wrap: wrap;
+}
+.de-flex { flex: 1; }
+.de-name {
+  min-width: 0; width: 260px; height: 32px; padding: 0 10px;
+  font: inherit; font-size: 15px; font-weight: 600;
+  border: none; border-radius: var(--r-sm);
+  background: transparent; color: var(--ink);
+  box-shadow: inset 0 0 0 1px transparent;
+  transition: box-shadow var(--dur) ease, background var(--dur) ease;
+}
+.de-name:hover { background: var(--n-100); }
+.de-name:focus { outline: none; background: var(--cloud); box-shadow: inset 0 0 0 2px var(--select); }
+.de-views { display: flex; gap: 4px; }
+.de-viewbtn.on { background-image: var(--grad-primary); color: #fff; border-color: transparent; box-shadow: var(--shadow-nav); }
+.de-body { flex: 1; min-height: 0; display: flex; }
+
+/* ---- board ---- */
+.de-board { flex: 1; overflow: auto; padding: 24px clamp(14px, 3vw, 40px) 60px; }
+.de-boardgrid {
+  display: grid; gap: 22px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  align-items: start;
+}
+.de-card { margin: 0; cursor: pointer; }
+.de-cardn { display: block; font-size: 11.5px; color: var(--soft); margin-bottom: 5px; font-variant-numeric: tabular-nums; }
+.de-cardbox {
+  position: relative; aspect-ratio: 16 / 9; container-type: size;
+  border: 1px solid var(--edge); border-radius: var(--r-md); overflow: hidden;
+  background: #fff; box-shadow: var(--shadow-card);
+  transition: box-shadow var(--dur) ease, border-color var(--dur) ease;
+}
+.de-card:hover .de-cardbox { border-color: var(--n-300); box-shadow: var(--shadow-2); }
+.de-card.on .de-cardbox { border-color: var(--select); box-shadow: 0 0 0 2px var(--select-soft), var(--shadow-2); }
+.de-card.dragging { opacity: .6; }
+.de-card figcaption {
+  margin-top: 6px; font-size: 12.5px; color: var(--mist);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.de-add {
+  aspect-ratio: 16 / 9; border: 1px dashed var(--n-300); border-radius: var(--r-md);
+  background: none; color: var(--mist); font: inherit; font-size: 13px; cursor: pointer;
+  transition: border-color var(--dur) ease, color var(--dur) ease;
+}
+.de-add:hover { border-color: var(--n-400); color: var(--ink); }
+
+/* ---- rail ---- */
+.de-rail {
+  width: 176px; flex: none; display: flex; flex-direction: column;
+  background: var(--sunken); border-right: 1px solid var(--edge);
+}
+.de-railtop { padding: 8px; border-bottom: 1px solid var(--edge); }
+.de-railtop .mini { width: 100%; }
+.de-raillist { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.de-thumb { display: flex; gap: 6px; align-items: flex-start; cursor: pointer; }
+.de-thumb.dragging { opacity: .6; }
+.de-thumbn { width: 14px; flex: none; font-size: 10.5px; color: var(--soft); padding-top: 3px; font-variant-numeric: tabular-nums; }
+.de-thumbbox {
+  flex: 1; min-width: 0; position: relative; aspect-ratio: 16 / 9;
+  container-type: size; overflow: hidden;
+  border: 1px solid var(--edge); border-radius: 6px; background: #fff;
+}
+.de-thumb.on .de-thumbbox { border-color: var(--select); box-shadow: 0 0 0 2px var(--select-soft); }
+
+/* ---- stage ---- */
+.de-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.de-stagewrap { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 18px; }
+.de-stage {
+  position: relative; aspect-ratio: 16 / 9;
+  width: min(100%, calc((100dvh - 260px) * 16 / 9));
+  container-type: size;
+  border-radius: var(--r-md); overflow: hidden;
+  box-shadow: var(--shadow-3);
+  cursor: default; touch-action: none;
+}
+.de-slide { position: absolute; inset: 0; container-type: size; }
+.de-el { position: absolute; }
+.de-stage > .de-el { cursor: move; }
+.de-text { display: flex; flex-direction: column; justify-content: flex-start; overflow: hidden; }
+.de-textin { width: 100%; outline: none; white-space: pre-wrap; }
+.de-textin.editing { box-shadow: inset 0 0 0 2px var(--select); border-radius: 4px; }
+.de-text[data-role="bullets"] ul { margin: 0; padding-left: 1.1em; }
+.de-text[data-role="bullets"] li { margin-bottom: .35em; }
+.de-img img { width: 100%; height: 100%; display: block; }
+.de-shape svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.de-video { background: #000; border-radius: 6px; overflow: hidden; }
+.de-vslot { width: 100%; height: 100%; }
+.de-vempty { display: flex; width: 100%; height: 100%; align-items: center; justify-content: center; color: #737373; font-size: 13px; }
+
+/* Selection chrome sits in its own layer, so redrawing it never tears
+   down a mounted video underneath. */
+.de-handles { position: absolute; inset: 0; pointer-events: none; }
+.de-ring { position: absolute; outline: 2px solid var(--select); outline-offset: 1px; }
+.de-h {
+  position: absolute; width: 11px; height: 11px; margin: -5.5px 0 0 -5.5px;
+  background: #fff; border: 2px solid var(--select); border-radius: 50%;
+  pointer-events: auto; cursor: nwse-resize;
+}
+.de-h[data-h="n"], .de-h[data-h="s"] { cursor: ns-resize; }
+.de-h[data-h="w"], .de-h[data-h="e"] { cursor: ew-resize; }
+.de-h[data-h="ne"], .de-h[data-h="sw"] { cursor: nesw-resize; }
+.de-band { position: absolute; background: var(--select-soft); outline: 1px solid var(--select); pointer-events: none; }
+.de-guides { position: absolute; inset: 0; pointer-events: none; }
+.de-gv { position: absolute; top: 0; bottom: 0; width: 1px; background: #ff3b30; }
+.de-gh { position: absolute; left: 0; right: 0; height: 1px; background: #ff3b30; }
+
+/* ---- notes + tools ---- */
+.de-notes { padding: 0 18px 8px; }
+.de-notes textarea {
+  width: 100%; height: 54px; resize: vertical; padding: 8px 11px;
+  font: inherit; font-size: 13px; border: none; border-radius: var(--r-sm);
+  background: var(--n-100); color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--n-200); outline: none;
+}
+.de-notes textarea:focus { box-shadow: inset 0 0 0 2px var(--select); }
+.de-tools {
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  padding: 8px; margin: 0 auto 12px; width: fit-content; max-width: calc(100% - 24px);
+  flex-wrap: wrap;
+  background: var(--cloud); border: 1px solid var(--edge);
+  border-radius: 18px; box-shadow: var(--shadow-3);
+}
+
+/* ---- properties ---- */
+.de-props {
+  width: 232px; flex: none; overflow-y: auto;
+  padding: 14px; background: var(--cloud); border-left: 1px solid var(--edge);
+}
+.de-props .bs-row > span:first-child { width: 74px; }
+.de-props select, .de-props input[type="number"] {
+  flex: 1; min-width: 0; height: 30px; padding: 0 8px;
+  font: inherit; font-size: 12.5px; border: none; border-radius: var(--r-sm);
+  background: var(--n-100); color: var(--ink); box-shadow: inset 0 0 0 1px var(--n-200);
+}
+.de-props select:focus, .de-props input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--select); }
+.de-xy { flex: 1; display: flex; gap: 5px; min-width: 0; }
+.de-sw { flex: 1; display: flex; flex-wrap: wrap; gap: 4px; }
+.de-swatch {
+  width: 20px; height: 20px; border-radius: 50%; cursor: pointer;
+  background: var(--c); border: 1px solid rgb(10 10 10 / .22);
+}
+.de-swatch.on { box-shadow: 0 0 0 2px var(--cloud), 0 0 0 4px var(--select); }
+.de-swatch.de-none { background: repeating-linear-gradient(45deg, #fff 0 4px, #ddd 4px 8px); }
+.de-proprow { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 14px; }
+
+/* ---- rink picker + deck cards ---- */
+.de-rinks { display: flex; flex-direction: column; gap: 4px; max-height: 40vh; overflow-y: auto; margin: 12px 0 4px; }
+.de-rinkpick {
+  text-align: left; padding: 7px 10px; border-radius: var(--r-sm);
+  border: 1px solid var(--edge); background: var(--cloud);
+  font: inherit; font-size: 12.5px; color: var(--graphite); cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.de-rinkpick:hover { background: var(--n-100); border-color: var(--n-300); color: var(--ink); }
+.ph-decks {
+  display: grid; gap: 14px; margin-bottom: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+.deck-card, .deck-new {
+  display: flex; flex-direction: column; gap: 6px; text-align: left;
+  padding: 0; border: none; background: none; cursor: pointer; font: inherit;
+}
+.deck-thumb {
+  position: relative; display: block; aspect-ratio: 16 / 9; container-type: size;
+  border: 1px solid var(--edge); border-radius: var(--r-md); overflow: hidden;
+  background: #fff; box-shadow: var(--shadow-card);
+  transition: box-shadow var(--dur) ease, border-color var(--dur) ease;
+}
+.deck-card:hover .deck-thumb { border-color: var(--n-300); box-shadow: var(--shadow-2); }
+.deck-name { font-size: 13.5px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.deck-meta { font-size: 11.5px; color: var(--soft); }
+.deck-new {
+  align-items: center; justify-content: center; aspect-ratio: 16 / 9;
+  border: 1px dashed var(--n-300); border-radius: var(--r-md);
+  color: var(--mist); font-size: 13px;
+}
+.deck-new:hover { border-color: var(--n-400); color: var(--ink); }
+
+/* A presented authored slide fills the stage; the editor chrome does not
+   travel with it. */
+.pr-slide.de-pres { container-type: size; }
+.pr-slide.de-pres .de-slide { position: absolute; inset: 0; }
+
+@media (max-width: 900px) {
+  .de-rail { width: 118px; }
+  .de-props { display: none; }
+  .de-boardgrid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+}
