@@ -187,37 +187,100 @@
   padding: 7px 8px; border-bottom: 1px solid var(--edge);
   background: var(--cloud);
 }
+/* The search field collapses to its icon (2026-08-27, Tony's call) - the
+   log is a narrow column and a permanent search box was the widest thing
+   in it. The icon lights while a query is active, so a filtered list can
+   never look like an empty one. */
+.log-iconbtn {
+  flex: none; width: 26px; height: 26px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: 999px; background: var(--field);
+  color: var(--mist); cursor: pointer;
+  transition: background var(--dur) ease, color var(--dur) ease;
+}
+.log-iconbtn svg { width: 14px; height: 14px; }
+.log-iconbtn:hover { color: var(--ink); background: var(--n-200); }
+.log-iconbtn.on { background-image: var(--grad-primary); color: #fff; box-shadow: var(--shadow-nav); }
 #vpLogSearch {
   flex: 1; min-width: 0; height: 26px; padding: 0 10px; font-size: 12px;
   border: none; border-radius: 999px; background: var(--field);
   box-shadow: inset 0 0 0 2px transparent;
   transition: box-shadow var(--dur) ease;
 }
+#vpLogSearch[hidden] { display: none; }
 #vpLogSearch::placeholder { color: var(--soft); }
 #vpLogSearch:hover:not(:focus) { box-shadow: var(--field-ring-hover); }
 #vpLogSearch:focus { outline: none; box-shadow: var(--field-ring-focus); }
-.log-head select {
-  height: 26px; max-width: 84px; font: inherit; font-size: 11.5px;
-  border: 1px solid var(--edge); border-radius: 6px; background: var(--cloud);
-  color: var(--graphite); padding: 0 2px;
+.log-filters { flex: 1; min-width: 0; display: flex; gap: 4px; }
+.log-filters[hidden] { display: none; }
+.log-filter {
+  flex: 1; min-width: 0; height: 26px; padding: 0 6px;
+  font: inherit; font-size: 11.5px; font-weight: 500;
+  border: 1px solid var(--edge); border-radius: 6px;
+  background: var(--cloud); color: var(--graphite); cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  transition: background var(--dur) ease, border-color var(--dur) ease, color var(--dur) ease;
 }
-.log-count { color: var(--soft); font-size: 10.5px; white-space: nowrap; padding: 0 2px; }
+.log-filter:hover { border-color: var(--n-300); color: var(--ink); }
+.log-filter.on { background-image: var(--grad-primary); border-color: transparent; color: #fff; box-shadow: var(--shadow-nav); }
+
+/* A multi-select filter menu with a count beside every option, so it also
+   reads as a summary of what the game holds. */
+.filter-menu {
+  position: fixed; z-index: 60;
+  width: 220px; max-height: 60vh;
+  display: flex; flex-direction: column;
+  padding: 6px; border-radius: 16px;
+  background: var(--cloud); border: 1px solid var(--edge);
+  box-shadow: var(--shadow-3);
+}
+.fm-list { overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
+.fm-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 8px; border-radius: 10px; cursor: pointer; font-size: 12.5px;
+}
+.fm-row:hover { background: var(--sunken); }
+.fm-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fm-empty { margin: 0; padding: 10px 8px; color: var(--soft); font-size: 12px; }
+.fm-foot { display: flex; gap: 6px; padding: 6px 4px 2px; border-top: 1px solid var(--edge); margin-top: 4px; }
+.fm-foot .mini { flex: 1; }
+
 .log-list { flex: 1; overflow-y: auto; }
-/* Column headers, the table's own. Sticky so a long log keeps its labels. */
-/* The BoardUI table header: n-100 surface, hairline top and bottom, quiet
-   medium type in n-400 - no uppercase, no tracking. */
+/* The BoardUI table header, and now the sort control too: clicking Time or
+   Clip sorts, a second click reverses. The standalone sort button is gone
+   (2026-08-27) - a table header is where sorting belongs, and it gave the
+   top bar its width back. */
 .log-cols {
-  display: flex; gap: 8px; padding: 6px 10px;
+  display: flex; align-items: center; gap: 8px; padding: 5px 10px;
   position: sticky; top: 0; z-index: 1;
   background: var(--sunken);
   border-top: 1px solid var(--edge); border-bottom: 1px solid var(--edge);
   font-size: 11.5px; font-weight: 500;
-  text-transform: none; letter-spacing: 0;
   color: var(--soft);
 }
+.c-check { flex: none; width: 16px; display: inline-flex; align-items: center; }
+.c-check input { width: 13px; height: 13px; margin: 0; cursor: pointer; accent-color: var(--select); }
 .log-cols .c-time { width: 58px; flex-shrink: 0; }
-/* ALTERNATING ROWS (Tony's ask, mChapters' own look): the stripe is what
-   lets the eye track a timecode across to its name in a long list. */
+.c-sort {
+  border: none; background: none; padding: 0; font: inherit; cursor: pointer;
+  color: inherit; text-align: left;
+}
+.c-sort:hover { color: var(--ink); }
+.c-sort.on { color: var(--ink); font-weight: 600; }
+.c-grow { flex: 1; min-width: 0; }
+.log-count { flex: none; color: var(--soft); font-size: 10.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+.log-bulk {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 10px; background: var(--select-soft);
+  border-bottom: 1px solid var(--edge);
+  font-size: 11.5px;
+}
+.log-bulkn { font-weight: 600; color: var(--ink); }
+.log-bulk .mini { height: 22px; padding: 0 7px; font-size: 11px; }
+
+/* ALTERNATING ROWS (mChapters' own look): the stripe is what lets the eye
+   track a timecode across to its name in a long list. */
 .log-row {
   display: flex; align-items: center; gap: 8px;
   padding: 0 10px; min-height: 26px; cursor: pointer;
@@ -226,29 +289,65 @@
 }
 .log-row:nth-child(even) { background: var(--sunken); }
 .log-row:hover { background: var(--n-200); color: var(--ink); }
+.log-row.picked { background: var(--select-soft); }
 .log-row.on { background-image: var(--grad-primary); color: #fff; box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.18); }
-.log-row.on .log-time, .log-row.on .tag-chip { color: rgba(255,255,255,.78); }
-.log-row.on .tag-chip { background: rgba(255,255,255,.14); border-color: transparent; }
-.log-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--c); flex-shrink: 0; }
+.log-row.on .log-time { color: rgba(255,255,255,.78); }
+.log-row.on .log-tagline { color: rgba(255,255,255,.72); }
+.log-row.on .log-tagline::placeholder { color: rgba(255,255,255,.5); }
+.log-row.on .rate-dot { background: rgba(255,255,255,.32); }
 .log-time {
   width: 58px; flex-shrink: 0; font-size: 11px; color: var(--mist);
   font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
 }
+/* THREE DOTS, ONE MEANING EACH: good, bad, star. Grey until the tag is on
+   (2026-08-27, Tony's call). The old single dot wore the clip button's own
+   colour, which restated the name and told you nothing else. */
+.log-rate { flex: none; display: inline-flex; gap: 3px; }
+.rate-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--n-300);
+  transition: background var(--dur) ease;
+}
+.rate-dot.on { background: var(--c); }
 .log-name {
   flex-shrink: 1; min-width: 0; font-weight: 600;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.log-tags { flex: 1; min-width: 0; display: flex; align-items: center; gap: 3px; overflow: hidden; }
-.log-tagin {
-  border: none; background: none; outline: none; font: inherit; font-size: 11px;
-  color: var(--graphite); min-width: 40px; width: 40px; padding: 1px 0; opacity: 0;
+/* Tags as ONE editable line, not pills: pills ate the width this column
+   has least of. Lighter and quieter than the clip name beside it, so the
+   name still leads. */
+.log-tagline {
+  flex: 1; min-width: 40px;
+  border: none; background: none; outline: none;
+  font: inherit; font-size: 11.5px; font-weight: 400;
+  color: var(--soft);
+  padding: 2px 4px; border-radius: 5px;
+  text-overflow: ellipsis;
+  transition: background var(--dur) ease, color var(--dur) ease;
 }
-.log-tagin::placeholder { color: var(--soft); }
-.log-row:hover .log-tagin, .log-tagin:focus { opacity: 1; }
-.log-acts { display: none; gap: 1px; flex-shrink: 0; }
-.log-row:hover .log-acts { display: inline-flex; }
-.log-acts .mini { height: 20px; padding: 0 5px; font-size: 10.5px; }
+.log-tagline::placeholder { color: var(--n-300); }
+.log-row:hover .log-tagline { color: var(--mist); }
+.log-tagline:focus { background: var(--cloud); color: var(--ink); box-shadow: inset 0 0 0 1px var(--select); }
 .log-empty { color: var(--mist); font-size: 12px; line-height: 1.5; padding: 14px 10px; }
+
+/* Which clip the playlist is on. Sits on the video, never in it. */
+.pl-badge {
+  position: absolute; left: 12px; top: 12px; z-index: 6;
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 6px 5px 10px; border-radius: 999px;
+  background: rgba(10, 10, 10, 0.72);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  color: #fff; font-size: 12px;
+}
+.pl-n { font-variant-numeric: tabular-nums; opacity: 0.7; }
+.pl-name { font-weight: 600; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-skip {
+  width: 20px; height: 20px; border: none; border-radius: 50%;
+  background: rgba(255,255,255,0.16); color: #fff; cursor: pointer;
+  font-size: 15px; line-height: 1;
+}
+.pl-skip:hover { background: rgba(255,255,255,0.3); }
+.vp-flex { flex: 1; }
 
 /* ---------------------------------------------------------- tag column
    Slim by design. A button is a 7-character SOLID button wearing its own
@@ -264,11 +363,18 @@
 .vp-side {
   width: 124px; flex-shrink: 0; overflow-y: auto;
   display: flex; flex-direction: column; gap: 4px;
-  padding: 8px 7px 12px; background: var(--cloud);
+  padding: 8px 7px 12px;
+  /* Its OWN surface (2026-08-27, Tony's call): the panel and the Clip Log
+     were both white and ran together as one field of controls. A sunken
+     ground and a hairline are enough to separate them without a border
+     heavy enough to read as a wall. */
+  background: var(--sunken);
+  border-right: 1px solid var(--edge);
 }
+/* Labels read as words, not as small caps (2026-08-27). */
 .side-label {
-  font-size: 9px; font-weight: 600; text-transform: uppercase;
-  letter-spacing: 0.1em; color: var(--soft); margin: 7px 2px 2px;
+  font-size: 12px; font-weight: 700; text-transform: none;
+  letter-spacing: -0.01em; color: var(--ink); margin: 9px 2px 3px;
 }
 .side-label:first-child { margin-top: 0; }
 .side-div { padding: 4px 2px; cursor: grab; }
@@ -281,7 +387,7 @@
   text-align: left; cursor: grab;
   border: 1px solid color-mix(in oklab, var(--btn) 76%, #000);
   border-radius: var(--r-sm);
-  padding: 4px 8px;
+  padding: 4px 5px;
   background-image: linear-gradient(180deg,
     color-mix(in oklab, var(--btn) 93%, #fff) 0%,
     color-mix(in oklab, var(--btn) 87%, #000) 100%);
@@ -314,11 +420,19 @@
   box-shadow: var(--shadow-card);
 }
 .tag-edit:hover { filter: none; background: var(--n-50); border-color: var(--n-300); color: var(--ink); box-shadow: var(--shadow-card); }
+/* THE SHORTCUT HAS TO BE READABLE FROM THE BENCH (2026-08-27, Tony's
+   call). It was 8.5px at 60% opacity, which is decoration, not a label.
+   Bigger, near-opaque, and on its own slightly darker chip so it holds up
+   over every button colour. */
 .tag-key {
-  margin-left: auto; font-size: 8.5px; font-weight: 600;
-  color: color-mix(in srgb, var(--fg, #fff) 60%, transparent);
-  flex-shrink: 0; font-variant-numeric: tabular-nums;
+  margin-left: auto; flex-shrink: 0;
+  font-size: 11px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in srgb, var(--fg, #fff) 94%, transparent);
+  background: rgb(0 0 0 / 0.17);
+  border-radius: 4px; padding: 0 4px; line-height: 1.45;
 }
+.tag-btn-mode .tag-key, .tag-edit .tag-key { background: var(--n-200); color: var(--mist); }
 
 /* ---------------------------------------------------------- stage */
 .vp-stagecol { flex: 1; min-width: 0; display: flex; flex-direction: column; }

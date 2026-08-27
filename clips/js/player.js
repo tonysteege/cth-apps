@@ -12,6 +12,7 @@
 import { getSettings, putSettings, putGame, uid } from './store.js';
 import { openScrubSource, releaseScrubSource, scrubProviderFor } from './scrubsource.js';
 import { toast, esc } from './ui.js';
+import { ctxMenu } from '/diagrams/js/ui.js';
 import { drawEl } from '/diagrams/js/flat.js';
 
 let cur = null;
@@ -128,6 +129,7 @@ function pressClipButton(b) {
     created: Date.now(),
   };
   cur.game.clips.push(c);
+  pushUndo({ kind: 'clip', id: c.id });
   setSel(c.id);
   scheduleSave();
   status('Edited');
@@ -138,6 +140,7 @@ function pressTagButton(b) {
   const c = selClip();
   if (!c) { toast('Select A Clip First - Tags Attach To A Clip', true); return; }
   const has = c.tags.includes(b.label);
+  pushUndo({ kind: 'tags', id: c.id, tags: [...c.tags] });
   c.tags = has ? c.tags.filter((t) => t !== b.label) : [...c.tags, b.label];
   paintLog();
   drawTimeline();
@@ -703,7 +706,7 @@ function paintBar() {
     </button>`;
   };
   bar.innerHTML = `
-    <div class="side-label">Clip Buttons</div>
+    <div class="side-label">Clips</div>
     ${panelItems(1).map(item).join('')}
     <div class="side-label">Tags</div>
     ${panelItems(2).map(item).join('')}
@@ -752,7 +755,50 @@ function paintBar() {
 
 // ------------------------------------------------------------- clip log
 
-const view = { search: '', sort: 'timedesc', label: '', tag: '' };
+// The log's view state. `labels` and `tags` are ARRAYS now - filtering is
+// multi-select (2026-08-27) - and sorting comes from the table header
+// rather than a button, so it carries a column and a direction.
+const view = {
+  search: '', searchOpen: false,
+  labels: [], tags: [],
+  sortBy: 'time', sortDir: 'desc',
+  playlist: false,
+};
+
+const SEARCH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>';
+
+// ---- undo -----------------------------------------------------------
+// Cmd+Z takes back the last tag or clip. One shallow stack, capped: this
+// is a safety net for a mis-hit key at game speed, not a document history.
+const undoStack = [];
+const UNDO_CAP = 40;
+export function pushUndo(entry) {
+  undoStack.push(entry);
+  if (undoStack.length > UNDO_CAP) undoStack.shift();
+}
+export function undoLast() {
+  const u = undoStack.pop();
+  if (!u) { toast('Nothing To Undo'); return; }
+  if (u.kind === 'clip') {
+    cur.game.clips = cur.game.clips.filter((c) => c.id !== u.id);
+    if (cur.sel === u.id) cur.sel = null;
+    toast('Clip Undone');
+  } else if (u.kind === 'tags') {
+    const c = cur.game.clips.find((x) => x.id === u.id);
+    if (c) c.tags = u.tags;
+    toast('Tags Undone');
+  } else if (u.kind === 'delete') {
+    cur.game.clips = [...cur.game.clips, ...u.clips];
+    toast(`${u.clips.length} Restored`);
+  } else if (u.kind === 'rename') {
+    const c = cur.game.clips.find((x) => x.id === u.id);
+    if (c) c.name = u.name;
+    toast('Rename Undone');
+  }
+  scheduleSave();
+  paintLog();
+  drawTimeline();
+}
 
 function filteredClips() {
   let list = [...cur.game.clips];
@@ -760,9 +806,15 @@ function filteredClips() {
     const q = view.search.toLowerCase();
     list = list.filter((c) => clipName(c).toLowerCase().includes(q) || (c.note || '').toLowerCase().includes(q));
   }
-  if (view.label) list = list.filter((c) => c.label === view.label);
-  if (view.tag) list = list.filter((c) => c.tags.includes(view.tag));
-  list.sort((a, b) => (view.sort === 'timedesc' ? b.in - a.in : a.in - b.in));
+  if (view.labels.length) list = list.filter((c) => view.labels.includes(c.label));
+  // A clip matching ANY ticked tag stays: ticking two tags widens the view
+  // rather than narrowing it to clips carrying both, which is what a coach
+  // scanning for "good or star" actually wants.
+  if (view.tags.length) list = list.filter((c) => (c.tags || []).some((t) => view.tags.includes(t)));
+  const dir = view.sortDir === 'asc' ? 1 : -1;
+  list.sort((a, b) => (view.sortBy === 'name'
+    ? String(a.name || a.label).localeCompare(String(b.name || b.label)) * dir
+    : (a.in - b.in) * dir));
   return list;
 }
 
@@ -775,106 +827,350 @@ export const normTag = (raw) => (raw || '').trim().replace(/^#+/, '').replace(/\
 // on the left, then the clip's tags as chips with a write-in box, actions on
 // the right. The rail's stacked two-line rows wasted the one thing tags
 // need, which is width.
+// ---- filter menus ---------------------------------------------------
+// Multi-select with a count beside every option, so the menu doubles as a
+// summary of what the game holds.
+function openFilterMenu(btn, countMap, kind) {
+  document.getElementById('vpFilterMenu')?.remove();
+  const chosen = kind === 'label' ? view.labels : view.tags;
+  const opts = [...countMap.entries()].sort((a, b) => b[1] - a[1]);
+  const box = document.createElement('div');
+  box.id = 'vpFilterMenu';
+  box.className = 'filter-menu';
+  box.innerHTML = `
+    <div class="fm-list">
+      ${opts.map(([name, n]) => `
+        <label class="fm-row">
+          <input type="checkbox" value="${esc(name)}"${chosen.includes(name) ? ' checked' : ''}>
+          <span class="fm-name">${esc(name)}</span>
+          <span class="chip-neutral">${n}</span>
+        </label>`).join('') || '<p class="fm-empty">Nothing To Filter Yet</p>'}
+    </div>
+    ${opts.length ? '<div class="fm-foot"><button class="mini" data-fm="none">Clear</button><button class="mini" data-fm="all">All</button></div>' : ''}`;
+  document.body.appendChild(box);
+  const r = btn.getBoundingClientRect();
+  box.style.left = `${Math.min(r.left, window.innerWidth - box.offsetWidth - 10)}px`;
+  box.style.top = `${Math.min(r.bottom + 6, window.innerHeight - box.offsetHeight - 10)}px`;
+  const apply = (next) => {
+    if (kind === 'label') view.labels = next; else view.tags = next;
+    paintLog();
+  };
+  box.querySelectorAll('input').forEach((cb) => {
+    cb.onchange = () => apply([...box.querySelectorAll('input')].filter((x) => x.checked).map((x) => x.value));
+  });
+  box.querySelector('[data-fm="none"]')?.addEventListener('click', () => { apply([]); box.remove(); });
+  box.querySelector('[data-fm="all"]')?.addEventListener('click', () => { apply(opts.map((o) => o[0])); box.remove(); });
+  const away = (e) => {
+    if (box.contains(e.target) || e.target === btn) return;
+    box.remove();
+    document.removeEventListener('mousedown', away);
+  };
+  setTimeout(() => document.addEventListener('mousedown', away), 0);
+}
+
+// ---- right-click on a clip ------------------------------------------
+function openClipMenu(x, y, c) {
+  if (!c) return;
+  ctxMenu(x, y, [
+    ['Play This Clip', () => enterClipMode(c.id, { loop: false })],
+    ['Loop This Clip', () => enterClipMode(c.id, { loop: true })],
+    ['Rename…', () => renameClip(c)],
+    ['Edit Timecodes…', () => editTimes(c)],
+    ['Set In At Playhead', () => {
+      c.in = Math.min(video().currentTime, c.out - 0.3);
+      scheduleSave(); paintLog(); drawTimeline(); toast('Clip In Set');
+    }],
+    ['Set Out At Playhead', () => {
+      c.out = Math.max(video().currentTime, c.in + 0.3);
+      scheduleSave(); paintLog(); drawTimeline(); toast('Clip Out Set');
+    }],
+    ['Duplicate', () => {
+      const copy = { ...c, id: uid(), name: `${c.name || c.label} Copy`, tags: [...(c.tags || [])] };
+      cur.game.clips = [...cur.game.clips, copy];
+      pushUndo({ kind: 'clip', id: copy.id });
+      scheduleSave(); paintLog(); drawTimeline();
+    }],
+    ['Copy Timecode', async () => {
+      await navigator.clipboard.writeText(fmtHMS(c.in));
+      toast('Timecode Copied');
+    }],
+    ['Delete', () => {
+      pushUndo({ kind: 'delete', clips: [c] });
+      cur.game.clips = cur.game.clips.filter((x) => x.id !== c.id);
+      if (cur.sel === c.id) cur.sel = null;
+      selection.delete(c.id);
+      scheduleSave(); paintLog(); drawTimeline(); toast('Clip Deleted');
+    }, true],
+  ]);
+}
+
+function renameClip(c) {
+  const name = prompt('Clip Name', c.name || c.label);
+  if (name == null) return;
+  pushUndo({ kind: 'rename', id: c.id, name: c.name });
+  c.name = name.trim();
+  scheduleSave();
+  paintLog();
+}
+
+// In and out as timecodes, so a clip can be nudged without scrubbing to it.
+function editTimes(c) {
+  const parse = (v, fallback) => {
+    if (v == null) return fallback;
+    const p = v.trim().split(':').map(Number);
+    if (p.some(Number.isNaN)) return fallback;
+    return p.length === 3 ? p[0] * 3600 + p[1] * 60 + p[2]
+      : p.length === 2 ? p[0] * 60 + p[1] : p[0];
+  };
+  const i = parse(prompt('Clip In (H:MM:SS)', fmtHMS(c.in)), c.in);
+  const o = parse(prompt('Clip Out (H:MM:SS)', fmtHMS(c.out)), c.out);
+  c.in = Math.max(0, Math.min(i, o - 0.3));
+  c.out = Math.max(c.in + 0.3, o);
+  scheduleSave();
+  paintLog();
+  drawTimeline();
+  toast('Timecodes Updated');
+}
+
+// ---- bulk ------------------------------------------------------------
+function pickedClips() {
+  return cur.game.clips.filter((c) => selection.has(c.id));
+}
+function bulkAction(kind) {
+  const picked = pickedClips();
+  if (!picked.length) return;
+  if (kind === 'none') { selection.clear(); paintLog(); return; }
+  if (kind === 'del') {
+    pushUndo({ kind: 'delete', clips: picked.map((c) => ({ ...c })) });
+    const gone = new Set(picked.map((c) => c.id));
+    cur.game.clips = cur.game.clips.filter((c) => !gone.has(c.id));
+    if (gone.has(cur.sel)) cur.sel = null;
+    selection.clear();
+    scheduleSave(); paintLog(); drawTimeline();
+    toast(`${picked.length} Clips Deleted`);
+    return;
+  }
+  if (kind === 'rename') {
+    const base = prompt(`Rename ${picked.length} Clips To (a number is appended)`, picked[0].name || picked[0].label);
+    if (base == null) return;
+    picked.forEach((c, i) => { c.name = `${base.trim()} ${i + 1}`; });
+    scheduleSave(); paintLog();
+    toast(`${picked.length} Clips Renamed`);
+    return;
+  }
+  if (kind === 'tag') {
+    const raw = prompt(`Add Tags To ${picked.length} Clips (space separated)`, '');
+    if (!raw) return;
+    const add = raw.split(/[\s,]+/).map(normTag).filter(Boolean);
+    for (const c of picked) c.tags = [...new Set([...(c.tags || []), ...add])];
+    scheduleSave(); paintLog(); drawTimeline();
+    toast(`Tagged ${picked.length} Clips`);
+    return;
+  }
+  if (kind === 'pull') {
+    if (hooks.onBulkPull) hooks.onBulkPull(picked);
+    else toast('Pull Export Is Not Wired Yet', true);
+  }
+}
+
+// ---- playlist --------------------------------------------------------
+// Plays every clip currently shown, back to back, with a persistent
+// indicator on the player. Filter first, then press Playlist.
+function togglePlaylist() {
+  view.playlist = !view.playlist;
+  if (!view.playlist) { exitPlaylist(); paintLog(); return; }
+  const list = filteredClips();
+  if (!list.length) { view.playlist = false; toast('Nothing To Play', true); return; }
+  playlistQueue = list.map((c) => c.id);
+  playlistAt = -1;
+  paintLog();
+  playlistNext();
+}
+let playlistQueue = [];
+let playlistAt = -1;
+function playlistNext() {
+  playlistAt += 1;
+  if (playlistAt >= playlistQueue.length) { view.playlist = false; exitPlaylist(); paintLog(); toast('Playlist Finished'); return; }
+  const id = playlistQueue[playlistAt];
+  const c = cur.game.clips.find((x) => x.id === id);
+  if (!c) { playlistNext(); return; }
+  setSel(id);
+  enterClipMode(id, { loop: false });
+  paintPlaylistBadge(c);
+}
+function paintPlaylistBadge(c) {
+  let b = document.getElementById('vpPlaylistBadge');
+  if (!b) {
+    b = document.createElement('div');
+    b.id = 'vpPlaylistBadge';
+    b.className = 'pl-badge';
+    el('vpStage')?.appendChild(b);
+  }
+  b.innerHTML = `<span class="pl-n">${playlistAt + 1}/${playlistQueue.length}</span><span class="pl-name">${esc(c.name || c.label)}</span><button class="pl-skip" title="Next Clip">&rsaquo;</button>`;
+  b.querySelector('.pl-skip').onclick = () => playlistNext();
+}
+function exitPlaylist() {
+  playlistQueue = [];
+  playlistAt = -1;
+  document.getElementById('vpPlaylistBadge')?.remove();
+}
+export function playlistRunning() { return view.playlist; }
+export function playlistAdvance() { if (view.playlist) playlistNext(); }
+
+// RATING DOTS: three grey dots that light when good / bad / star is on.
+// Only those three ever colour a row (2026-08-27, Tony's call) - a per
+// clip-button colour told you nothing you could not read from the name.
+const RATINGS = [
+  { tag: 'good', color: '#16a34a' },
+  { tag: 'bad', color: '#dc2626' },
+  { tag: 'star', color: '#2b7fff' },
+];
+
+// A clip's tags as ONE editable line rather than a row of pills: pills ate
+// the width the log has least of. Typing commits on Enter or blur, and the
+// whole set is replaced by what is in the field, so removing a tag is
+// deleting its word.
+const tagLine = (c) => (c.tags || []).join(' ');
+
+export const selection = new Set();   // clip ids ticked for a bulk action
+
 export function paintLog() {
   const log = el('vpLog');
   if (!log || !cur) return;
-  const labels = [...new Set(cur.game.clips.map((c) => c.label))];
-  const tags = [...new Set(cur.game.clips.flatMap((c) => c.tags))];
-  const tagOpts = [...new Set([...panelButtons(2).map((b) => b.label), ...tags])];
+  const all = cur.game.clips;
+  const counts = (get) => {
+    const m = new Map();
+    for (const c of all) for (const v of [].concat(get(c) ?? [])) if (v) m.set(v, (m.get(v) || 0) + 1);
+    return m;
+  };
+  const labelCounts = counts((c) => c.label);
+  const tagCounts = counts((c) => c.tags);
   const list = filteredClips();
-  // Keep the caret alive across a repaint, for the search box and for
-  // whichever row's write-in box is being typed in.
+  const tagOpts = [...new Set([...panelButtons(2).map((b) => b.label), ...tagCounts.keys()])];
+  // Keep the caret alive across a repaint.
   const ae = document.activeElement;
   const keepSearch = ae === el('vpLogSearch') ? ae.selectionStart : null;
   const keepTagRow = ae?.dataset?.tagrow || null;
   const keepTagVal = keepTagRow ? ae.value : '';
+  const keepTagSel = keepTagRow ? ae.selectionStart : null;
+  for (const id of [...selection]) if (!all.some((c) => c.id === id)) selection.delete(id);
+  const ticked = list.filter((c) => selection.has(c.id)).length;
+  const arrow = (col) => (view.sortBy !== col ? '' : view.sortDir === 'asc' ? ' ▲' : ' ▼');
+
   log.innerHTML = `
     <div class="log-head">
-      <input id="vpLogSearch" type="search" placeholder="Search Clips…" value="${esc(view.search)}" autocomplete="off">
-      <select id="vpLogLabel">
-        <option value="">All Clips</option>
-        ${labels.map((l) => `<option${view.label === l ? ' selected' : ''}>${esc(l)}</option>`).join('')}
-      </select>
-      <select id="vpLogTag">
-        <option value="">All Tags</option>
-        ${tags.map((t) => `<option${view.tag === t ? ' selected' : ''}>${esc(t)}</option>`).join('')}
-      </select>
-      <button class="mini" id="vpLogSort">${view.sort === 'timedesc' ? 'Newest' : 'Timeline'}</button>
-      <div class="log-count">${list.length} Of ${cur.game.clips.length} Clip${cur.game.clips.length === 1 ? '' : 's'}</div>
+      <button class="log-iconbtn${view.search ? ' on' : ''}" id="vpLogSearchBtn" title="Search Clips" aria-label="Search Clips">${SEARCH_ICON}</button>
+      <input id="vpLogSearch" type="search" placeholder="Search Clips…" value="${esc(view.search)}" autocomplete="off"${view.searchOpen || view.search ? '' : ' hidden'}>
+      <div class="log-filters"${view.searchOpen ? ' hidden' : ''}>
+        <button class="log-filter${view.labels.length ? ' on' : ''}" data-menu="label">Clips${view.labels.length ? ` (${view.labels.length})` : ''}</button>
+        <button class="log-filter${view.tags.length ? ' on' : ''}" data-menu="tag">Tags${view.tags.length ? ` (${view.tags.length})` : ''}</button>
+        <button class="log-filter${view.playlist ? ' on' : ''}" id="vpPlaylist" title="Play Every Clip Below, Back To Back">Playlist</button>
+      </div>
     </div>
+    <div class="log-cols">
+      <span class="c-check"><input type="checkbox" id="vpAllCheck" title="Select Every Clip Below"${ticked && ticked === list.length ? ' checked' : ''}></span>
+      <button class="c-time c-sort${view.sortBy === 'time' ? ' on' : ''}" data-sort="time">Time${arrow('time')}</button>
+      <button class="c-sort c-grow${view.sortBy === 'name' ? ' on' : ''}" data-sort="name">Clip${arrow('name')}</button>
+      <span class="log-count">${list.length} Of ${all.length}</span>
+    </div>
+    ${ticked ? `<div class="log-bulk">
+      <span class="log-bulkn">${ticked} Selected</span>
+      <span class="vp-flex"></span>
+      <button class="mini" data-bulk="pull">Pull</button>
+      <button class="mini" data-bulk="tag">Tag</button>
+      <button class="mini" data-bulk="rename">Rename</button>
+      <button class="mini mini-danger" data-bulk="del">Delete</button>
+      <button class="mini" data-bulk="none">Clear</button>
+    </div>` : ''}
     <datalist id="vpTagOpts">${tagOpts.map((t) => `<option value="${esc(t)}">`).join('')}</datalist>
-    <div class="log-cols"><span class="c-time">Time</span><span>Clip</span></div>
     <div class="log-list">
       ${list.map((c) => `
-        <div class="log-row${c.id === cur.sel ? ' on' : ''}" data-id="${c.id}">
+        <div class="log-row${c.id === cur.sel ? ' on' : ''}${selection.has(c.id) ? ' picked' : ''}" data-id="${c.id}">
+          <span class="c-check"><input type="checkbox" data-pick="${c.id}"${selection.has(c.id) ? ' checked' : ''} aria-label="Select ${esc(c.name || c.label)}"></span>
           <span class="log-time">${fmtHMS(c.in)}</span>
-          <span class="log-dot" style="--c:${c.color || '#3b82f6'}"></span>
+          <span class="log-rate">${RATINGS.map((r) => `<i class="rate-dot${(c.tags || []).includes(r.tag) ? ' on' : ''}" style="--c:${r.color}" title="${r.tag}"></i>`).join('')}</span>
           <span class="log-name">${esc(c.name || c.label)}</span>
-          <span class="log-tags">
-            ${c.tags.map((t) => `<span class="tag-chip">#${esc(t)}<button data-rmtag="${esc(t)}" title="Remove #${esc(t)}">&times;</button></span>`).join('')}
-            <input class="log-tagin" data-tagrow="${c.id}" list="vpTagOpts" placeholder="+ Tag" autocomplete="off"
-              >
-          </span>
-          <span class="log-acts">
-            <button class="mini" data-do="play" title="Play This Clip">Play</button>
-            <button class="mini" data-do="share" title="Share, Export, Embed, Email">Share</button>
-            <button class="mini mini-danger" data-do="del" title="Delete This Clip">&times;</button>
-          </span>
+          <input class="log-tagline" data-tagrow="${c.id}" list="vpTagOpts" value="${esc(tagLine(c))}" placeholder="tags" autocomplete="off" spellcheck="false">
         </div>`).join('') || '<div class="log-empty">No Clips Yet - Press A Tag Button (Or Its Key) While The Video Plays.</div>'}
     </div>`;
-  el('vpLogSearch').addEventListener('input', (e) => { view.search = e.target.value; paintLog(); });
-  el('vpLogSearch').addEventListener('keydown', (e) => e.stopPropagation());
-  if (keepSearch != null) { const s = el('vpLogSearch'); s.focus(); s.setSelectionRange(keepSearch, keepSearch); }
-  el('vpLogLabel').onchange = (e) => { view.label = e.target.value; paintLog(); };
-  el('vpLogTag').onchange = (e) => { view.tag = e.target.value; paintLog(); };
-  el('vpLogSort').onclick = () => { view.sort = view.sort === 'timedesc' ? 'timeline' : 'timedesc'; paintLog(); };
+
+  // ---- head
+  const sBtn = el('vpLogSearchBtn');
+  const sIn = el('vpLogSearch');
+  sBtn.onclick = () => { view.searchOpen = !view.searchOpen; paintLog(); if (view.searchOpen) el('vpLogSearch')?.focus(); };
+  sIn.addEventListener('input', (e) => { view.search = e.target.value; paintLog(); });
+  sIn.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Escape') { view.search = ''; view.searchOpen = false; paintLog(); }
+  });
+  if (keepSearch != null) { sIn.focus(); sIn.setSelectionRange(keepSearch, keepSearch); }
+  log.querySelectorAll('[data-menu]').forEach((b) => {
+    b.onclick = () => openFilterMenu(b, b.dataset.menu === 'label' ? labelCounts : tagCounts, b.dataset.menu);
+  });
+  el('vpPlaylist').onclick = () => togglePlaylist();
+
+  // ---- column sort
+  log.querySelectorAll('[data-sort]').forEach((b) => {
+    b.onclick = () => {
+      const col = b.dataset.sort;
+      if (view.sortBy === col) view.sortDir = view.sortDir === 'asc' ? 'desc' : 'asc';
+      else { view.sortBy = col; view.sortDir = col === 'time' ? 'asc' : 'asc'; }
+      paintLog();
+    };
+  });
+
+  // ---- selection
+  el('vpAllCheck').onchange = (e) => {
+    for (const c of list) if (e.target.checked) selection.add(c.id); else selection.delete(c.id);
+    paintLog();
+  };
+  log.querySelectorAll('[data-pick]').forEach((cb) => {
+    cb.onclick = (e) => e.stopPropagation();
+    cb.onchange = () => {
+      if (cb.checked) selection.add(cb.dataset.pick); else selection.delete(cb.dataset.pick);
+      paintLog();
+    };
+  });
+  log.querySelectorAll('[data-bulk]').forEach((b) => { b.onclick = () => bulkAction(b.dataset.bulk); });
+
+  // ---- rows
   log.querySelectorAll('.log-row').forEach((row) => {
     const id = row.dataset.id;
     const clip = () => cur.game.clips.find((x) => x.id === id);
     row.addEventListener('click', (e) => {
-      if (e.target.closest('.mini') || e.target.closest('.tag-chip') || e.target.closest('.log-tagin')) return;
-      const c = clip();
+      if (e.target.closest('input')) return;
       setSel(id);
-      seek(c.in);
+      seek(clip().in);
     });
-    row.addEventListener('dblclick', (e) => {
-      if (e.target.closest('.mini') || e.target.closest('.tag-chip') || e.target.closest('.log-tagin')) return;
-      const c = clip();
-      const name = prompt('Clip Name', c.name || c.label);
-      if (name != null) { c.name = name.trim(); scheduleSave(); paintLog(); }
-    });
-    row.querySelectorAll('[data-rmtag]').forEach((x) => {
-      x.onclick = () => {
-        const c = clip();
-        c.tags = c.tags.filter((t) => t !== x.dataset.rmtag);
-        scheduleSave(); paintLog(); drawTimeline();
-      };
-    });
-    const tin = row.querySelector('.log-tagin');
-    tin.addEventListener('keydown', (e) => {
-      e.stopPropagation();
-      if (e.key !== 'Enter' && e.key !== ',') return;
+    row.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      const t = normTag(tin.value);
-      if (!t) return;
-      const c = clip();
-      if (!c.tags.includes(t)) c.tags = [...c.tags, t];
-      tin.value = '';
-      scheduleSave(); paintLog(); drawTimeline();
+      openClipMenu(e.clientX, e.clientY, clip());
     });
-    if (keepTagRow === id) { tin.focus(); tin.value = keepTagVal; }
-    row.querySelector('[data-do="play"]').onclick = () => enterClipMode(id, { loop: false });
-    row.querySelector('[data-do="share"]').onclick = (e) => {
-      if (hooks.onShare) hooks.onShare(clip(), e.currentTarget);
-    };
-    row.querySelector('[data-do="del"]').onclick = () => {
-      cur.game.clips = cur.game.clips.filter((x) => x.id !== id);
-      if (cur.sel === id) cur.sel = null;
+    const tin = row.querySelector('.log-tagline');
+    const commit = () => {
+      const c = clip();
+      if (!c) return;
+      const next = tin.value.split(/[\s,]+/).map(normTag).filter(Boolean);
+      const uniq = [...new Set(next)];
+      if (uniq.join(' ') === (c.tags || []).join(' ')) return;
+      pushUndo({ kind: 'tags', id, tags: [...(c.tags || [])] });
+      c.tags = uniq;
       scheduleSave();
       paintLog();
       drawTimeline();
-      toast('Clip Deleted');
     };
+    tin.addEventListener('click', (e) => e.stopPropagation());
+    tin.addEventListener('blur', commit);
+    tin.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') { e.preventDefault(); commit(); tin.blur(); }
+      if (e.key === 'Escape') { tin.value = tagLine(clip()); tin.blur(); }
+    });
+    if (keepTagRow === id) {
+      tin.focus();
+      tin.value = keepTagVal;
+      if (keepTagSel != null) tin.setSelectionRange(keepTagSel, keepTagSel);
+    }
   });
 }
 
@@ -885,7 +1181,7 @@ export function paintLog() {
 // ones. Any other colour is still reachable from the colour well beside them.
 const NEW_BTN_COLOR = '#d9d9d9';
 const PRESET_COLORS = [
-  ['#1a1a1a', 'Ink'], ['#d9d9d9', 'Light Grey'], ['#78716c', 'Stone'],
+  ['#1a1a1a', 'Ink'], ['#d9d9d9', 'Light Grey'], ['#64748b', 'Steel'],
   ['#16a34a', 'Green'], ['#dc2626', 'Red'], ['#3b82f6', 'Blue'],
   ['#0ea5e9', 'Sky'], ['#eab308', 'Yellow'], ['#f97316', 'Orange'],
   ['#7c3aed', 'Violet'], ['#d946ef', 'Magenta'], ['#6366f1', 'Indigo'],
@@ -1100,6 +1396,12 @@ function onKey(e) {
   const t = e.target;
   if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
   if (document.querySelector('.sheet-veil') || document.querySelector('.an-root:not([hidden])')) return;
+  // Cmd+Z takes back the last tag or clip - a mis-hit key at game speed
+  // should cost one keystroke, not a hunt through the log. It has to sit
+  // ABOVE the modifier bail below, which otherwise swallows it; the input
+  // guard above still stands, so Cmd+Z inside a field is the browser's own
+  // text undo, which is what anyone typing expects.
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undoLast(); return; }
   if (e.metaKey || e.ctrlKey) return;
   const k = e.key.toLowerCase();
   const stop = () => e.preventDefault();

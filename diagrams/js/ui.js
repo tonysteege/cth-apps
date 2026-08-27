@@ -82,3 +82,22 @@ export function fmtDate(ts) {
   if (sameDay) return `Today ${d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
   return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: d.getFullYear() === today.getFullYear() ? undefined : 'numeric' });
 }
+
+// A right-click menu. Shared from here (2026-08-27) because Clips grew one
+// too - it lived inside diagrams/js/app.js, which cannot be imported
+// without running the whole Diagrams app. `.move-menu` and `.ctx-danger`
+// are already in the shared stylesheet.
+// items: [label, onPick, isDanger?][]
+export function ctxMenu(x, y, items) {
+  document.querySelector('.move-menu')?.remove();
+  const m = document.createElement('div');
+  m.className = 'move-menu';
+  m.innerHTML = items.map(([label, , danger], i) => `<button data-i="${i}"${danger ? ' class="ctx-danger"' : ''}>${label}</button>`).join('');
+  document.body.appendChild(m);
+  m.style.left = `${Math.max(8, Math.min(window.innerWidth - m.offsetWidth - 8, x))}px`;
+  m.style.top = `${Math.max(8, Math.min(window.innerHeight - m.offsetHeight - 8, y))}px`;
+  const close = () => { m.remove(); window.removeEventListener('pointerdown', away, true); };
+  const away = (e) => { if (!m.contains(e.target)) close(); };
+  window.addEventListener('pointerdown', away, true);
+  m.querySelectorAll('[data-i]').forEach((b) => { b.onclick = () => { close(); items[Number(b.dataset.i)][1](); }; });
+}

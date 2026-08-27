@@ -486,7 +486,10 @@ const SIDE_W_DEFAULT = 124;
 // The buttons no longer shrink with the column (2026-08-26, Tony's call), so
 // the column can only go as narrow as a whole button: 7 characters, its key
 // badge and the padding either side. Below this it would clip them.
-const SIDE_W_MIN = 104;
+// 68px is a whole tag button at its new padding - about 35% under the old
+// 104px floor (2026-08-27, Tony's call). The buttons themselves still do
+// not resize with the column; see the css note on .vp-side.
+const SIDE_W_MIN = 68;
 
 function wireResize({ grip, panel, key, def, min, max }) {
   const h = $(grip);

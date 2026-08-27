@@ -86,7 +86,7 @@ export const DEFAULT_PANEL = () => ({
     { id: uid(), tier: 1, label: 'Turnover', key: 't', color: '#dc2626', lead: 6, lag: 3 },
     { id: uid(), tier: 1, label: 'Breakout', key: 'b', color: '#7c3aed', lead: 5, lag: 6 },
     { id: uid(), tier: 1, label: 'Forecheck', key: 'r', color: '#f97316', lead: 5, lag: 5 },
-    { id: uid(), tier: 1, label: 'Faceoff', key: 'w', color: '#78716c', lead: 2, lag: 6 },
+    { id: uid(), tier: 1, label: 'Faceoff', key: 'w', color: '#64748b', lead: 2, lag: 6 },
     { id: uid(), tier: 1, label: 'Highlight', key: 'h', color: '#eab308', lead: 8, lag: 5 },
     { id: uid(), tier: 2, label: 'good', key: 'u', color: '#16a34a' },
     { id: uid(), tier: 2, label: 'bad', key: 'd', color: '#dc2626', },
@@ -97,11 +97,34 @@ export const DEFAULT_PANEL = () => ({
   ],
 });
 
+// Everything below `panel` was added on 2026-08-27 for the Clips rebuild.
+// Storage is ADDITIVE-ONLY: getSettings merges these over whatever is
+// saved, so an older record simply grows the new fields.
+//
+//   players     the roster the Players dialogue lists, each with a
+//               single-key shortcut: { id, num, first, last, key }
+//   naming      the export file-name pattern. Tokens: {name} {tags}
+//               {hhmmss} {label} {date}
+//   freezeBuf   the in/out buffer around the playhead a Freeze export
+//               carries, in seconds. pullBuf is the same for Pull.
+//   holdSec     how long the frozen frame is held in a Freeze export
+//   cursorHi    the recording's cursor highlight
+//   toolKeys    one-key shortcuts for the annotation tools, editable
+//               from a right-click on the tool itself
+//   recordArea  the last capture rectangle, remembered across sessions
 const DEFAULT_SETTINGS = () => ({
   id: 'main',
   panel: DEFAULT_PANEL(),
   groups: { Team: '', Parents: '' },   // name -> comma-separated emails
   scrubReverse: false,
+  players: [],
+  naming: '{name}-{tags}-{hhmmss}',
+  freezeBuf: { before: 5, after: 10 },
+  pullBuf: { before: 5, after: 10 },
+  holdSec: 3,
+  cursorHi: { on: true, color: '#ef4444', size: 46, opacity: 0.32 },
+  toolKeys: { select: 'v', pen: 'd', arrow: 'a', box: 'b', circle: 'c', text: 't', angle: 'g' },
+  recordArea: null,
 });
 
 export async function getSettings() {
@@ -109,7 +132,17 @@ export async function getSettings() {
   if (s) {
     // Older records grow new fields without losing anything.
     const d = DEFAULT_SETTINGS();
-    return { ...d, ...s, panel: s.panel || d.panel, groups: { ...d.groups, ...(s.groups || {}) } };
+    return {
+      ...d,
+      ...s,
+      panel: s.panel || d.panel,
+      groups: { ...d.groups, ...(s.groups || {}) },
+      players: s.players || d.players,
+      freezeBuf: { ...d.freezeBuf, ...(s.freezeBuf || {}) },
+      pullBuf: { ...d.pullBuf, ...(s.pullBuf || {}) },
+      cursorHi: { ...d.cursorHi, ...(s.cursorHi || {}) },
+      toolKeys: { ...d.toolKeys, ...(s.toolKeys || {}) },
+    };
   }
   return DEFAULT_SETTINGS();
 }

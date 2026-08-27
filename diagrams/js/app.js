@@ -17,7 +17,7 @@ import {
 } from './editor.js';
 import { renderStateFlat, sliceFrames } from './flat.js';
 import { pngReadDiagram, pngSetDiagram, dataUrlToBytes, bytesToBlob } from './png.js';
-import { toast, esc, confirmSheet, leaveSheet, fmtDate } from './ui.js';
+import { toast, esc, confirmSheet, leaveSheet, fmtDate, ctxMenu } from './ui.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -223,20 +223,6 @@ const EDSIDE_KEY = 'cthd.edside.v1';
 const COLLAPSE_KEY = 'cthd.sidecollapse.v1';
 const collapsed = () => { try { return new Set(JSON.parse(localStorage.getItem(COLLAPSE_KEY)) || []); } catch (_) { return new Set(); } };
 const saveCollapsed = (set) => localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...set]));
-
-function ctxMenu(x, y, items) {
-  document.querySelector('.move-menu')?.remove();
-  const m = document.createElement('div');
-  m.className = 'move-menu';
-  m.innerHTML = items.map(([label, , danger], i) => `<button data-i="${i}"${danger ? ' class="ctx-danger"' : ''}>${label}</button>`).join('');
-  document.body.appendChild(m);
-  m.style.left = `${Math.max(8, Math.min(window.innerWidth - m.offsetWidth - 8, x))}px`;
-  m.style.top = `${Math.max(8, Math.min(window.innerHeight - m.offsetHeight - 8, y))}px`;
-  const close = () => { m.remove(); window.removeEventListener('pointerdown', away, true); };
-  const away = (e) => { if (!m.contains(e.target)) close(); };
-  window.addEventListener('pointerdown', away, true);
-  m.querySelectorAll('[data-i]').forEach((b) => { b.onclick = () => { close(); items[Number(b.dataset.i)][1](); }; });
-}
 
 // Inline rename: swap a row's name for an input, commit on Enter or blur.
 function inlineRename(nameEl, initial, commit) {
