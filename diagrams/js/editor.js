@@ -663,8 +663,14 @@ export function render() {
 
 const ICON = {
   select: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M4.04 4.69a.5.5 0 0 1 .65-.65l16 6.5a.5.5 0 0 1-.06.94l-6.13 1.58a2 2 0 0 0-1.43 1.44l-1.58 6.12a.5.5 0 0 1-.95.07z"/></svg>',
-  arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M5 19 19 5"/><path d="M10 5h9v9"/></svg>',
-  dasharrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M5 19 19 5" stroke-dasharray="3.4 3"/><path d="M10 5h9v9"/></svg>',
+  // The five movement arrows, all drawn on the same lower-left to
+  // upper-right diagonal with the same head, so the row reads as one
+  // family and only the LINE says what the movement is.
+  arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M4.5 19.5 18 6"/><path d="M10.5 5.5H19V14"/></svg>',
+  dasharrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M4.5 19.5 18 6" stroke-dasharray="3.2 3"/><path d="M10.5 5.5H19V14"/></svg>',
+  skatepuck: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M4 19.5c1.9-1.1 1.2-3.4 3.1-4.5s2.6 1.2 4.5.1 1.2-3.4 3.1-4.5 2.6 1.2 4.5.1"/><path d="M12.5 5.2H19v6.5"/></svg>',
+  skateback: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M4 19.5a2 2 0 1 0 2.9-2.8 2 2 0 1 1 2.9-2.9 2 2 0 1 0 2.9-2.8 2 2 0 1 1 2.9-2.9"/><path d="M12.5 5.2H19v6.5"/></svg>',
+  shoot: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M3.2 18.1 16.6 4.7"/><path d="M5.9 20.8 19.3 7.4"/><path d="M11.6 4.2h8.2v8.2"/></svg>',
   box: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4.25" y="5.25" width="15.5" height="13.5" rx="2.75"/></svg>',
   circle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="7.75"/></svg>',
   text: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M4 7V5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5V7"/><path d="M12 4v16"/><path d="M9 20h6"/></svg>',
@@ -685,25 +691,45 @@ const HEADS = [
   ['none', 'Plain Line'],
 ];
 
+// Each movement is its OWN TOOL (2026-08-27, Tony's call): arm it and
+// draw, the way icehockeysystems does it. `motion` is still what gets
+// stored on the element, so the drawing and the animator are unchanged -
+// the tool just decides which value to stamp.
 const TOOLS = [
   ['select', 'Select & Move'],
-  ['arrow', 'Arrow'],
-  ['dasharrow', 'Dashed Arrow'],
+  ['arrow', 'Skate'],
+  ['skatepuck', 'Skate With Puck'],
+  ['skateback', 'Skate Backwards'],
+  ['shoot', 'Shoot'],
+  ['dasharrow', 'Pass'],
   ['box', 'Shaded Box'],
   ['circle', 'Shaded Circle'],
   ['text', 'Text'],
   ['pen', 'Pen'],
 ];
+
+// tool -> what the element carries. A pass is the dashed line; the rest
+// are solid lines wearing a motion.
+const LINE_SPEC = {
+  arrow: { dash: false, motion: null },
+  skatepuck: { dash: false, motion: 'puck' },
+  skateback: { dash: false, motion: 'backward' },
+  shoot: { dash: false, motion: 'shoot' },
+  dasharrow: { dash: true, motion: null },
+};
 const PLAYER_SLOTS = [0, 1, 2];
 const ITEM_ORDER = ['coach', 'net', 'puck', 'pucks', 'cone', 'border'];
 // The preset letters a player can arrive wearing (hover a player button).
 const PLAYER_LABELS = ['1', '2', '3', '4', '5', 'C', 'D1', 'D2', 'F1', 'F2', 'F3', 'G', 'LD', 'LW', 'O', 'RD', 'RW', 'X'];
 
+// P is Pass (Tony's call 2026-08-27), so the pen moved to E and the pucks
+// stamp moved off S. Any key Tony has already customized still wins.
 const DEFAULT_KEYS = {
-  select: 'v', arrow: 'a', dasharrow: 'd', box: 'b', circle: 'c', text: 't', pen: 'p',
+  select: 'v', arrow: 'a', skatepuck: 's', skateback: 'z', shoot: 'x', dasharrow: 'p',
+  box: 'b', circle: 'c', text: 't', pen: 'e',
   'p-0': '1', 'p-1': '2', 'p-2': '3',
   faceoff: 'f',
-  'i-coach': 'h', 'i-net': 'n', 'i-puck': 'k', 'i-pucks': 's', 'i-cone': 'o', 'i-border': 'w',
+  'i-coach': 'h', 'i-net': 'n', 'i-puck': 'k', 'i-pucks': 'u', 'i-cone': 'o', 'i-border': 'w',
   'c-0': '6', 'c-1': '7', 'c-2': '8', 'c-3': '9',
 };
 const customKeys = () => settings().diagramKeys || {};
@@ -798,23 +824,7 @@ function showPlayerMenu(slot, btn) {
 // a second press on the armed button for touch.
 
 const WEIGHTS = [[4, 'Fine Lines'], [8, 'Standard Lines'], [14, 'Bold Lines']];
-const LINE_TOOLS = new Set(['arrow', 'dasharrow', 'pen']);
-
-// What the arrow MEANS. Skating is the plain arrow; a pass is the dashed
-// tool; these three add the standard drill-book drawings and give the
-// animator its physics (see anim.js).
-const MOTIONS = [
-  ['skate', 'Skate'],
-  ['puck', 'Skate With Puck'],
-  ['backward', 'Skate Backwards'],
-  ['shoot', 'Shoot'],
-];
-const MOTION_ICONS = {
-  skate: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18 16 6"/><path d="M9.5 5.5H17V13"/></svg>',
-  puck: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18c1.6-2.4 3-.6 4.4-2.6s2.4-.2 3.8-2.2 2.2-.4 3.4-2.1"/><path d="M12.5 5.5H19V12"/></svg>',
-  backward: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M6.2 19.4a2.5 2.5 0 1 1 3-3"/><path d="M11.4 14.2a2.5 2.5 0 1 1 3-3"/><path d="M13 6h6v6"/></svg>',
-  shoot: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 15.5 8.5"/><path d="M7 23 18.5 11.5"/><path d="M10.5 6.5H18V14"/></svg>',
-};
+const LINE_TOOLS = new Set(['arrow', 'skatepuck', 'skateback', 'shoot', 'dasharrow', 'pen']);
 
 let lmenuEl = null;
 let lmenuTimer = null;
@@ -833,17 +843,10 @@ function showLineMenu(tool, btn) {
   // The pen draws freehand strokes, which have no arrowhead - offering one
   // there would be a control that does nothing.
   const wantsHead = tool !== 'pen';
-  // The Type row belongs to the plain arrow tool only: a pass IS the dashed
-  // tool, and a pen stroke is a drawing, not a movement.
-  const wantsType = tool === 'arrow';
-  const motionNow = cur.motion || 'skate';
   lmenuEl = document.createElement('div');
   lmenuEl.className = 'pmenu lmenu';
   lmenuEl.dataset.tool = tool;
   lmenuEl.innerHTML = `
-    ${wantsType ? `<span class="lmenu-label">Type</span>
-    ${MOTIONS.map(([m, label]) => `<button class="tb-btn tb-small${motionNow === m ? ' on' : ''}" data-motion="${m}" aria-label="${label}" title="${label}">${MOTION_ICONS[m]}</button>`).join('')}
-    <span class="tb-sep"></span>` : ''}
     ${wantsHead ? `<span class="lmenu-label">Head</span>
     ${HEADS.map(([h, label]) => `<button class="tb-btn tb-small${headNow === h ? ' on' : ''}" data-head="${h}" aria-label="${label}" title="${label}">${HEAD_ICONS[h]}</button>`).join('')}
     <span class="tb-sep"></span>` : ''}
@@ -862,23 +865,6 @@ function showLineMenu(tool, btn) {
   // rather than repainting the bar, so it stays open for a second choice.
   const mark = (attr, val) => lmenuEl?.querySelectorAll(`[data-${attr}]`).forEach((o) => {
     o.classList.toggle('on', o.dataset[attr] === String(val));
-  });
-  lmenuEl.querySelectorAll('[data-motion]').forEach((b) => {
-    b.onclick = () => {
-      cur.motion = b.dataset.motion;
-      saveSettings({ arrowMotion: cur.motion });
-      // Retype any selected solid arrows too, like head and weight do.
-      const arrows = selEls().filter((z) => z.type === 'arrow' && !z.dash);
-      if (arrows.length) {
-        snapshot();
-        arrows.forEach((z) => {
-          if (cur.motion === 'skate') delete z.motion; else z.motion = cur.motion;
-        });
-        markDirty();
-      }
-      mark('motion', cur.motion);
-      render();
-    };
   });
   lmenuEl.querySelectorAll('[data-head]').forEach((b) => {
     b.onclick = () => {
@@ -1589,13 +1575,13 @@ function onDown(e) {
     return;
   }
 
-  if (cur.tool === 'arrow' || cur.tool === 'dasharrow') {
+  if (LINE_SPEC[cur.tool]) {
     snapshot();
     const d = defaults();
     const a = {
       id: uid(), type: 'arrow', x1: p.x, y1: p.y, x2: p.x, y2: p.y, mx: p.x, my: p.y,
-      color: cur.color, width: d.stroke, dash: cur.tool === 'dasharrow',
-      ...(cur.tool === 'arrow' && cur.motion && cur.motion !== 'skate' ? { motion: cur.motion } : {}),
+      color: cur.color, width: d.stroke, dash: !!LINE_SPEC[cur.tool]?.dash,
+      ...(LINE_SPEC[cur.tool]?.motion ? { motion: LINE_SPEC[cur.tool].motion } : {}),
       head: cur.head || 'triangle',
     };
     cur.elements.push(a);
@@ -2032,7 +2018,6 @@ export async function openEditor(drill, h = {}) {
     pendingLabel: null,
     hideId: null,
     head: settings().arrowHead || 'triangle',
-    motion: settings().arrowMotion || 'skate',
     guides: [],
     seq: 1,
     rinkNames: [],

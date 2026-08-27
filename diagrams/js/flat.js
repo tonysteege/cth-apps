@@ -173,50 +173,41 @@ export function motionPolys(a, trim) {
     ];
   }
   if (m === 'puck') {
-    // Carrying the puck: a squiggle. The amplitude eases in and fades out
-    // near the head so the wave lands cleanly on the arrowhead.
-    const amp = w * 1.9;
-    const wave = Math.max(w * 7, 40);
+    // CARRYING THE PUCK: a smooth, open wave - a few big cycles, not a
+    // tight spring. Matched to how the drill books draw it (2026-08-27):
+    // roughly one cycle per 130 units with a deep amplitude, so it still
+    // reads as a wave at thumbnail size instead of turning into fuzz.
+    const amp = w * 3.1;
+    const wave = Math.max(w * 15, 118);
     let dist = 0;
     return [withNormals.map((p, i) => {
       if (i) dist += Math.hypot(p.x - withNormals[i - 1].x, p.y - withNormals[i - 1].y);
-      const fade = Math.min(1, dist / (wave * 0.6)) * Math.min(1, (total - dist) / (wave * 0.8));
+      // Ease the wave in and out so the ends meet the tail and the
+      // arrowhead cleanly rather than starting mid-swing.
+      const fade = Math.min(1, dist / (wave * 0.45)) * Math.min(1, (total - dist) / (wave * 0.5));
       const off = Math.sin((dist / wave) * Math.PI * 2) * amp * Math.max(0, fade);
       return [p.x + p.nx * off, p.y + p.ny * off];
     })];
   }
   if (m === 'backward') {
-    // Backwards skating: repeated c-cuts along the route, no spine - the
-    // standard drill-book drawing. Each c is a short arc facing travel.
-    const gap = Math.max(w * 5.2, 34);
-    const r = Math.max(w * 1.7, 11);
-    const polys = [];
+    // BACKWARDS: one CONTINUOUS scalloped line - a run of half-circles
+    // along the route, which is the c-cut notation. It used to draw
+    // detached letter shapes, which read as text on the ice rather than
+    // as edgework (2026-08-27).
+    // Deep enough to read as c-cuts rather than as fine chatter: the
+    // scallop is about four line-widths tall and only a little wider.
+    const r = Math.max(w * 4.2, 28);
+    const gap = r * 1.55;
     let dist = 0;
-    let next = gap * 0.5;
-    for (let i = 1; i < withNormals.length; i++) {
-      const p = withNormals[i];
-      dist += Math.hypot(p.x - withNormals[i - 1].x, p.y - withNormals[i - 1].y);
-      if (dist >= next && dist < total - gap * 0.35) {
-        next += gap;
-        const arc = [];
-        for (let k = 0; k <= 8; k++) {
-          const th = p.ang + Math.PI / 2 + (Math.PI * 1.15) * (k / 8) - Math.PI * 0.075;
-          arc.push([p.x + Math.cos(th) * r, p.y + Math.sin(th) * r]);
-        }
-        polys.push(arc);
-      }
-    }
-    // A very short arrow still shows one cut.
-    if (!polys.length) {
-      const p = withNormals[Math.floor(withNormals.length / 2)];
-      const arc = [];
-      for (let k = 0; k <= 8; k++) {
-        const th = p.ang + Math.PI / 2 + (Math.PI * 1.15) * (k / 8) - Math.PI * 0.075;
-        arc.push([p.x + Math.cos(th) * r, p.y + Math.sin(th) * r]);
-      }
-      polys.push(arc);
-    }
-    return polys;
+    return [withNormals.map((p, i) => {
+      if (i) dist += Math.hypot(p.x - withNormals[i - 1].x, p.y - withNormals[i - 1].y);
+      const fade = Math.min(1, dist / (gap * 0.5)) * Math.min(1, (total - dist) / (gap * 0.6));
+      // A half-circle profile per gap, all bulging the same side: the
+      // scallop of a c-cut, drawn as one unbroken stroke.
+      const phase = (dist % gap) / gap;
+      const off = Math.sin(phase * Math.PI) * r * Math.max(0, fade);
+      return [p.x + p.nx * off, p.y + p.ny * off];
+    })];
   }
   return null;
 }

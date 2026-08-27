@@ -154,10 +154,17 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   than repainting. Any future contextual control belongs in a popup too -
   the toolbar's width is fixed by design.
 
-- **MOTION ARROWS** (2026-08-27, Tony's call). An arrow may carry an
-  optional ADDITIVE `motion` property: 'puck' (skate with puck, drawn as a
-  squiggle), 'backward' (c-cuts, no spine), 'shoot' (doubled line). Absent
-  means plain skating; a pass stays `dash: true`. Old consumers (Film
+- **MOTION ARROWS ARE FIVE TOOLBAR TOOLS** (2026-08-27, Tony's call,
+  second pass): Skate `A`, Skate With Puck `S`, Skate Backwards `Z`,
+  Shoot `X`, Pass `P`. `LINE_SPEC` in editor.js maps each tool to the
+  `dash` / `motion` it stamps - the popup's old Type row is gone, the
+  tool IS the type. P became Pass, so the PEN MOVED TO `E` and the pucks
+  stamp moved off S to `U`; any key Tony has customized still wins.
+  An arrow may carry an optional ADDITIVE `motion` property: 'puck'
+  (a smooth open wave, about one cycle per 130 units), 'backward' (ONE
+  CONTINUOUS scalloped line of half-circles - it must never go back to
+  detached letter shapes, which read as text on the ice), 'shoot' (a
+  doubled line). Absent means plain skating; a pass stays `dash: true`. Old consumers (Film
   Room) draw a plain arrow - additive contract preserved. The decoration
   geometry lives ONCE in flat.js (`motionPolys`, `arrowPathPoints`,
   `arrowPointAt`, `arrowLength`) and both renderers consume it - that is
