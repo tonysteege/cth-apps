@@ -345,3 +345,179 @@
   .vp-transport { gap: 2px; padding: 3px 6px; }
   .vp-tc { min-width: 50px; font-size: 10px; }
 }
+
+/* ============================================================
+   THE BUTTON PANEL EDITOR (2026-08-26, Tony's call)
+
+   This dialog had NO stylesheet at all - every `.pe-` class below was
+   referenced by player.js and defined nowhere, which is why it rendered as
+   a wrapping stack of raw inputs with the twelve preset swatches showing
+   as bare dashes. It is now a real BoardUI form: one grid so every column
+   lines up under a header, a scrolling body between a fixed title and a
+   fixed footer (the Save button used to fall off the bottom of the screen
+   and could not be reached), and one colour well per row instead of
+   twelve swatches printed on every row.
+   ============================================================ */
+
+.sheet-pe {
+  position: relative;
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(88dvh, 860px);
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+.pe-top { padding: 22px 26px 14px; border-bottom: 1px solid var(--edge); }
+.pe-top h3 { margin: 0 0 6px; }
+.pe-top p { margin: 0; color: var(--mist); line-height: 1.5; font-size: 13px; max-width: 68ch; }
+
+.pe-body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 26px 18px; background: var(--page); }
+.pe-section { padding-top: 18px; }
+.pe-title {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--mist); margin: 0 0 8px 2px;
+}
+
+/* One grid, shared by the column header and every row beneath it, so the
+   headings sit over the fields they name. */
+.pe-head, .pe-list--clip .pe-row, .pe-list--tag .pe-row {
+  display: grid;
+  align-items: center;
+  gap: 8px;
+}
+.pe-head--clip, .pe-list--clip .pe-row { grid-template-columns: 18px 34px minmax(0, 1fr) 46px 58px 58px 78px; }
+.pe-head--tag,  .pe-list--tag  .pe-row { grid-template-columns: 18px 34px minmax(0, 1fr) 46px 78px; }
+.pe-head {
+  padding: 0 10px 5px;
+  font-size: 10.5px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--soft);
+}
+/* Same horizontal inset as a row (list padding 6 + row padding 4), so a
+   heading sits exactly over its field. */
+.pe-head { padding-left: 10px; padding-right: 10px; }
+.pe-head > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.pe-list {
+  display: flex; flex-direction: column; gap: 4px;
+  background: var(--cloud);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-card);
+  padding: 6px;
+}
+.pe-row {
+  padding: 5px 4px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: var(--cloud);
+  transition: background var(--dur) ease, border-color var(--dur) ease;
+}
+.pe-row:hover { background: var(--n-50); }
+.pe-row.dragging { opacity: 0.5; border-color: var(--a-400); background: var(--a-50); }
+
+.pe-grip {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 24px; cursor: grab;
+  color: var(--n-300); fill: currentColor;
+}
+.pe-grip:active { cursor: grabbing; }
+.pe-row:hover .pe-grip { color: var(--n-400); }
+
+/* The colour well: the button's own colour, drawn the way the button is. */
+.pe-well {
+  width: 34px; height: 26px; padding: 0;
+  border: 1px solid color-mix(in oklab, var(--c, #737373) 74%, #000);
+  border-radius: var(--r-sm);
+  background-image: linear-gradient(180deg,
+    color-mix(in oklab, var(--c, #737373) 93%, #fff) 0%,
+    color-mix(in oklab, var(--c, #737373) 87%, #000) 100%);
+  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.18), var(--shadow-card);
+  cursor: pointer;
+  transition: filter var(--dur) ease, box-shadow var(--dur) ease;
+}
+.pe-well:hover { filter: brightness(1.07); box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.22), var(--shadow-2); }
+
+.pe-label, .pe-key, .pe-num {
+  height: 30px; min-width: 0; width: 100%;
+  padding: 0 9px;
+  font: inherit; font-size: 13px;
+  border: 1px solid var(--edge);
+  border-radius: var(--r-sm);
+  background: var(--cloud);
+  color: var(--ink);
+  transition: border-color var(--dur) ease, box-shadow var(--dur) ease;
+}
+.pe-label::placeholder, .pe-key::placeholder { color: var(--soft); }
+.pe-label:focus, .pe-key:focus, .pe-num:focus { border-color: var(--a-500); box-shadow: var(--ring); }
+.pe-key, .pe-num { text-align: center; padding: 0 4px; font-variant-numeric: tabular-nums; }
+.pe-key { text-transform: lowercase; font-weight: 600; }
+
+.pe-acts { display: inline-flex; align-items: center; justify-content: flex-end; gap: 2px; }
+.pe-acts .mini { height: 26px; }
+
+/* A divider row is one wide rule, not a set of fields. */
+.pe-list .pe-row--div { grid-template-columns: 18px minmax(0, 1fr) 78px; }
+.pe-divword {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--soft);
+}
+.pe-divword::after { content: ''; flex: 1; height: 1px; background: var(--edge); }
+
+.pe-adds { display: flex; gap: 6px; padding: 8px 2px 0; }
+.pe-adds .mini { border: 1px dashed var(--n-300); color: var(--mist); }
+.pe-adds .mini:hover { border-color: var(--a-400); color: var(--a-600); background: var(--a-50); }
+
+.pe-foot {
+  margin: 0;
+  padding: 14px 26px;
+  border-top: 1px solid var(--edge);
+  background: var(--cloud);
+}
+
+/* The colour popover: one per dialog, moved to whichever well opened it. */
+.pe-pop {
+  position: fixed;
+  z-index: 80;
+  width: 216px;
+  padding: 10px;
+  background: var(--cloud);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-dropdown);
+}
+.pe-pop[hidden] { display: none; }
+.pe-pop-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.pe-sw {
+  width: 100%; aspect-ratio: 1; padding: 0;
+  border: 1px solid color-mix(in oklab, var(--c) 74%, #000);
+  border-radius: 6px;
+  background-image: linear-gradient(180deg,
+    color-mix(in oklab, var(--c) 93%, #fff) 0%,
+    color-mix(in oklab, var(--c) 87%, #000) 100%);
+  cursor: pointer;
+  transition: transform var(--dur) ease, box-shadow var(--dur) ease;
+}
+.pe-sw:hover { transform: scale(1.08); }
+.pe-sw.on { box-shadow: 0 0 0 2px var(--cloud), 0 0 0 3.5px var(--a-500); }
+.pe-pop-custom {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--edge);
+  font-size: 12px; color: var(--mist);
+}
+.pe-pop-custom input {
+  width: 34px; height: 26px; padding: 0;
+  border: 1px solid var(--edge); border-radius: var(--r-sm);
+  background: var(--cloud); cursor: pointer;
+}
+
+@media (max-width: 620px) {
+  .pe-top, .pe-body, .pe-foot { padding-left: 16px; padding-right: 16px; }
+  .pe-head { display: none; }
+  .pe-list--clip .pe-row { grid-template-columns: 18px 34px minmax(0, 1fr) 40px; grid-auto-rows: auto; }
+  .pe-list--clip .pe-row .pe-num { grid-column: span 2; }
+  .pe-list--clip .pe-row .pe-acts { grid-column: span 2; justify-content: flex-end; }
+  .pe-list .pe-row--div { grid-template-columns: 18px minmax(0, 1fr) auto; }
+  .pe-list--tag .pe-row { grid-template-columns: 18px 34px minmax(0, 1fr) 40px auto; }
+}

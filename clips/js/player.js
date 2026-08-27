@@ -886,49 +886,122 @@ function openPanelEditor() {
   wrap.className = 'sheet-veil';
   // A row is either a button or a divider; both drag to reorder within
   // their own section, and both carry the same delete and duplicate.
+  const GRIP = '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><circle cx="6" cy="3.5" r="1.25"/><circle cx="10" cy="3.5" r="1.25"/><circle cx="6" cy="8" r="1.25"/><circle cx="10" cy="8" r="1.25"/><circle cx="6" cy="12.5" r="1.25"/><circle cx="10" cy="12.5" r="1.25"/></svg>';
+  const acts = (what) => `
+      <span class="pe-acts">
+        <button class="mini" data-dup title="Duplicate ${what}">Copy</button>
+        <button class="mini mini-danger" data-del title="Remove ${what}" aria-label="Remove ${what}">&times;</button>
+      </span>`;
+  // A row is either a button or a divider; both drag to reorder within
+  // their own section, and both carry the same delete and duplicate.
+  //
+  // The twelve preset swatches used to be printed INSIDE every row, which
+  // is what made this dialog unreadable: eight rows meant ninety-six
+  // swatches. The colour now lives behind one well per row that opens a
+  // single shared popover. The hidden `.pe-color` input stays exactly
+  // where it was so the save reader below is untouched.
   const row = (b) => (b.divider ? `
     <div class="pe-row pe-row--div" data-id="${b.id}" data-divider="1" draggable="true">
-      <span class="pe-grip" title="Drag To Reorder">⠿</span>
+      <span class="pe-grip" title="Drag To Reorder">${GRIP}</span>
       <span class="pe-divword">Divider</span>
-      <button class="mini" data-dup title="Duplicate">Copy</button>
-      <button class="mini mini-danger" data-del title="Remove">&times;</button>
+      ${acts('This Divider')}
     </div>` : `
     <div class="pe-row" data-id="${b.id}" draggable="true">
-      <span class="pe-grip" title="Drag To Reorder">⠿</span>
-      <span class="pe-swatches">
-        ${PRESET_COLORS.map(([hex, name]) => `<button type="button" class="pe-sw${b.color?.toLowerCase() === hex ? ' on' : ''}" data-sw="${hex}" style="--c:${hex}" title="${name}"></button>`).join('')}
-      </span>
-      <input class="pe-color" type="color" value="${b.color}" title="Any Other Color">
-      <input class="pe-label" value="${esc(b.label)}" placeholder="Label">
-      <input class="pe-key" value="${esc(b.key || '')}" maxlength="1" placeholder="Key" title="Hotkey">
+      <span class="pe-grip" title="Drag To Reorder">${GRIP}</span>
+      <button type="button" class="pe-well" data-colorbtn style="--c:${b.color}" title="Button Colour" aria-label="Button Colour"></button>
+      <input class="pe-color" type="color" value="${b.color}" hidden>
+      <input class="pe-label" value="${esc(b.label)}" placeholder="${b.tier === 1 ? 'Label' : 'tag-name'}" aria-label="Label">
+      <input class="pe-key" value="${esc(b.key || '')}" maxlength="1" placeholder="-" aria-label="Hotkey">
       ${b.tier === 1 ? `
-        <input class="pe-num" type="number" value="${b.lead ?? 8}" min="0" max="120" title="Seconds Before The Playhead">
-        <input class="pe-num" type="number" value="${b.lag ?? 4}" min="0" max="120" title="Seconds After The Playhead">` : '<span class="pe-spacer"></span>'}
-      <button class="mini" data-dup title="Duplicate This Button">Copy</button>
-      <button class="mini mini-danger" data-del title="Remove">&times;</button>
+        <input class="pe-num" type="number" value="${b.lead ?? 8}" min="0" max="120" aria-label="Seconds Before The Playhead">
+        <input class="pe-num" type="number" value="${b.lag ?? 4}" min="0" max="120" aria-label="Seconds After The Playhead">` : ''}
+      ${acts('This Button')}
     </div>`);
+  const head = (tier) => `
+    <div class="pe-head pe-head--${tier === 1 ? 'clip' : 'tag'}">
+      <span></span><span></span><span>Label</span><span>Key</span>
+      ${tier === 1 ? '<span>Lead</span><span>Lag</span>' : ''}<span></span>
+    </div>`;
   wrap.innerHTML = `
-    <div class="sheet sheet-wide" role="dialog" aria-modal="true">
-      <h3>Tag Buttons</h3>
-      <p>Clip Buttons mark a clip at the playhead (lead seconds before, lag after). Tag Buttons toggle a #tag on the selected clip. Keys are one letter. Drag the grip to reorder; dividers group buttons in the side panel.</p>
-      <div class="pe-title">Clip Buttons <span class="pe-cols">Color &middot; Label &middot; Key &middot; Lead &middot; Lag</span></div>
-      <div id="peT1" class="pe-list">${panelItems(1).map(row).join('')}</div>
-      <div class="pe-adds">
-        <button class="mini" id="peAdd1">+ Clip Button</button>
-        <button class="mini" id="peDiv1">+ Divider</button>
+    <div class="sheet sheet-pe" role="dialog" aria-modal="true" aria-labelledby="peTitle">
+      <div class="pe-top">
+        <h3 id="peTitle">Tag Buttons</h3>
+        <p>Clip Buttons mark a clip at the playhead - Lead is seconds before it, Lag is seconds after. Tag Buttons toggle a #tag on the selected clip. A key is one letter. Drag a row by its handle to reorder it, and use a divider to group buttons in the side panel.</p>
       </div>
-      <div class="pe-title">Tag Buttons</div>
-      <div id="peT2" class="pe-list">${panelItems(2).map(row).join('')}</div>
-      <div class="pe-adds">
-        <button class="mini" id="peAdd2">+ Tag Button</button>
-        <button class="mini" id="peDiv2">+ Divider</button>
+      <div class="pe-body">
+        <section class="pe-section">
+          <div class="pe-title">Clip Buttons</div>
+          ${head(1)}
+          <div id="peT1" class="pe-list pe-list--clip">${panelItems(1).map(row).join('')}</div>
+          <div class="pe-adds">
+            <button class="mini" id="peAdd1">+ Clip Button</button>
+            <button class="mini" id="peDiv1">+ Divider</button>
+          </div>
+        </section>
+        <section class="pe-section">
+          <div class="pe-title">Tag Buttons</div>
+          ${head(2)}
+          <div id="peT2" class="pe-list pe-list--tag">${panelItems(2).map(row).join('')}</div>
+          <div class="pe-adds">
+            <button class="mini" id="peAdd2">+ Tag Button</button>
+            <button class="mini" id="peDiv2">+ Divider</button>
+          </div>
+        </section>
       </div>
-      <div class="sheet-row">
+      <div class="sheet-row pe-foot">
         <button class="btn" data-x="cancel">Cancel</button>
         <button class="btn btn-ink" data-x="save">Save Buttons</button>
       </div>
     </div>`;
   document.body.appendChild(wrap);
+
+  // ---- the one shared colour popover -------------------------------
+  const pop = document.createElement('div');
+  pop.className = 'pe-pop';
+  pop.hidden = true;
+  pop.innerHTML = `
+    <div class="pe-pop-grid">
+      ${PRESET_COLORS.map(([hex, name]) => `<button type="button" class="pe-sw" data-sw="${hex}" style="--c:${hex}" title="${name}" aria-label="${name}"></button>`).join('')}
+    </div>
+    <label class="pe-pop-custom">Any Other Colour<input type="color" class="pe-pop-color"></label>`;
+  wrap.querySelector('.sheet-pe').appendChild(pop);
+  let popRow = null;
+
+  const syncWell = (r) => {
+    const hex = r.querySelector('.pe-color').value;
+    r.querySelector('.pe-well').style.setProperty('--c', hex);
+  };
+  const closePop = () => { pop.hidden = true; popRow = null; };
+  const openPop = (btn) => {
+    popRow = btn.closest('.pe-row');
+    const hex = popRow.querySelector('.pe-color').value.toLowerCase();
+    pop.querySelectorAll('[data-sw]').forEach((o) => o.classList.toggle('on', o.dataset.sw === hex));
+    pop.querySelector('.pe-pop-color').value = hex;
+    pop.hidden = false;
+    // Fixed, and measured after it is visible, so a row near the bottom of
+    // the scrolling list still shows the whole popover.
+    const b = btn.getBoundingClientRect();
+    const h = pop.offsetHeight;
+    const top = b.bottom + 6 + h > window.innerHeight ? Math.max(8, b.top - 6 - h) : b.bottom + 6;
+    pop.style.top = `${top}px`;
+    pop.style.left = `${Math.max(8, Math.min(b.left, window.innerWidth - pop.offsetWidth - 8))}px`;
+  };
+  const applyColor = (hex) => {
+    if (!popRow) return;
+    popRow.querySelector('.pe-color').value = hex;
+    syncWell(popRow);
+  };
+  pop.querySelectorAll('[data-sw]').forEach((sw) => {
+    sw.onclick = () => {
+      applyColor(sw.dataset.sw);
+      pop.querySelectorAll('[data-sw]').forEach((o) => o.classList.toggle('on', o === sw));
+      closePop();
+    };
+  });
+  pop.querySelector('.pe-pop-color').oninput = (e) => {
+    applyColor(e.target.value);
+    pop.querySelectorAll('[data-sw]').forEach((o) => o.classList.toggle('on', o.dataset.sw === e.target.value));
+  };
 
   const wireRow = (r) => {
     r.addEventListener('dragstart', (e) => {
@@ -944,16 +1017,12 @@ function openPanelEditor() {
       const box = r.getBoundingClientRect();
       r.parentElement.insertBefore(src, e.clientY < box.top + box.height / 2 ? r : r.nextSibling);
     });
-    r.querySelectorAll('[data-sw]').forEach((sw) => {
-      sw.onclick = () => {
-        r.querySelector('.pe-color').value = sw.dataset.sw;
-        r.querySelectorAll('[data-sw]').forEach((o) => o.classList.toggle('on', o === sw));
-      };
-    });
-    const col = r.querySelector('.pe-color');
-    if (col) col.oninput = () => r.querySelectorAll('[data-sw]').forEach((o) => o.classList.toggle('on', o.dataset.sw === col.value));
+    const well = r.querySelector('[data-colorbtn]');
+    if (well) well.onclick = (e) => { e.stopPropagation(); if (popRow === r) closePop(); else openPop(well); };
   };
   wrap.querySelectorAll('.pe-row').forEach(wireRow);
+  wrap.addEventListener('scroll', closePop, true);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !pop.hidden) closePop(); });
 
   const add = (listId, b) => {
     const list = wrap.querySelector(listId);
@@ -968,6 +1037,7 @@ function openPanelEditor() {
   wrap.querySelector('#peDiv2').onclick = () => add('#peT2', { id: uid(), tier: 2, divider: true });
 
   wrap.addEventListener('click', (e) => {
+    if (!pop.hidden && !pop.contains(e.target) && !e.target.closest('[data-colorbtn]')) closePop();
     const dup = e.target.closest('[data-dup]');
     if (dup) {
       const r = dup.closest('.pe-row');

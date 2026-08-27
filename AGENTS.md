@@ -241,6 +241,19 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   and drag-to-reorder. A divider is `{id, tier, divider: true}` in the same
   `panel.buttons` array - anything reading that array must skip dividers
   (`panelButtons` does; `panelItems` keeps them for rendering).
+- **The panel editor is a real form** (2026-08-26, Tony's call). Every
+  `.pe-` class it uses was referenced by `player.js` and defined in NO
+  stylesheet, so the dialog rendered as a wrapping stack of raw inputs with
+  the twelve preset swatches showing as bare dashes, and its Save button
+  fell off the bottom of the screen where it could not be reached. It is
+  now: one CSS grid shared by a column header and its rows (the actions
+  column is a FIXED 78px - as `auto` the empty header cell collapsed and
+  pushed every heading off its field), a scrolling body between a fixed
+  title and a fixed footer, and ONE colour well per row opening a single
+  shared popover instead of twelve swatches printed on every row. The
+  hidden `.pe-color` input stays in each row, so the save reader is
+  unchanged. Keep `.pe-label`, `.pe-key`, `.pe-color` and `.pe-num` on
+  their inputs - the reader finds the values by those class names.
 - Freeze-frame drawings use the DIAGRAMS element model and renderer
   (`/diagrams/js/flat.js` is imported cross-app); keep that import working.
 - `clips/embed.html` is the Notion-embeddable single-clip player; its hash
