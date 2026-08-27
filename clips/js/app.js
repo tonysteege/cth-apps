@@ -30,8 +30,12 @@ import {
   video,
   normTag,
   paintBar,
+  playerDuration,
+  playerSel,
 } from './player.js';
-import { openAnnotate } from './annotate.js';
+import { openAnnotate, annotationElements } from './annotate.js';
+import { recordRange, deliver, fileStem, CROP_PRESETS, openMic } from './export.js';
+import { drawEl } from '/diagrams/js/flat.js';
 import { toast, esc, confirmSheet, fmtDate } from './ui.js';
 import { putDrill, uid as drillUid } from '/diagrams/js/store.js';
 
@@ -472,10 +476,10 @@ async function showPlayer(id) {
   $('#vpLogBtn').onclick = () => { document.querySelector('.vp').classList.toggle('log-hidden'); };
   $('#vpSideBtn').onclick = () => { document.querySelector('.vp').classList.toggle('side-hidden'); };
   $('#vpSettings').onclick = () => openClipSettings();
-  // Wired for real in the export phase. A button that silently does
-  // nothing is the dead control this suite keeps learning not to ship.
-  $('#vpPull').onclick = () => toast('Pull Export Lands In The Next Phase', true);
-  $('#vpRecord').onclick = () => toast('Record Lands In The Next Phase', true);
+  $('#vpPull').onclick = () => void runPull(game, video().currentTime);
+  $('#vpPull').oncontextmenu = (e) => { e.preventDefault(); void editBuffer('pullBuf', 'Pull'); };
+  $('#vpFreeze').oncontextmenu = (e) => { e.preventDefault(); void editBuffer('freezeBuf', 'Freeze'); };
+  $('#vpRecord').onclick = () => void openRecord(game);
   wirePanels();
 
   await openPlayer(game, src, {
@@ -484,6 +488,7 @@ async function showPlayer(id) {
     // its fast path: bytes sliced straight off the file, no range requests.
     scrubFile: localFiles.get(id) || null,
     onShare: (clip, anchor) => openShareMenu(game, clip, anchor),
+    onBulkPull: (clips) => void runBulkPull(game, clips),
     onAnnotate: async (freeze) => {
       const st = playerSettings() || await getSettings();
       openAnnotate(freeze, grabFrame(), {
@@ -495,7 +500,10 @@ async function showPlayer(id) {
           if (live) live.toolKeys = keys;
           await putSettings({ ...(live || st), toolKeys: keys });
         },
-        onDone: (f) => { updateFreeze(f); },
+        // Done exports the clip and nothing else (2026-08-27, Tony's
+        // call). A freeze used to be saved onto the game record and
+        // replayed during playback; the deliverable is the file.
+        onDone: (f) => void runFreezeExport(game, f, f.elements || []),
         onExport: (canvas, f) => void exportFrame(game, canvas, f),
       });
     },
@@ -833,6 +841,261 @@ const status = null; // recordClip progress hook placeholder
 // ------------------------------------------------------------- boot
 
 window.addEventListener('hashchange', () => void go());
+
+// ------------------------------------------------------- freeze/pull/record
+//
+// Three buttons, one engine (export.js). Freeze bakes a held, annotated
+// frame into the middle of a clip; Pull takes the same window with nothing
+// added; Record composites the player with a cursor ring and your voice.
+// None of them writes to the Clip Log and none of them reports success -
+// the file appearing beside its source IS the report.
+
+const bufOf = (s, which) => ({ before: 5, after: 10, ...(s?.[which] || {}) });
+
+function clipWindow(t, buf, duration) {
+  return {
+    from: Math.max(0, t - buf.before),
+    to: Math.min(duration || t + buf.after, t + buf.after),
+  };
+}
+
+// Right-click Freeze or Pull to change its buffer. Written straight to
+// settings, so it holds for every later export.
+async function editBuffer(which, label) {
+  const st = playerSettings() || await getSettings();
+  const cur = bufOf(st, which);
+  const before = Number(prompt(`${label}: seconds BEFORE the playhead`, cur.before));
+  if (!Number.isFinite(before)) return;
+  const after = Number(prompt(`${label}: seconds AFTER the playhead`, cur.after));
+  if (!Number.isFinite(after)) return;
+  const next = { before: Math.max(0, before), after: Math.max(1, after) };
+  st[which] = next;
+  await putSettings(st);
+  toast(`${label} Buffer: ${next.before}s / ${next.after}s`);
+}
+
+// The clip a Freeze or Pull is named after: whichever row is selected, else
+// the play itself at this timecode.
+function namingFor(game, t) {
+  const sel = (playerGame()?.clips || []).find((c) => c.id === playerSel());
+  if (sel && t >= sel.in - 0.5 && t <= sel.out + 0.5) {
+    return { name: sel.name || sel.label, tags: sel.tags || [], label: sel.label, t: sel.in };
+  }
+  return { name: game.name, tags: [], label: '', t };
+}
+
+async function runFreezeExport(game, freeze, elements) {
+  const st = playerSettings() || await getSettings();
+  const v = video();
+  const buf = bufOf(st, 'freezeBuf');
+  const w = clipWindow(freeze.t, buf, playerDuration());
+  const meta = namingFor(game, freeze.t);
+  const stemName = fileStem(st.naming, { ...meta, suffix: '-freeze' });
+  try {
+    const { blob, ext } = await recordRange(v, {
+      from: w.from,
+      to: w.to,
+      holdAt: freeze.t,
+      hold: Math.max(0, Number(freeze.hold ?? st.holdSec) || 0),
+      // The drawings are painted into every frame OF THE HOLD only: an
+      // annotation that floats over the live action before and after the
+      // freeze reads as a glitch, not as a note.
+      paint: (ctx, cv) => {
+        if (!v.paused) return;
+        ctx.save();
+        ctx.scale(cv.width / (v.videoWidth || cv.width), cv.height / (v.videoHeight || cv.height));
+        for (const el2 of elements || []) drawEl(ctx, el2);
+        ctx.restore();
+      },
+    });
+    await deliver(game, blob, `${stemName}.${ext}`);
+  } catch (e) {
+    console.error(e);
+    toast(e.message || 'Freeze Export Failed', true);
+  }
+}
+
+async function runPull(game, t, nameMeta = null) {
+  const st = playerSettings() || await getSettings();
+  const v = video();
+  const buf = bufOf(st, 'pullBuf');
+  const w = clipWindow(t, buf, playerDuration());
+  const meta = nameMeta || namingFor(game, t);
+  try {
+    const { blob, ext } = await recordRange(v, { from: w.from, to: w.to });
+    await deliver(game, blob, `${fileStem(st.naming, meta)}.${ext}`);
+  } catch (e) {
+    console.error(e);
+    toast(e.message || 'Pull Export Failed', true);
+  }
+}
+
+// Several rows at once, each its own file. Sequential on purpose: they all
+// drive the one video element.
+async function runBulkPull(game, clips) {
+  for (const c of clips) {
+    await runPull(game, c.in + Math.min(1, (c.out - c.in) / 2), {
+      name: c.name || c.label, tags: c.tags || [], label: c.label, t: c.in,
+    });
+  }
+  toast(`${clips.length} Clips Pulled`);
+}
+
+// ---- record ----------------------------------------------------------
+//
+// The capture region is a rectangle OF THE VIDEO. See the note in
+// export.js for why that beats a desktop grab here.
+
+let recording = null;
+
+async function openRecord(game) {
+  if (recording) { stopRecord(); return; }
+  const st = playerSettings() || await getSettings();
+  const area = st.recordArea || { x: 0, y: 0, w: 1, h: 1 };
+  const veil = document.createElement('div');
+  veil.className = 'sheet-veil';
+  veil.innerHTML = `
+    <div class="sheet sheet-wide" role="dialog" aria-modal="true" aria-label="Record">
+      <h3>Record</h3>
+      <p>Drag the box to choose what is recorded. Your microphone and the cursor ring are included; the toolbar never is.</p>
+      <div class="rec-stage"><canvas class="rec-shot"></canvas><div class="rec-box"></div></div>
+      <div class="rec-presets">${CROP_PRESETS.map(([n], i) => `<button class="mini" data-preset="${i}">${n}</button>`).join('')}</div>
+      <div class="sheet-row">
+        <span class="vp-flex"></span>
+        <button class="btn" data-x="cancel">Cancel</button>
+        <button class="btn btn-ink" data-x="go">Start (Return)</button>
+      </div>
+    </div>`;
+  document.body.appendChild(veil);
+
+  const shot = veil.querySelector('.rec-shot');
+  const v = video();
+  shot.width = v.videoWidth || 1280;
+  shot.height = v.videoHeight || 720;
+  shot.getContext('2d').drawImage(v, 0, 0);
+  const boxEl = veil.querySelector('.rec-box');
+  let crop = { ...area };
+  const place = () => {
+    boxEl.style.left = `${crop.x * 100}%`;
+    boxEl.style.top = `${crop.y * 100}%`;
+    boxEl.style.width = `${crop.w * 100}%`;
+    boxEl.style.height = `${crop.h * 100}%`;
+  };
+  place();
+  // Drag anywhere on the frame to draw a new region.
+  const stage = veil.querySelector('.rec-stage');
+  stage.addEventListener('pointerdown', (e) => {
+    const r = stage.getBoundingClientRect();
+    const x0 = (e.clientX - r.left) / r.width;
+    const y0 = (e.clientY - r.top) / r.height;
+    const move = (ev) => {
+      const x1 = Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width));
+      const y1 = Math.min(1, Math.max(0, (ev.clientY - r.top) / r.height));
+      crop = { x: Math.min(x0, x1), y: Math.min(y0, y1), w: Math.abs(x1 - x0), h: Math.abs(y1 - y0) };
+      place();
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      if (crop.w < 0.05 || crop.h < 0.05) { crop = { ...area }; place(); }
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  });
+  veil.querySelectorAll('[data-preset]').forEach((b) => {
+    b.onclick = () => { crop = { ...CROP_PRESETS[Number(b.dataset.preset)][1] }; place(); };
+  });
+
+  const close = () => { document.removeEventListener('keydown', onk, true); veil.remove(); };
+  const start = async () => {
+    close();
+    st.recordArea = crop;
+    await putSettings(st);
+    void startRecord(game, crop, st);
+  };
+  function onk(e) {
+    if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); start(); }
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+  }
+  document.addEventListener('keydown', onk, true);
+  veil.addEventListener('mousedown', (e) => { if (e.target === veil) close(); });
+  veil.querySelector('[data-x="cancel"]').onclick = close;
+  veil.querySelector('[data-x="go"]').onclick = start;
+}
+
+async function startRecord(game, crop, st) {
+  const v = video();
+  const mic = await openMic();
+  // The annotation toolbar opens over the take. Its drawings are painted
+  // into the file; the toolbar itself never can be, because the file is
+  // composited from the video, not grabbed off the screen.
+  const freeze = { id: uid(), t: v.currentTime, hold: 0, elements: [] };
+  openAnnotate(freeze, grabFrame(), {
+    keys: st.toolKeys,
+    onDone: () => stopRecord(),
+    onExport: (canvas) => void deliverFrame(game, canvas),
+  });
+  // Where the pointer is, in video coordinates, for the ring.
+  let cursor = null;
+  const track = (e) => {
+    const c = document.getElementById('anCanvas');
+    if (!c) return;
+    const r = c.getBoundingClientRect();
+    const sc = Math.min(r.width / (v.videoWidth || 1), r.height / (v.videoHeight || 1));
+    const ox = r.left + (r.width - (v.videoWidth || 1) * sc) / 2;
+    const oy = r.top + (r.height - (v.videoHeight || 1) * sc) / 2;
+    cursor = { x: (e.clientX - ox) / sc, y: (e.clientY - oy) / sc };
+  };
+  window.addEventListener('pointermove', track);
+
+  const hi = st.cursorHi || {};
+  const paint = (ctx, cv, box) => {
+    ctx.save();
+    ctx.translate(-box.sx * (cv.width / box.sw), -box.sy * (cv.height / box.sh));
+    ctx.scale(cv.width / box.sw, cv.height / box.sh);
+    for (const el2 of annotationElements()) drawEl(ctx, el2);
+    if (hi.on !== false && cursor) {
+      ctx.beginPath();
+      ctx.arc(cursor.x, cursor.y, (hi.size || 46) / 2, 0, Math.PI * 2);
+      ctx.fillStyle = hi.color || '#ef4444';
+      ctx.globalAlpha = hi.opacity ?? 0.32;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+  };
+
+  recording = { cancel: null, cleanup: () => window.removeEventListener('pointermove', track) };
+  try {
+    const { blob, ext } = await recordRange(v, {
+      from: null,
+      to: null,
+      crop,
+      paint,
+      audio: 'video',
+      mic,
+      onFrame: () => { if (recording?.stopRequested) throw 0; },
+    });
+    await deliver(game, blob, `${fileStem(st.naming, namingFor(game, v.currentTime))}-analysis.${ext}`);
+  } catch (e) {
+    if (e) { console.error(e); toast(e.message || 'Recording Failed', true); }
+  }
+  for (const t of mic?.getTracks() || []) t.stop();
+  recording?.cleanup();
+  recording = null;
+}
+
+function stopRecord() {
+  if (!recording) return;
+  recording.stopRequested = true;
+  video().pause();
+}
+
+async function deliverFrame(game, canvas) {
+  const st = playerSettings() || await getSettings();
+  const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
+  await deliver(game, blob, `${fileStem(st.naming, namingFor(game, video().currentTime))}-frame.png`);
+}
 
 // ------------------------------------------------------------- settings
 //

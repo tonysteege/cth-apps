@@ -24,7 +24,7 @@ Status key: `[ ]` not started, `[~]` in progress, `[x]` done and verified.
 - [x] 7. Sort button is removed; the Time and Clip table headers sort,
       ascending and descending.
 - [x] 8. "N of N Clips" moves to the right edge of the table header bar.
-- [~] 9. Row checkboxes for multi-select, plus bulk actions (rename,
+- [x] 9. Row checkboxes for multi-select, plus bulk actions (rename,
       export, delete, at least).
 - [x] 10. Cmd+Z undoes the last tag or clip.
 - [x] 11. Right-click menu on a clip row: delete, rename, edit timecodes
@@ -75,20 +75,20 @@ Status key: `[ ]` not started, `[~]` in progress, `[x]` done and verified.
 
 ## Phase 4 - Freeze, Pull, Record
 
-- [~] 34. Record and Pull sit beside Freeze in the top bar.
-- [ ] 35. FREEZE opens the annotation toolbar; Done (or Return) exports
+- [x] 34. Record and Pull sit beside Freeze in the top bar.
+- [x] 35. FREEZE opens the annotation toolbar; Done (or Return) exports
       the clip with a 3-second freeze (or whatever the toolbar is set to)
       at the playhead, annotations baked in. It is NOT written to the Clip
       Log. It lands in the source video's own folder with `-freeze`
       appended to the file name.
-- [ ] 36. Right-click Freeze sets a custom in/out buffer; default 5s
+- [x] 36. Right-click Freeze sets a custom in/out buffer; default 5s
       before and 10s after.
-- [ ] 37. PULL: same right-click buffer, same defaults; exports the
+- [x] 37. PULL: same right-click buffer, same defaults; exports the
       surrounding chunk as a straight clip to the same folder, no
       appended text, no freeze.
-- [ ] 38. Bulk Pull from several selected Clip Log rows, each exported as
+- [x] 38. Bulk Pull from several selected Clip Log rows, each exported as
       its own clip into the same folder.
-- [ ] 39. RECORD: shows a bounding box for the capture area, draggable,
+- [x] 39. RECORD: shows a bounding box for the capture area, draggable,
       with one-click presets, remembered across sessions. Return or a Go
       button starts a screen recording of the video player with the
       laptop microphone live and the cursor highlighted by a translucent
@@ -105,15 +105,15 @@ Status key: `[ ]` not started, `[~]` in progress, `[x]` done and verified.
 
 ## Phase 5 - Export, Settings, and the rest
 
-- [ ] 40. Export file names follow
+- [x] 40. Export file names follow
       `[clip name]-[tags in Clip Log order, joined by -]-[HHMMSS]`,
       itself editable in Settings.
-- [ ] 41. Exports are SILENT: no progress dialogue, no indicator. The file
+- [x] 41. Exports are SILENT: no progress dialogue, no indicator. The file
       simply appears. A failure, and only a failure, raises a notice.
 - [x] 42. A Settings sheet covering as much as is reasonable: players,
       the cursor highlight, the naming pattern, buffers, shortcuts.
 - [x] 43. Remove the Email function.
-- [ ] 44. Timeline: freeze marks go. Every tag timecode gets a clickable
+- [x] 44. Timeline: freeze marks go. Every tag timecode gets a clickable
       marker that jumps there. The timeline zooms and scrolls from the
       trackpad.
 - [ ] 45. Tablet and mobile keep up with all of the above.

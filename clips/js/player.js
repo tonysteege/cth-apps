@@ -570,12 +570,31 @@ export function removeFreeze(id) {
 // on chrome. This is 30px: the clip lane IS the scrub bar, freeze marks ride
 // its bottom edge, and the two timecodes sit on top of the ends rather than
 // on a row of their own.
-const TL = { h: 30, top: 5, lane: 17, freezeY: 24 };
+const TL = { h: 30, top: 5, lane: 17, tagY: 24 };
+
+// THE TIMELINE ZOOMS AND SCROLLS (2026-08-27, Tony's call). `view0` is the
+// first second on screen and `span` is how many seconds it shows; at zoom 1
+// the span is the whole file. A trackpad pinch (ctrl+wheel) or a vertical
+// wheel zooms about the pointer, so the frame under the finger stays put;
+// a horizontal two-finger swipe scrolls.
+const tl = { view0: 0, span: 0 };
+function tlSpan() { return tl.span > 0 ? tl.span : Math.max(0.001, cur.duration); }
+function tlClamp() {
+  const d = Math.max(0.001, cur.duration);
+  // span 0 MEANS "fit", and stays 0 until something zooms. The first paint
+  // can run before the file's duration is known, and clamping then pinned
+  // the span at the 2-second floor - so the timeline opened zoomed into the
+  // first two seconds of every video (caught 2026-08-27 in testing).
+  if (!tl.span || tl.span >= d) { tl.span = 0; tl.view0 = 0; return; }
+  tl.span = Math.max(2, tl.span);
+  tl.view0 = Math.min(d - tl.span, Math.max(0, tl.view0));
+}
+export function tlZoomedIn() { return tl.span > 0 && tl.span < (cur?.duration || 0) - 0.01; }
 
 function tlCanvas() { return el('vpTimeline'); }
 function tlScale() {
   const c = tlCanvas();
-  return c.clientWidth / Math.max(0.001, cur.duration);
+  return c.clientWidth / tlSpan();
 }
 
 function drawTimeline() {
@@ -587,13 +606,20 @@ function drawTimeline() {
   const ctx = c.getContext('2d');
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
-  const px = (t) => (t / Math.max(0.001, cur.duration)) * W;
+  tlClamp();
+  const span = tlSpan();
+  const px = (t) => ((t - tl.view0) / span) * W;
 
-  // ground + minute ticks
+  // ground + ticks. The tick spacing follows the zoom, so a zoomed-in view
+  // does not either vanish its grid or turn it into a solid bar.
   ctx.fillStyle = '#f2f2f2';
   ctx.fillRect(0, TL.top, W, TL.lane);
   ctx.fillStyle = '#d9d9d9';
-  for (let m = 60; m < cur.duration; m += 60) ctx.fillRect(px(m), TL.top, 1, TL.lane);
+  const step = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600].find((sTick) => (sTick / span) * W >= 42) || 900;
+  for (let m = Math.ceil(tl.view0 / step) * step; m < tl.view0 + span; m += step) {
+    const tx = px(m);
+    if (tx > 0 && tx < W) ctx.fillRect(tx, TL.top, 1, TL.lane);
+  }
 
   // clip spans
   for (const cl of cur.game.clips) {
@@ -615,14 +641,20 @@ function drawTimeline() {
     }
   }
 
-  // freezes - small triangles tucked under the lane
-  for (const f of activeFreezes()) {
-    const x = px(f.t);
-    ctx.fillStyle = '#0ea5e9';
+  // A MARKER PER TAGGED CLIP, not per freeze (2026-08-27, Tony's call).
+  // Freezes are exports now, so a freeze mark pointed at nothing; a tag
+  // mark points at a moment worth going back to, and clicking it goes.
+  tlMarks = [];
+  for (const cl of cur.game.clips) {
+    if (!(cl.tags || []).length) continue;
+    const x = px(cl.in);
+    if (x < -6 || x > W + 6) continue;
+    tlMarks.push({ x, t: cl.in, id: cl.id });
+    ctx.fillStyle = RATING_COLOR(cl.tags);
     ctx.beginPath();
-    ctx.moveTo(x - 4, TL.freezeY + 5);
-    ctx.lineTo(x + 4, TL.freezeY + 5);
-    ctx.lineTo(x, TL.freezeY);
+    ctx.moveTo(x - 4, TL.tagY + 5);
+    ctx.lineTo(x + 4, TL.tagY + 5);
+    ctx.lineTo(x, TL.tagY);
     ctx.closePath();
     ctx.fill();
   }
@@ -639,11 +671,62 @@ function drawTimeline() {
 let tlDrag = null; // {kind:'seek'|'in'|'out', id}
 function tlPointT(e) {
   const r = tlCanvas().getBoundingClientRect();
-  return ((e.clientX - r.left) / r.width) * cur.duration;
+  return tl.view0 + ((e.clientX - r.left) / r.width) * tlSpan();
+}
+
+let tlMarks = [];
+// A tagged clip's colour comes from its rating, so the lane reads at a
+// glance: green good, red bad, blue star, grey everything else.
+function RATING_COLOR(tags) {
+  if (tags.includes('star')) return '#2b7fff';
+  if (tags.includes('bad')) return '#dc2626';
+  if (tags.includes('good')) return '#16a34a';
+  return '#a3a3a3';
+}
+function tlMarkAt(e) {
+  const r = tlCanvas().getBoundingClientRect();
+  const x = e.clientX - r.left;
+  const y = e.clientY - r.top;
+  if (y < TL.tagY - 4) return null;
+  return tlMarks.find((m) => Math.abs(m.x - x) <= 7) || null;
+}
+
+// Trackpad: pinch or wheel to zoom about the pointer, swipe to scroll.
+export function wireTimelineZoom() {
+  const c = tlCanvas();
+  if (!c || c.dataset.zoomWired) return;
+  c.dataset.zoomWired = '1';
+  c.addEventListener('wheel', (e) => {
+    if (!cur) return;
+    const d = Math.max(0.001, cur.duration);
+    const r = c.getBoundingClientRect();
+    const frac = (e.clientX - r.left) / r.width;
+    if (e.ctrlKey || Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+      e.preventDefault();
+      const at = tl.view0 + frac * tlSpan();
+      const next = Math.min(d, Math.max(2, tlSpan() * (1 + e.deltaY * 0.0035)));
+      tl.span = next;
+      tl.view0 = at - frac * next;   // the frame under the finger stays put
+    } else {
+      e.preventDefault();
+      tl.view0 += (e.deltaX / r.width) * tlSpan();
+    }
+    tlClamp();
+    drawTimeline();
+  }, { passive: false });
+  c.addEventListener('dblclick', () => { tl.span = 0; tl.view0 = 0; drawTimeline(); });
 }
 function onTlDown(e) {
   if (!cur) return;
   e.preventDefault();
+  // A tag marker is a jump target first: clicking one goes there and
+  // selects its clip, which is the whole reason the marks are drawn.
+  const mark = tlMarkAt(e);
+  if (mark) {
+    setSel(mark.id);
+    seek(mark.t);
+    return;
+  }
   const t = tlPointT(e);
   const c = selClip();
   const tol = 6 / tlScale();
@@ -1592,6 +1675,8 @@ export function grabFrame() {
 // ------------------------------------------------------------- open/close
 
 export function playerGame() { return cur?.game || null; }
+export function playerDuration() { return cur?.duration || video()?.duration || 0; }
+export function playerSel() { return cur?.sel || null; }
 export function playerSettings() { return cur?.settings || null; }
 
 export async function openPlayer(game, videoUrl, h = {}) {
@@ -1700,9 +1785,12 @@ function wireOnce() {
   el('vpVideo').addEventListener('emptied', () => { abortScrub(); });
   el('vpVideo').addEventListener('loadeddata', () => primeSoon(800));
   el('vpVideo').addEventListener('pause', () => primeSoon());
-  const tl = tlCanvas();
-  tl.addEventListener('pointerdown', onTlDown);
-  tl.addEventListener('pointermove', onTlMove);
+  // Named tlEl, not tl: the module-level `tl` is the zoom state and a local
+  // shadow of that name here is a trap for whoever reads it next.
+  const tlEl = tlCanvas();
+  tlEl.addEventListener('pointerdown', onTlDown);
+  wireTimelineZoom();
+  tlEl.addEventListener('pointermove', onTlMove);
   window.addEventListener('pointerup', onTlUp);
   el('vpPlay').onclick = togglePlay;
   el('vpBack5').onclick = () => seek(video().currentTime - 5);
