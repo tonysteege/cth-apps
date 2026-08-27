@@ -76,6 +76,151 @@ export function arrowEndAngle(a) {
   return Math.atan2(a.y2 - cy, a.x2 - cx);
 }
 
+// ---- motion arrows (2026-08-27) -------------------------------------------
+//
+// An arrow may carry an optional `motion` property naming what the movement
+// IS: 'puck' (skate with puck), 'backward' (skate backwards), 'shoot'.
+// Absent means plain skating; a pass stays `dash: true` as it always was.
+// The property is ADDITIVE on the stored shape - old consumers (Film Room)
+// simply draw a plain arrow. It matters twice: the body is DECORATED so the
+// printed diagram reads like a real drill sheet (squiggle = carrying,
+// c-cuts = backwards, doubled line = shot), and the animator reads it for
+// speed and for whether the puck travels with the player.
+//
+// The decoration geometry is computed HERE, once, as polylines both
+// renderers consume - it is the only way drawEl and svgEl stay identical.
+
+export function arrowPathPoints(a, trim, n = 64) {
+  const { cx, cy } = arrowCtrl(a);
+  const pts = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const u = 1 - t;
+    pts.push([
+      u * u * a.x1 + 2 * u * t * cx + t * t * a.x2,
+      u * u * a.y1 + 2 * u * t * cy + t * t * a.y2,
+    ]);
+  }
+  // Cut `trim` of arc length off the tail so the body stops short of the
+  // arrowhead exactly like the plain Q-path with its endpoint pulled back.
+  if (trim > 0) {
+    let cut = trim;
+    while (pts.length > 2 && cut > 0) {
+      const [x1, y1] = pts[pts.length - 2];
+      const [x2, y2] = pts[pts.length - 1];
+      const seg = Math.hypot(x2 - x1, y2 - y1);
+      if (seg <= cut) { pts.pop(); cut -= seg; } else {
+        const f = (seg - cut) / seg;
+        pts[pts.length - 1] = [x1 + (x2 - x1) * f, y1 + (y2 - y1) * f];
+        cut = 0;
+      }
+    }
+  }
+  return pts;
+}
+
+export function arrowLength(a) {
+  const pts = arrowPathPoints(a, 0, 48);
+  let L = 0;
+  for (let i = 1; i < pts.length; i++) L += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+  return L;
+}
+
+// A point (and tangent angle) at arc-length fraction f of the arrow body.
+export function arrowPointAt(a, f) {
+  const pts = arrowPathPoints(a, 0, 64);
+  const segs = [];
+  let L = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const d = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+    segs.push(d);
+    L += d;
+  }
+  let want = Math.max(0, Math.min(1, f)) * L;
+  for (let i = 0; i < segs.length; i++) {
+    if (want <= segs[i] || i === segs.length - 1) {
+      const t = segs[i] ? want / segs[i] : 0;
+      const [x1, y1] = pts[i];
+      const [x2, y2] = pts[i + 1];
+      return { x: x1 + (x2 - x1) * t, y: y1 + (y2 - y1) * t, ang: Math.atan2(y2 - y1, x2 - x1) };
+    }
+    want -= segs[i];
+  }
+  const last = pts[pts.length - 1];
+  return { x: last[0], y: last[1], ang: arrowEndAngle(a) };
+}
+
+// The decorated body for a motion arrow, as polylines. Null means "draw the
+// plain body" (skating, and every pass).
+export function motionPolys(a, trim) {
+  const m = a.motion;
+  if (!m || m === 'skate' || a.dash) return null;
+  const w = a.width || 8;
+  const pts = arrowPathPoints(a, trim);
+  const withNormals = pts.map((p, i) => {
+    const q = pts[Math.min(i + 1, pts.length - 1)];
+    const r = pts[Math.max(i - 1, 0)];
+    const ang = Math.atan2(q[1] - r[1], q[0] - r[0]);
+    return { x: p[0], y: p[1], nx: -Math.sin(ang), ny: Math.cos(ang), ang };
+  });
+  const total = pts.reduce((acc, p, i) => (i ? acc + Math.hypot(p[0] - pts[i - 1][0], p[1] - pts[i - 1][1]) : 0), 0);
+  if (m === 'shoot') {
+    // A shot is the classic doubled line.
+    const off = w * 1.05;
+    return [
+      withNormals.map((p) => [p.x + p.nx * off, p.y + p.ny * off]),
+      withNormals.map((p) => [p.x - p.nx * off, p.y - p.ny * off]),
+    ];
+  }
+  if (m === 'puck') {
+    // Carrying the puck: a squiggle. The amplitude eases in and fades out
+    // near the head so the wave lands cleanly on the arrowhead.
+    const amp = w * 1.9;
+    const wave = Math.max(w * 7, 40);
+    let dist = 0;
+    return [withNormals.map((p, i) => {
+      if (i) dist += Math.hypot(p.x - withNormals[i - 1].x, p.y - withNormals[i - 1].y);
+      const fade = Math.min(1, dist / (wave * 0.6)) * Math.min(1, (total - dist) / (wave * 0.8));
+      const off = Math.sin((dist / wave) * Math.PI * 2) * amp * Math.max(0, fade);
+      return [p.x + p.nx * off, p.y + p.ny * off];
+    })];
+  }
+  if (m === 'backward') {
+    // Backwards skating: repeated c-cuts along the route, no spine - the
+    // standard drill-book drawing. Each c is a short arc facing travel.
+    const gap = Math.max(w * 5.2, 34);
+    const r = Math.max(w * 1.7, 11);
+    const polys = [];
+    let dist = 0;
+    let next = gap * 0.5;
+    for (let i = 1; i < withNormals.length; i++) {
+      const p = withNormals[i];
+      dist += Math.hypot(p.x - withNormals[i - 1].x, p.y - withNormals[i - 1].y);
+      if (dist >= next && dist < total - gap * 0.35) {
+        next += gap;
+        const arc = [];
+        for (let k = 0; k <= 8; k++) {
+          const th = p.ang + Math.PI / 2 + (Math.PI * 1.15) * (k / 8) - Math.PI * 0.075;
+          arc.push([p.x + Math.cos(th) * r, p.y + Math.sin(th) * r]);
+        }
+        polys.push(arc);
+      }
+    }
+    // A very short arrow still shows one cut.
+    if (!polys.length) {
+      const p = withNormals[Math.floor(withNormals.length / 2)];
+      const arc = [];
+      for (let k = 0; k <= 8; k++) {
+        const th = p.ang + Math.PI / 2 + (Math.PI * 1.15) * (k / 8) - Math.PI * 0.075;
+        arc.push([p.x + Math.cos(th) * r, p.y + Math.sin(th) * r]);
+      }
+      polys.push(arc);
+    }
+    return polys;
+  }
+  return null;
+}
+
 export const shapeLabelSize = (x) => Math.max(18, Math.min(x.w, x.h) * 0.3);
 
 function drawPucksInto(ctx, x) {
@@ -169,15 +314,29 @@ function drawElInner(ctx, x) {
     const head = w * 4.3;
     const style = x.head || 'triangle';
     const trim = style === 'triangle' ? head * 0.7 : 0;
-    ctx.beginPath();
-    ctx.moveTo(x.x1, x.y1);
-    ctx.quadraticCurveTo(cx, cy, x.x2 - Math.cos(ang) * trim, x.y2 - Math.sin(ang) * trim);
     ctx.strokeStyle = colorOf(x.color);
     ctx.lineWidth = w;
     ctx.lineCap = 'round';
-    if (x.dash) ctx.setLineDash([w * 2.4, w * 2]);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    ctx.lineJoin = 'round';
+    const deco = motionPolys(x, trim);
+    if (deco) {
+      // A motion-decorated body (squiggle / c-cuts / doubled line). The
+      // backward c-cuts draw slightly lighter so they read as edgework.
+      if (x.motion === 'backward') ctx.lineWidth = Math.max(2, w * 0.85);
+      for (const poly of deco) {
+        ctx.beginPath();
+        poly.forEach(([px, py], i) => (i ? ctx.lineTo(px, py) : ctx.moveTo(px, py)));
+        ctx.stroke();
+      }
+      ctx.lineWidth = w;
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(x.x1, x.y1);
+      ctx.quadraticCurveTo(cx, cy, x.x2 - Math.cos(ang) * trim, x.y2 - Math.sin(ang) * trim);
+      if (x.dash) ctx.setLineDash([w * 2.4, w * 2]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
     if (style === 'triangle') {
       ctx.beginPath();
       ctx.moveTo(x.x2, x.y2);

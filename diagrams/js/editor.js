@@ -38,7 +38,7 @@ import { toast, esc } from './ui.js';
 import {
   INK, PALETTE, SLOT_COUNT, colorOf, labelInkOn, measureText, arrowCtrl, arrowEndAngle,
   drawEl, TEXT_CHIP, shapeLabelSize, ROTATABLE,
-  rotCenterOf, sliceFrames,
+  rotCenterOf, sliceFrames, motionPolys,
 } from './flat.js';
 
 // Editor-only breathing room in SEQUENCES: extra visual space between and
@@ -505,8 +505,16 @@ function svgEl(x) {
       const by = Math.sin(ang + Math.PI / 2) * head * 0.7;
       headSvg = `<path d="M ${x.x2 - bx} ${x.y2 - by} L ${x.x2 + bx} ${x.y2 + by}" fill="none" ${stroke}></path>`;
     }
+    const deco = motionPolys(x, trim);
+    let bodySvg;
+    if (deco) {
+      const bw = x.motion === 'backward' ? Math.max(2, w * 0.85) : w;
+      bodySvg = deco.map((poly) => `<path d="M ${poly.map(([px, py]) => `${px} ${py}`).join(' L ')}" fill="none" stroke="${col}" stroke-width="${bw}" stroke-linecap="round" stroke-linejoin="round"></path>`).join('');
+    } else {
+      bodySvg = `<path d="M ${x.x1} ${x.y1} Q ${cx} ${cy} ${tx} ${ty}" fill="none" ${stroke}${x.dash ? ` stroke-dasharray="${w * 2.4} ${w * 2}"` : ''}></path>`;
+    }
     return `<g data-id="${x.id}">
-      <path d="M ${x.x1} ${x.y1} Q ${cx} ${cy} ${tx} ${ty}" fill="none" ${stroke}${x.dash ? ` stroke-dasharray="${w * 2.4} ${w * 2}"` : ''}></path>
+      ${bodySvg}
       ${headSvg}
     </g>`;
   }
@@ -792,6 +800,22 @@ function showPlayerMenu(slot, btn) {
 const WEIGHTS = [[4, 'Fine Lines'], [8, 'Standard Lines'], [14, 'Bold Lines']];
 const LINE_TOOLS = new Set(['arrow', 'dasharrow', 'pen']);
 
+// What the arrow MEANS. Skating is the plain arrow; a pass is the dashed
+// tool; these three add the standard drill-book drawings and give the
+// animator its physics (see anim.js).
+const MOTIONS = [
+  ['skate', 'Skate'],
+  ['puck', 'Skate With Puck'],
+  ['backward', 'Skate Backwards'],
+  ['shoot', 'Shoot'],
+];
+const MOTION_ICONS = {
+  skate: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18 16 6"/><path d="M9.5 5.5H17V13"/></svg>',
+  puck: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18c1.6-2.4 3-.6 4.4-2.6s2.4-.2 3.8-2.2 2.2-.4 3.4-2.1"/><path d="M12.5 5.5H19V12"/></svg>',
+  backward: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M6.2 19.4a2.5 2.5 0 1 1 3-3"/><path d="M11.4 14.2a2.5 2.5 0 1 1 3-3"/><path d="M13 6h6v6"/></svg>',
+  shoot: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 15.5 8.5"/><path d="M7 23 18.5 11.5"/><path d="M10.5 6.5H18V14"/></svg>',
+};
+
 let lmenuEl = null;
 let lmenuTimer = null;
 function hideLineMenu(soon = false) {
@@ -809,10 +833,17 @@ function showLineMenu(tool, btn) {
   // The pen draws freehand strokes, which have no arrowhead - offering one
   // there would be a control that does nothing.
   const wantsHead = tool !== 'pen';
+  // The Type row belongs to the plain arrow tool only: a pass IS the dashed
+  // tool, and a pen stroke is a drawing, not a movement.
+  const wantsType = tool === 'arrow';
+  const motionNow = cur.motion || 'skate';
   lmenuEl = document.createElement('div');
   lmenuEl.className = 'pmenu lmenu';
   lmenuEl.dataset.tool = tool;
   lmenuEl.innerHTML = `
+    ${wantsType ? `<span class="lmenu-label">Type</span>
+    ${MOTIONS.map(([m, label]) => `<button class="tb-btn tb-small${motionNow === m ? ' on' : ''}" data-motion="${m}" aria-label="${label}" title="${label}">${MOTION_ICONS[m]}</button>`).join('')}
+    <span class="tb-sep"></span>` : ''}
     ${wantsHead ? `<span class="lmenu-label">Head</span>
     ${HEADS.map(([h, label]) => `<button class="tb-btn tb-small${headNow === h ? ' on' : ''}" data-head="${h}" aria-label="${label}" title="${label}">${HEAD_ICONS[h]}</button>`).join('')}
     <span class="tb-sep"></span>` : ''}
@@ -831,6 +862,23 @@ function showLineMenu(tool, btn) {
   // rather than repainting the bar, so it stays open for a second choice.
   const mark = (attr, val) => lmenuEl?.querySelectorAll(`[data-${attr}]`).forEach((o) => {
     o.classList.toggle('on', o.dataset[attr] === String(val));
+  });
+  lmenuEl.querySelectorAll('[data-motion]').forEach((b) => {
+    b.onclick = () => {
+      cur.motion = b.dataset.motion;
+      saveSettings({ arrowMotion: cur.motion });
+      // Retype any selected solid arrows too, like head and weight do.
+      const arrows = selEls().filter((z) => z.type === 'arrow' && !z.dash);
+      if (arrows.length) {
+        snapshot();
+        arrows.forEach((z) => {
+          if (cur.motion === 'skate') delete z.motion; else z.motion = cur.motion;
+        });
+        markDirty();
+      }
+      mark('motion', cur.motion);
+      render();
+    };
   });
   lmenuEl.querySelectorAll('[data-head]').forEach((b) => {
     b.onclick = () => {
@@ -1547,6 +1595,7 @@ function onDown(e) {
     const a = {
       id: uid(), type: 'arrow', x1: p.x, y1: p.y, x2: p.x, y2: p.y, mx: p.x, my: p.y,
       color: cur.color, width: d.stroke, dash: cur.tool === 'dasharrow',
+      ...(cur.tool === 'arrow' && cur.motion && cur.motion !== 'skate' ? { motion: cur.motion } : {}),
       head: cur.head || 'triangle',
     };
     cur.elements.push(a);
@@ -1983,6 +2032,7 @@ export async function openEditor(drill, h = {}) {
     pendingLabel: null,
     hideId: null,
     head: settings().arrowHead || 'triangle',
+    motion: settings().arrowMotion || 'skate',
     guides: [],
     seq: 1,
     rinkNames: [],

@@ -505,6 +505,7 @@ async function showEditor(id) {
           <button class="btn" id="edRedo" title="Redo (Shift+Cmd+Z)">Redo</button>
           <span class="ed-sep"></span>
           <button class="btn" id="edRinks" hidden title="Copy, Print Or Export Chosen Rinks From This Sequence">Rinks</button>
+          <button class="btn" id="edAnim" title="Animate The Drill - Players And Pucks Follow Your Arrows (Then Save A GIF Or Video)">Animate</button>
           <button class="btn" id="edSaveImg" title="Save This Diagram As A PNG In Your cth/diagrams Folder">Save PNG</button>
           <button class="btn" id="edCopy" title="Copy The Finished Picture To The Clipboard">Copy</button>
           <button class="btn" id="edPrint" title="Print This Diagram">Print</button>
@@ -604,6 +605,17 @@ async function showEditor(id) {
   };
   $('#edRinks').onclick = () => showRinksSheet(drill);
   $('#edSaveImg').onclick = () => void savePngToFolder(drill, null);
+  $('#edAnim').onclick = async () => {
+    try {
+      await saveNow();
+      const st = currentState();
+      const { openAnimator } = await import('./anim.js');
+      await openAnimator({ state: st, name: drill.name, rinkNames: st.rinkNames });
+    } catch (e) {
+      console.error(e);
+      toast(`Could Not Start The Animation (${e.message || 'Error'})`, true);
+    }
+  };
 
   document.addEventListener('cthd:shortcuts', showShortcuts);
 }

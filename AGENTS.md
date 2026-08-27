@@ -146,6 +146,39 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   than repainting. Any future contextual control belongs in a popup too -
   the toolbar's width is fixed by design.
 
+- **MOTION ARROWS** (2026-08-27, Tony's call). An arrow may carry an
+  optional ADDITIVE `motion` property: 'puck' (skate with puck, drawn as a
+  squiggle), 'backward' (c-cuts, no spine), 'shoot' (doubled line). Absent
+  means plain skating; a pass stays `dash: true`. Old consumers (Film
+  Room) draw a plain arrow - additive contract preserved. The decoration
+  geometry lives ONCE in flat.js (`motionPolys`, `arrowPathPoints`,
+  `arrowPointAt`, `arrowLength`) and both renderers consume it - that is
+  what keeps drawEl and svgEl identical; never inline the math into one
+  side. The arrow tool's popup gained a Type row (arrow tool only - a pass
+  IS the dashed tool, a pen stroke is a drawing); the chosen type persists
+  in `cthd.settings.v1` as `arrowMotion` and retypes selected solid arrows
+  like head and weight do.
+- **THE DRILL ANIMATOR** (`js/anim.js`, 2026-08-27). The Animate button in
+  the editor header turns the drawn diagram into a smooth animation with
+  no extra authoring: each rink of a sequence is a phase; every arrow
+  moves the nearest thing at its tail (skating arrows move players, a
+  pass/shot moves a puck, Skate With Puck carries it); an arrow whose tail
+  sits near another's head WAITS for it (chained timing - skate, pass,
+  shoot); a pass with no drawn puck conjures one, and a puck arriving at a
+  pass's tail is reused so one puck flows through the chain; between rinks
+  the matched objects (players by label+colour, pucks) glide from where
+  the phase left them to where the next rink draws them. Rendering reuses
+  `drawEl` so the animation is pixel-identical to the PNG. Exports: GIF
+  (own dependency-free GIF89a encoder in anim.js - 216-cube + grey-ramp
+  palette, LZW) and WebM (MediaRecorder, real-time), both saved to the CTH
+  folder's `/diagrams/<name>-drill.gif|.webm` via localfs with a download
+  fallback. NOTHING is stored on the diagram - edit, press Animate again,
+  the new sequence plays. Viewer prefs (speed, size, fps, routes) live in
+  localStorage `cthd.anim.v1`, not on the drill record.
+- **Colour hotkeys recolor the selection**: keys 6/7/8/9 arm colour
+  presets 1-4 AND recolor every selected element that has a colour
+  (`chooseSlot`), in bulk. This predates the animator; do not break it.
+
 ## Clips (/clips/) rules
 
 - Clips reads game film from `/videos` inside the chosen CTH folder and
