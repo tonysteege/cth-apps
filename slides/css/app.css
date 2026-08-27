@@ -26,8 +26,13 @@ body.dark { background: #0b0b0b; }
 #phUrl:hover:not(:focus) { box-shadow: var(--field-ring-hover); }
 #phUrl:focus { outline: none; box-shadow: var(--field-ring-focus); }
 .ph-title {
-  font-size: 11px; font-weight: 600; text-transform: uppercase;
-  letter-spacing: .09em; color: var(--soft); margin: 26px 4px 10px;
+  /* CTH SECTION LABEL (2026-08-27, Tony's call). Replaces the 11px
+     uppercase grey label the whole suite used: Title Case, ink, bold, a
+     little larger than body, so a section reads as a heading. The markup
+     already carried Title Case text - the caps were the css. Same values
+     in clips, diagrams and slides; keep the three in step. */
+  font-size: 15px; font-weight: 700; text-transform: none;
+  letter-spacing: -0.01em; color: var(--ink); margin: 26px 4px 12px;
 }
 .ph-recents { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 6px; }
 .ph-card { border: 1px solid var(--edge); border-radius: 16px; padding: 18px 22px; box-shadow: var(--shadow-card); background: var(--cloud); }

@@ -9,6 +9,7 @@ import { BOTS, botById, defaultsFor, migrateStyles, ICONS, EXAMPLE_MAX } from '.
 import { getConfig, putConfig, getLayout, putLayout, addRun, listRuns, deleteRun,
   putExample, getExample, deleteExample, uid } from './store.js';
 import { aiText, aiVision, aiImage, notionText, parseJson, AiError } from './ai.js';
+import { sortable } from './sortable.js';
 import { toast, esc } from '../../diagrams/js/ui.js';
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -248,32 +249,15 @@ async function hydrateSources(bot, vals, say, signal) {
 }
 
 // Drag by the grip only: the card is full of text fields now, and a
-// draggable card steals every selection and caret drag inside it.
+// draggable card steals every selection and caret drag inside it. The
+// mechanism is the shared pointer sortable, NOT HTML5 drag-and-drop -
+// see sortable.js for why (the snap-back Tony saw was the browser's).
 function wireDrag(board, l) {
-  let dragEl = null;
-  board.querySelectorAll('.bot-card').forEach((el) => {
-    const grip = el.querySelector('.bot-grip');
-    grip.addEventListener('pointerdown', () => { el.draggable = true; });
-    grip.addEventListener('pointerup', () => { el.draggable = false; });
-    el.addEventListener('dragstart', (e) => {
-      if (!el.draggable) { e.preventDefault(); return; }
-      dragEl = el;
-      el.classList.add('dragging');
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', el.dataset.bot);
-    });
-    el.addEventListener('dragend', async () => {
-      el.classList.remove('dragging');
-      el.draggable = false;
-      dragEl = null;
-      await putLayout({ ...l, order: [...board.querySelectorAll('.bot-card')].map((c) => c.dataset.bot) });
-    });
-    el.addEventListener('dragover', (e) => {
-      if (!dragEl || dragEl === el) return;
-      e.preventDefault();
-      const r = el.getBoundingClientRect();
-      board.insertBefore(dragEl, e.clientX < r.left + r.width / 2 ? el : el.nextSibling);
-    });
+  sortable(board, {
+    item: '.bot-card',
+    handle: '.bot-grip',
+    axis: 'grid',
+    onEnd: (order) => void putLayout({ ...l, order: order.map((c) => c.dataset.bot) }),
   });
 }
 
@@ -304,6 +288,58 @@ function wireResize(board, l) {
     });
   });
 }
+
+// ---------------------------------------------------- knowledge sources
+//
+// A bot's PRIMARY KNOWLEDGE (2026-08-27, Tony's call): Notion pages and
+// text files it should treat as authoritative, above whatever the model
+// happens to know. Two rules make this behave:
+//
+//  - A NOTION PAGE IS READ FRESH AT RUN TIME, falling back to the snapshot
+//    taken when it was added if the fetch fails. A knowledge source that
+//    goes stale the day it is attached is not a knowledge source. The
+//    Worker's 60-second edge cache keeps the cost of that near zero.
+//  - IT IS BUDGETED. The Worker caps a prompt at 8000 characters, so the
+//    knowledge block is capped well under that and each source gets a
+//    fair share rather than the first one eating the room.
+
+const KNOW_MAX = 6;
+const KNOW_BUDGET = 4200;
+const KNOW_PER_SOURCE = 6000;
+
+async function knowledgeBlock(cfg, say, signal) {
+  const list = (cfg.knowledge || []).slice(0, KNOW_MAX);
+  if (!list.length) return '';
+  const parts = [];
+  for (const k of list) {
+    let text = k.text || '';
+    if (k.kind === 'notion' && k.url) {
+      try {
+        say?.('Reading Knowledge…');
+        const page = await notionText(k.url);
+        const fresh = [page.title, page.text].filter(Boolean).join('\n').trim();
+        if (fresh) { text = fresh; k.text = fresh.slice(0, KNOW_PER_SOURCE); }
+      } catch (e) {
+        if (e.name === 'AbortError') throw e;
+        // Fall through to the snapshot - a page that cannot be reached
+        // must not take the bot's knowledge down with it.
+        console.warn('knowledge refresh failed', k.name, e.message);
+      }
+    }
+    if (text) parts.push({ name: k.name, text });
+    if (signal?.aborted) throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
+  }
+  if (!parts.length) return '';
+  const share = Math.max(400, Math.floor(KNOW_BUDGET / parts.length));
+  return [
+    'PRIMARY KNOWLEDGE. Treat the following as authoritative for this coach.',
+    'Where it conflicts with what you otherwise know, follow it. Use its',
+    'terminology and its way of teaching. Do not cite it or mention it.',
+    ...parts.map((p) => `--- ${p.name} ---\n${p.text.slice(0, share)}`),
+  ].join('\n');
+}
+
+const withKnowledge = (system, block) => (block ? `${system}\n\n${block}` : system);
 
 // ------------------------------------------------------------- settings
 //
@@ -366,6 +402,15 @@ async function showSettings(bot) {
           <textarea class="bs-system" data-k="system" rows="7" spellcheck="false">${esc(cfg.system || bot.system)}</textarea>
           <p class="bs-note">This is what the model is told before every run of this bot. Clear it to fall back to the built-in instruction.</p>
         </section>
+        <section class="pe-section">
+          <div class="pe-title">Knowledge Files</div>
+          <div class="bs-know" data-know>${(cfg.knowledge || []).map(knowRow).join('')}</div>
+          <div class="bs-styleadd">
+            <button class="mini" data-addnotion>+ Notion Page</button>
+            <button class="mini" data-addfile>+ Text File</button>
+          </div>
+          <p class="bs-note">Sources this bot treats as authoritative, above what the model otherwise knows. A Notion page is re-read on every run, so editing the page updates the bot. Up to ${KNOW_MAX}.</p>
+        </section>
         ${stylesSetting ? `
         <section class="pe-section">
           <div class="pe-title">${esc(stylesSetting.label)}</div>
@@ -405,6 +450,74 @@ async function showSettings(bot) {
       veil.querySelectorAll('[data-color]').forEach((o) => o.classList.toggle('on', o === b));
     };
   });
+
+  // ---- knowledge sources ---------------------------------------------
+  const knowBox = veil.querySelector('[data-know]');
+  const knowList = () => JSON.parse(knowBox.dataset.list || JSON.stringify(cfg.knowledge || []));
+  knowBox.dataset.list = JSON.stringify(cfg.knowledge || []);
+
+  const paintKnow = () => {
+    const list = knowList();
+    knowBox.innerHTML = list.map(knowRow).join('') || '<p class="bs-empty">No sources yet. The bot runs on its instruction alone.</p>';
+    knowBox.querySelectorAll('[data-kdel]').forEach((b) => {
+      b.onclick = async () => {
+        const gone = list.find((k) => k.id === b.dataset.kdel);
+        if (gone?.kind === 'file') await deleteExample(gone.id).catch(() => {});
+        knowBox.dataset.list = JSON.stringify(list.filter((k) => k.id !== b.dataset.kdel));
+        paintKnow();
+      };
+    });
+    veil.querySelectorAll('[data-addnotion], [data-addfile]').forEach((b) => {
+      b.disabled = list.length >= KNOW_MAX;
+    });
+  };
+  paintKnow();
+
+  const addKnow = (rec) => {
+    knowBox.dataset.list = JSON.stringify([...knowList(), rec]);
+    paintKnow();
+  };
+
+  veil.querySelector('[data-addnotion]').onclick = async () => {
+    const url = prompt('Paste the Notion page link');
+    if (!url) return;
+    const btn = veil.querySelector('[data-addnotion]');
+    btn.textContent = 'Reading…';
+    btn.disabled = true;
+    try {
+      const page = await notionText(url);
+      const text = [page.title, page.text].filter(Boolean).join('\n').trim();
+      if (!text) throw new AiError('That Notion Page Has No Text In It', 'empty');
+      addKnow({ id: uid(), kind: 'notion', name: page.title || 'Notion Page', url: url.trim(), text: text.slice(0, KNOW_PER_SOURCE), at: Date.now() });
+      toast(`Added "${page.title || 'Notion Page'}"`);
+    } catch (e) {
+      toast(e.message || 'Could Not Read That Page', true);
+    }
+    btn.textContent = '+ Notion Page';
+    btn.disabled = false;
+    paintKnow();
+  };
+
+  veil.querySelector('[data-addfile]').onclick = () => {
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = 'text/plain,text/markdown,.md,.txt,.json,.csv';
+    inp.onchange = async () => {
+      const f = inp.files?.[0];
+      if (!f) return;
+      try {
+        const text = (await f.text()).trim();
+        if (!text) throw new Error('That File Is Empty');
+        const id = uid();
+        await putExample(id, f);
+        addKnow({ id, kind: 'file', name: f.name, text: text.slice(0, KNOW_PER_SOURCE), at: Date.now() });
+        toast('Knowledge File Added');
+      } catch (e) {
+        toast(e.message || 'Could Not Read That File', true);
+      }
+    };
+    inp.click();
+  };
 
   // ---- style list editing -------------------------------------------
   const stylesBox = veil.querySelector('[data-styles]');
@@ -510,10 +623,15 @@ async function showSettings(bot) {
     paintExamples(row);
   }
   stylesBox?.querySelectorAll('.bs-style').forEach(wireStyleRow);
+  // Reorder by the grip. The order of this list IS the order of the chips
+  // on the card, so it is worth being able to set.
+  const wireSort = () => sortable(stylesBox, { item: '.bs-style', handle: '.bs-grip', axis: 'y' });
+  if (stylesBox) wireSort();
 
   const addStyleRow = (st) => {
     stylesBox.insertAdjacentHTML('beforeend', styleRow(st));
     wireStyleRow(stylesBox.lastElementChild);
+    wireSort();
     stylesBox.lastElementChild.scrollIntoView({ block: 'nearest' });
   };
 
@@ -547,6 +665,7 @@ async function showSettings(bot) {
 
   veil.querySelector('[data-x="reset"]').onclick = async () => {
     for (const st of cfg.styles || []) for (const r of st.examples || []) await deleteExample(r.id).catch(() => {});
+    for (const k of cfg.knowledge || []) if (k.kind === 'file') await deleteExample(k.id).catch(() => {});
     for (const id of addedBlobs.keys()) await deleteExample(id).catch(() => {});
     cfgCache.delete(bot.id);
     await putConfig(bot.id, {});
@@ -571,6 +690,7 @@ async function showSettings(bot) {
       } else patch[key] = el.value;
     });
     if (!String(patch.system || '').trim()) patch.system = bot.system;
+    patch.knowledge = knowList();
     if (stylesBox) {
       patch.styles = [...stylesBox.querySelectorAll('.bs-style')].map((row) => ({
         id: row.dataset.id,
@@ -620,9 +740,26 @@ async function videoFrameDataUrl(file, max = 1600) {
   }
 }
 
+const GRIP = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>';
+
+const KNOW_ICON = {
+  notion: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h6"/><path d="M9 13h6m-6 4h4"/></svg>',
+  file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/><path d="M9 12h6m-6 4h6"/></svg>',
+};
+
+const knowRow = (k) => `
+  <div class="bs-knowrow" data-kid="${esc(k.id)}">
+    <span class="bs-knowic">${KNOW_ICON[k.kind] || KNOW_ICON.file}</span>
+    <span class="bs-knowname">${esc(k.name)}</span>
+    <span class="chip-neutral">${k.kind === 'notion' ? 'Notion' : 'File'}</span>
+    <span class="bs-knowsize">${Math.round((k.text || '').length / 100) / 10}k</span>
+    <button class="mini mini-danger" data-kdel="${esc(k.id)}" aria-label="Remove" title="Remove">&times;</button>
+  </div>`;
+
 const styleRow = (s) => `
   <div class="bs-style" data-id="${esc(s.id)}" data-examples="${esc(JSON.stringify(s.examples || []))}">
     <div class="bs-style-top">
+      <span class="bs-grip" title="Drag To Reorder" aria-hidden="true">${GRIP}</span>
       <input data-sname value="${esc(s.name)}" placeholder="Name" maxlength="24">
       <span class="bot-flex"></span>
       <button class="mini mini-danger" data-del aria-label="Remove Style" title="Remove Style">&times;</button>
@@ -716,7 +853,9 @@ async function runText(card, bot, cfg, vals, say, signal) {
   say('Thinking…');
   const out = card.querySelector('[data-out]');
   out.innerHTML = `<div class="run-skel">${'<div class="skel-line"></div>'.repeat(Math.min(5, cfg.count || 5))}</div>`;
-  const text = await aiText(cfg.system || bot.system, bot.prompt(vals, cfg), signal);
+  const know = await knowledgeBlock(cfg, say, signal);
+  say('Thinking…');
+  const text = await aiText(withKnowledge(cfg.system || bot.system, know), bot.prompt(vals, cfg), signal);
   const parsed = parseJson(text);
   const items = Array.isArray(parsed) ? parsed
     : (parsed && Array.isArray(parsed.cues) ? parsed.cues
@@ -775,13 +914,34 @@ async function runImage(card, bot, cfg, vals, styleId, say, signal, extra = '') 
   const out = card.querySelector('[data-out]');
   out.innerHTML = `<div class="img-grid">${'<div class="img-skel"></div>'.repeat(n)}</div>`;
 
+  const know = await knowledgeBlock(cfg, say, signal);
+  // An image model here is text-to-image: knowledge cannot be handed to it
+  // directly, so when a bot HAS knowledge one fast text call rewrites the
+  // brief through it first. Bots with no knowledge skip this entirely and
+  // run exactly as fast as before.
+  if (know && vals.brief) {
+    say('Applying Knowledge…');
+    try {
+      const framed = await aiText(
+        withKnowledge('You turn a coach\'s rough brief into a short, concrete subject line for an image generator.', know),
+        `Brief: ${vals.brief}\n\nRewrite this as ONE sentence of at most 45 words describing exactly what the image should show, using the coach's own terminology and structure from the primary knowledge. Describe the subject only - no style words, no camera words. Return only the sentence.`,
+        signal,
+      );
+      const line = String(framed || '').trim().replace(/^["']|["']$/g, '');
+      if (line && line.length > 12) vals = { ...vals, brief: line };
+    } catch (e) {
+      if (e.name === 'AbortError') throw e;
+      console.warn('knowledge framing failed', e.message);
+    }
+  }
+
   let style = (cfg.styles || []).find((st) => st.id === styleId) || null;
   if (styleId === 'best') {
     say('Choosing A Style…');
     try {
       const names = (cfg.styles || []).map((st) => `${st.name}: ${st.prompt}`).join('\n');
       const pick = await aiText(
-        cfg.system || bot.system,
+        withKnowledge(cfg.system || bot.system, know),
         `Subject: ${vals.brief}\n\nCandidate styles:\n${names}\n\nChoose the single most effective style for this subject - or invent a better one. Return JSON: {"name":"...","prompt":"the full style description"}`,
         signal,
       );

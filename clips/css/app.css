@@ -6,8 +6,13 @@
 /* ---------------------------------------------------------- library */
 .clib { flex: 1; padding: 24px clamp(16px, 3vw, 40px); background: var(--page); overflow-y: auto; }
 .clib-title {
-  font-size: 11px; font-weight: 600; text-transform: uppercase;
-  letter-spacing: 0.08em; color: var(--mist); margin: 22px 4px 10px;
+  /* CTH SECTION LABEL (2026-08-27, Tony's call). Replaces the 11px
+     uppercase grey label the whole suite used: Title Case, ink, bold, a
+     little larger than body, so a section reads as a heading. The markup
+     already carried Title Case text - the caps were the css. Same values
+     in clips, diagrams and slides; keep the three in step. */
+  font-size: 15px; font-weight: 700; text-transform: none;
+  letter-spacing: -0.01em; color: var(--ink); margin: 26px 4px 12px;
 }
 .clib-title:first-child { margin-top: 0; }
 .clib-recents { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 6px; }
@@ -399,8 +404,13 @@
 .pe-body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 26px 18px; background: var(--page); }
 .pe-section { padding-top: 18px; }
 .pe-title {
-  font-size: 11px; font-weight: 600; text-transform: uppercase;
-  letter-spacing: 0.08em; color: var(--mist); margin: 0 0 8px 2px;
+  /* CTH SECTION LABEL (2026-08-27, Tony's call). Replaces the 11px
+     uppercase grey label the whole suite used: Title Case, ink, bold, a
+     little larger than body, so a section reads as a heading. The markup
+     already carried Title Case text - the caps were the css. Same values
+     in clips, diagrams and slides; keep the three in step. */
+  font-size: 15px; font-weight: 700; text-transform: none;
+  letter-spacing: -0.01em; color: var(--ink); margin: 0 0 10px;
 }
 
 /* One grid, shared by the column header and every row beneath it, so the

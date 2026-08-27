@@ -84,6 +84,9 @@
     0 1px 12px 0 rgb(0 0 0 / 0.06),
     0 0 1px 0 rgb(0 0 0 / 0.32);
   --field: var(--n-200);
+  /* The lighter fill for a form that stacks big fields: n-200 reads far
+     heavier as a full-width slab than as one small input (2026-08-27). */
+  --field-soft: var(--n-100);
   --field-ring-hover: inset 0 0 0 2px var(--n-300);
   --field-ring-focus: inset 0 0 0 2px var(--n-400);
 }
@@ -1078,8 +1081,13 @@ input:focus, select:focus, textarea:focus { outline: none; }
 /* ---------------------------------------------- home page (2026-08-25) */
 .dlib { flex: 1; padding: 24px clamp(16px, 3vw, 40px); background: var(--page); overflow-y: auto; }
 .dlib-title {
-  font-size: 11px; font-weight: 600; text-transform: uppercase;
-  letter-spacing: 0.08em; color: var(--mist); margin: 22px 4px 10px;
+  /* CTH SECTION LABEL (2026-08-27, Tony's call). Replaces the 11px
+     uppercase grey label the whole suite used: Title Case, ink, bold, a
+     little larger than body, so a section reads as a heading. The markup
+     already carried Title Case text - the caps were the css. Same values
+     in clips, diagrams and slides; keep the three in step. */
+  font-size: 15px; font-weight: 700; text-transform: none;
+  letter-spacing: -0.01em; color: var(--ink); margin: 26px 4px 12px;
 }
 .dlib-title:first-child { margin-top: 0; }
 .dlib-note { color: var(--mist); padding: 8px 6px; font-size: 13px; }

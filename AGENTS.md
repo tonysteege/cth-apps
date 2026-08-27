@@ -417,18 +417,27 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   as compact tiles: icon, name, arrow. No descriptions - a short board
   beats a tall one. A new app is inserted in alphabetical order, never
   appended.
+- **SECTION LABELS ARE TITLE CASE, INK, BOLD** (2026-08-27, Tony's call),
+  suite-wide: `font-size: 15px; font-weight: 700; text-transform: none;
+  letter-spacing: -0.01em; color: var(--ink)`. This replaced the 11px
+  uppercase-grey label every app used - the markup already carried Title
+  Case text, the caps were the css. The same values are written into
+  `.pe-title` and `.clib-title` (clips), `.dlib-title` (diagrams) and
+  `.ph-title` (slides); keep the four in step. On a CARD the same label
+  steps down to 13px (`.run-head .pe-title`) - 15px dominates a 268px
+  column - but keeps the case, colour and weight. Table column headers
+  (`.pe-head`, `.log-cols`) and micro column labels (`.side-label`) are a
+  different thing and stay as they are.
 - **Type ramp.** Chrome tops out at 600 (400 body / 500 labels / 600
-  headings). 700 is used only for SLIDE CONTENT, which is read across a
+  headings), except the section label above at 700. 700 is used only for SLIDE CONTENT, which is read across a
   room. 800 is NOT in the BoardUI ramp and survives in exactly four places,
   all of which mirror committed DIAGRAM CONTENT so the editing field
   matches what `flat.js` draws: `.ed-input`, `.ed-input-chip`,
   `.ed-input-flabel` and `.pmenu-chip` (plus `.an-textinput` in Clips).
-  Do not "tidy" those to 600. ONE DELIBERATE EXCEPTION was added on
-  2026-08-27 at Tony's explicit request: `.bot-settings .pe-title`, the
-  section labels in the Bots settings sheet, are 15px/800 Title Case in
-  ink instead of the 11px uppercase grey `.pe-title`. It is scoped to
-  `.bot-settings` so the Clips panel editor, which shares the class, is
-  untouched. Anything else asking for 800 still needs Tony's call.
+  Do not "tidy" those to 600. (A 15px/800 Bots section label existed for
+  one afternoon on 2026-08-27; Tony asked for 700 instead, which is now
+  the suite-wide section label - see above. Nothing else may reach 800
+  without his call.)
 - **Colour.** The neutral ramp plus ONE accent. Danger is `--danger` /
   `--danger-soft`; no raw `#dc2626` or `rgba(180, 35, 24, ...)`.
 - **Motion.** `var(--dur)` (150ms), never loose `.12s` / `.15s` values.
@@ -490,13 +499,46 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   calls. Never imply to Tony that the picture itself is being sent.
   Uploads are not committed until Save: Cancel deletes what it added,
   and removals only become permanent on Save.
-- SETTINGS SECTION ORDER IS Card, Behaviour, Instructions, Styles
+- **KNOWLEDGE FILES ARE A BOT'S PRIMARY SOURCES** (2026-08-27, Tony's
+  call): up to 6 Notion pages or text files it treats as authoritative,
+  above whatever the model happens to know. They live on the config as
+  `knowledge: [{id, kind, name, url?, text, at}]`; a file's bytes go in
+  the same `examples` store. Two rules make this behave. A NOTION PAGE IS
+  RE-READ ON EVERY RUN through the Worker's `/notion/page/<id>` (60-second
+  edge cache), falling back to the snapshot taken when it was added if the
+  fetch fails - a source that goes stale the day it is attached is not a
+  source, and a page that cannot be reached must not take the bot down
+  with it. And IT IS BUDGETED: the Worker caps a prompt at 8000
+  characters, so the block is capped at 4200 and split evenly between
+  sources rather than letting the first one eat the room. It is injected
+  into the SYSTEM message. Because an image model here is text-to-image, a
+  bot that HAS knowledge runs one extra fast text call that rewrites the
+  brief through it first; a bot with none skips that entirely and runs
+  exactly as fast as before.
+- SETTINGS SECTION ORDER IS Card, Behaviour, Instructions, Knowledge
+  Files, Styles
   (2026-08-27, Tony's call). Styles goes LAST because it is by far the
   tallest section once examples are attached, and the global instruction
   everything inherits belongs above it, not past a scroll of style rows.
   A style's instruction is a TEXTAREA that grows with its text (64px to
   320px, `resize: vertical`) - it was a 32px input showing six words of a
-  forty-word description.
+  forty-word description. Style rows REORDER by their grip, and that order
+  is the order of the chips on the card. Settings fields use
+  `--field-soft` (n-100 with an n-200 hairline), not `--field`: the sheet
+  stacks big slabs of field where a card shows one small input, and n-200
+  reads far heavier at that size.
+- **REORDERING IS `js/sortable.js`, NEVER HTML5 DRAG-AND-DROP** (both the
+  board and the style list). HTML5 DnD drags a translucent SNAPSHOT while
+  the element stays put, then plays its own un-cancellable snap-back on
+  drop - that jump was the bug. The pointer sortable moves the real
+  element, FLIP-animates its neighbours as the order changes, and lands
+  the card into its new slot. Two things in it are load-bearing: every
+  frame CLEARS the transform, re-measures the layout box and re-derives
+  the transform, because re-inserting the element mid-drag moves its
+  layout position and the same transform would jump it; and the move/up
+  listeners live on the WINDOW, not the grip - relying on pointer capture
+  means a lost capture never fires `end`, and `is-sorting` (which sets
+  `pointer-events: none` on every other card) sticks until a reload.
 - A NUMBER SETTING IS CLAMPED ON SAVE, not just in the input's min/max.
   An empty or unparseable field used to persist 0 or NaN straight into
   the prompt ("Give exactly NaN cue options") and stay there.
