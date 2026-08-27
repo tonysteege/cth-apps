@@ -773,7 +773,34 @@ function onTlUp() {
 
 // ------------------------------------------------------------- tag bar
 
-function keyBadge(k) { return k ? `<span class="tag-key">${esc(k.toUpperCase())}</span>` : ''; }
+// A capital in the record means Shift plus that letter, so the badge has to
+// show the difference or `g` and `G` look like the same button.
+export function keyLabel(k) {
+  if (!k) return '';
+  return k !== k.toLowerCase() ? `⇧${k}` : k.toUpperCase();
+}
+function keyBadge(k) { return k ? `<span class="tag-key">${esc(keyLabel(k))}</span>` : ''; }
+
+// Duplicate keys, said once per key per session. A panel saved before the
+// editor started preventing them can still hold a pair, and the symptom -
+// one button simply never firing - gives no clue on its own.
+const dupeSaid = new Set();
+function warnDupeKey(key, hits) {
+  if (dupeSaid.has(key)) return;
+  dupeSaid.add(key);
+  const names = hits.map((b) => b.label).join(' and ');
+  toast(`${keyLabel(key)} Is On ${names} - Only ${hits[0].label} Fires. Open Edit Buttons To Fix It`, true);
+}
+
+// Every key carried by more than one button, for the check on open.
+export function duplicateKeys(buttons) {
+  const seen = new Map();
+  for (const b of buttons || []) {
+    if (!b.key) continue;
+    seen.set(b.key, [...(seen.get(b.key) || []), b.label]);
+  }
+  return [...seen.entries()].filter(([, v]) => v.length > 1);
+}
 
 // The tag buttons live in a slim vertical side panel (moved from a two-row
 // bar under the timeline, 2026-08-25, Tony's call): the rows were the widest
@@ -792,7 +819,7 @@ export function paintBar() {
     // re-keys and re-colours exactly like its neighbours, which is the whole
     // point of it being a real button rather than an injected one.
     if (b.act === 'players') return `
-    <button class="tag-btn tag-btn-players" draggable="true" data-drag="${b.id}" data-act="players" style="--c:${b.color};--fg:${btnFg(b.color)}" title="Tag The Players In This Clip${b.key ? ` (${b.key.toUpperCase()})` : ''}. Drag To Reorder">
+    <button class="tag-btn tag-btn-players" draggable="true" data-drag="${b.id}" data-act="players" style="--c:${b.color};--fg:${btnFg(b.color)}" title="Tag The Players In This Clip${b.key ? ` (${keyLabel(b.key)})` : ''}. Drag To Reorder">
       <span class="tag-btn-word">${esc(btnLabel(b.label))}</span>${keyBadge(b.key)}
     </button>`;
     return b.tier === 1 ? `
@@ -1272,7 +1299,7 @@ export function paintLog() {
           <span class="log-time">${fmtHMS(c.in)}</span>
           <span class="log-rate">${RATINGS.map((r) => `<i class="rate-dot${(c.tags || []).includes(r.tag) ? ' on' : ''}" style="--c:${r.color}" title="${r.tag}"></i>`).join('')}</span>
           <span class="log-name">${esc(c.name || c.label)}</span>
-          <input class="log-tagline" data-tagrow="${c.id}" list="vpTagOpts" value="${esc(tagLine(c))}" placeholder="tags" autocomplete="off" spellcheck="false">
+          <input class="log-tagline" data-tagrow="${c.id}" list="vpTagOpts" value="${esc(tagLine(c))}" autocomplete="off" spellcheck="false" aria-label="Tags">
         </div>`).join('') || '<div class="log-empty">No Clips Yet - Press A Tag Button (Or Its Key) While The Video Plays.</div>'}
     </div>`;
 
@@ -1419,7 +1446,7 @@ function openPanelEditor() {
     <div class="sheet sheet-pe" role="dialog" aria-modal="true" aria-labelledby="peTitle">
       <div class="pe-top">
         <h3 id="peTitle">Tag Buttons</h3>
-        <p>Clip Buttons mark a clip at the playhead - Lead is seconds before it, Lag is seconds after. Tag Buttons toggle a #tag on the selected clip. A key is one letter. Drag a row by its handle to reorder it, and use a divider to group buttons in the side panel. Players opens the roster instead of tagging, so its name is fixed, but it drags, re-keys and re-colours like any other button.</p>
+        <p>Clip Buttons mark a clip at the playhead - Lead is seconds before it, Lag is seconds after. Tag Buttons toggle a #tag on the selected clip. A key is one letter or digit, and a capital means Shift plus that letter - so <b>g</b> and <b>G</b> are two different shortcuts and you never have to fight over a letter. Typing a key another button already holds moves it, and clears the old one. Drag a row by its handle to reorder it, and use a divider to group buttons in the side panel. Players opens the roster instead of tagging, so its name is fixed, but it drags, re-keys and re-colours like any other button.</p>
       </div>
       <div class="pe-body">
         <section class="pe-section">
@@ -1528,27 +1555,57 @@ function openPanelEditor() {
     i: 'Set Clip In', o: 'Set Clip Out', f: 'Freeze Frame',
     ',': 'Back One Frame', '.': 'Forward One Frame',
   };
+  // Keys are CASE-SENSITIVE here: `g` and `G` (Shift+G) are two shortcuts,
+  // which is what stops twenty buttons fighting over twenty-six letters.
+  // RESERVED is lowercase only, so every capital is free ground.
+  const nameOf = (f) => f.closest('.pe-row')?.querySelector('.pe-label')?.value.trim() || 'that button';
   const markKeys = () => {
     const fields = [...wrap.querySelectorAll('.pe-key')];
     const count = {};
     for (const f of fields) {
-      const v = f.value.trim().toLowerCase();
+      const v = f.value.trim();
       if (v) count[v] = (count[v] || 0) + 1;
     }
     for (const f of fields) {
-      const v = f.value.trim().toLowerCase();
+      const v = f.value.trim();
       const dup = v && count[v] > 1;
       const takes = v && RESERVED[v];
       f.classList.toggle('pe-key--dup', !!dup);
       f.classList.toggle('pe-key--takes', !!takes && !dup);
+      if (v) f.classList.remove('pe-key--lost');
       f.title = dup
-        ? `${v.toUpperCase()} is on more than one button - only the first will fire. Give one of them a different key.`
+        ? `${keyLabel(v)} is on more than one button - only the first will fire.`
         : takes
-          ? `${v.toUpperCase()} normally does ${takes}. This button takes it over.`
-          : 'One letter. Leave blank for no shortcut.';
+          ? `${keyLabel(v)} normally does ${takes}. This button takes it over.`
+          : f.classList.contains('pe-key--lost')
+            ? f.title
+            : 'One letter or digit. A capital means Shift plus that letter, which is a separate shortcut. Blank for none.';
     }
   };
-  wrap.addEventListener('input', (e) => { if (e.target.classList.contains('pe-key')) markKeys(); });
+  // Typing a key that another button already holds TAKES IT: the previous
+  // holder is cleared and told so. A duplicate is never what anyone wants -
+  // only the first of the pair ever fires - so resolving it as you type
+  // beats saving a panel with a button that silently does nothing.
+  wrap.addEventListener('input', (e) => {
+    const f = e.target;
+    if (!f.classList || !f.classList.contains('pe-key')) return;
+    const v = f.value.trim();
+    if (v) {
+      // Collect the losers first and say it once. A key can be on more than
+      // one button already - that is the very state this is here to clean up
+      // - and one toast per loser would fire twice for the same keystroke.
+      const lost = [];
+      for (const other of wrap.querySelectorAll('.pe-key')) {
+        if (other === f || other.value.trim() !== v) continue;
+        other.value = '';
+        other.classList.add('pe-key--lost');
+        other.title = `${keyLabel(v)} moved to ${nameOf(f)}. Give this one another key.`;
+        lost.push(nameOf(other));
+      }
+      if (lost.length) toast(`${keyLabel(v)} Moved To ${nameOf(f)} - ${lost.join(' And ')} ${lost.length > 1 ? 'Have' : 'Has'} No Key Now`);
+    }
+    markKeys();
+  });
   // Adding, copying or deleting a row changes the picture too, and those run
   // through the click handler below, so re-check after it has done its work.
   wrap.addEventListener('click', () => setTimeout(markKeys, 0));
@@ -1600,7 +1657,11 @@ function openPanelEditor() {
         id: r.dataset.id,
         tier,
         label: r.querySelector('.pe-label').value.trim() || 'Untitled',
-        key: r.querySelector('.pe-key').value.trim().toLowerCase(),
+        // NOT lowercased (2026-08-27). A capital is a DIFFERENT shortcut -
+        // Shift plus the letter - which doubles the key space from 26 to 52
+        // and is what lets `g` stay Goal while `G` becomes nzg. Every key
+        // saved before this is lowercase and behaves exactly as it did.
+        key: r.querySelector('.pe-key').value.trim(),
         color: r.querySelector('.pe-color').value,
         // `act` is carried back out of the row. Without this the save would
         // read Players as an ordinary tag button and it would start
@@ -1645,9 +1706,17 @@ function onKey(e) {
   // A key typed into the editor is an explicit instruction and outranks a
   // built-in default. The editor flags the collision as you type, so taking
   // a transport key over is a choice, never a surprise.
-  const btn = cur.settings.panel.buttons.find((b) => b.key && b.key === k);
-  if (btn) {
+  // Matched against e.key EXACTLY, not the lowercased k, so `g` and `G` are
+  // two different shortcuts. Shift is therefore a whole second alphabet and
+  // nobody has to fight over a letter.
+  const hits = cur.settings.panel.buttons.filter((b) => b.key && b.key === e.key);
+  if (hits.length) {
     stop();
+    // A key on two buttons is always a mistake and only the first would ever
+    // fire. The editor prevents new ones; this catches a panel saved before
+    // it did, and says so instead of silently dropping the other button.
+    if (hits.length > 1) warnDupeKey(e.key, hits);
+    const btn = hits[0];
     if (btn.act === 'players') openPlayers();
     else if (btn.tier === 1) pressClipButton(btn);
     else pressTagButton(btn);
@@ -1797,6 +1866,13 @@ export async function openPlayer(game, videoUrl, h = {}) {
   paintBar();
   paintLog();
   status('Saved');
+  // Say it on open rather than waiting for the key to be pressed: a dead
+  // shortcut is invisible until the moment it is needed, which at game speed
+  // is the worst moment to discover it.
+  const dupes = duplicateKeys(cur.settings.panel.buttons);
+  if (dupes.length) {
+    toast(`${dupes.map(([k, names]) => `${keyLabel(k)} Is On ${names.join(' And ')}`).join('; ')} - Only The First Fires. Open Edit Buttons To Fix It`, true);
+  }
   raf();
 }
 

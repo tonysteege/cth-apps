@@ -349,6 +349,33 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   you type - `pe-key--dup` (danger ring: two buttons on one letter, only the
   first fires) and `pe-key--takes` (grey ring: this button takes a transport
   key over) - so a takeover is a choice, never a surprise.
+- **KEYS ARE CASE-SENSITIVE: a capital means Shift** (2026-08-27, Tony's
+  call). `g` and `G` are two different shortcuts, which takes the key space
+  from 26 to 52 and is the answer to a panel with twenty buttons on it.
+  `save` no longer lowercases the field and `onKey` matches `e.key` exactly,
+  NOT the lowercased `k` the transport handlers use. Consequences:
+  - Every key saved before this is lowercase and behaves exactly as it did.
+  - `.pe-key` must carry NO `text-transform` - lowercasing the field visually
+    would hide the one thing that now distinguishes two shortcuts.
+  - Badges and titles go through `keyLabel()`, which renders a capital as
+    `⇧G`. Never `toUpperCase()` a key for display again: it makes `g` and `G`
+    look identical.
+  - RESERVED (the transport list) is lowercase only, so every capital is free
+    ground and can never collide with a transport key.
+- **A DUPLICATE KEY IS ALWAYS A MISTAKE AND IS RESOLVED, NOT JUST FLAGGED**
+  (2026-08-27). This was the live bug: Tony had `nzg` on `g` and `nzr` on `r`
+  alongside the default Goal=g and Forecheck=r, and since the lookup takes
+  the FIRST match, nzg and nzr simply never fired with nothing to say why.
+  Three layers now:
+  - Typing a key another button holds MOVES it: the previous holder is
+    cleared, marked `pe-key--lost`, and named in one toast. Collect the
+    losers and toast once - a key can already be on two buttons, and a toast
+    per loser fires twice for one keystroke.
+  - `openPlayer` runs `duplicateKeys()` on open and names every clash, because
+    a dead shortcut is invisible until the moment it is needed, which at game
+    speed is the worst moment to find out.
+  - `onKey` filters rather than finds, fires the first, and warns once per key
+    per session for a panel saved before any of this existed.
 - **The panel editor is a real form** (2026-08-26, Tony's call). Every
   `.pe-` class it uses was referenced by `player.js` and defined in NO
   stylesheet, so the dialog rendered as a wrapping stack of raw inputs with
