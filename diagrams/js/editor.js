@@ -472,10 +472,17 @@ function svgEl(x) {
     </g>`;
   }
   if (x.type === 'box' || x.type === 'circle') {
-    const fill = `fill="${colorOf(x.color)}" fill-opacity="${x.alpha == null ? 0.3 : x.alpha}"`;
+    // The optional `outline` (2026-08-27): absent means the light wash
+    // these have always drawn, so every saved diagram is unchanged. This
+    // must stay in step with drawEl in flat.js - same rule as always.
+    const ow = x.width || Math.max(4, Math.min(x.w, x.h) * 0.02);
+    const paint = x.outline
+      ? `fill="none" stroke="${colorOf(x.color)}" stroke-width="${ow}" stroke-opacity="${x.alpha == null ? 1 : Math.max(x.alpha, 0.9)}"`
+      : `fill="${colorOf(x.color)}" fill-opacity="${x.alpha == null ? 0.3 : x.alpha}"`;
+    const inset = x.outline ? ow / 2 : 0;
     const shape = x.type === 'circle'
-      ? `<ellipse cx="${x.x + x.w / 2}" cy="${x.y + x.h / 2}" rx="${x.w / 2}" ry="${x.h / 2}" ${fill}></ellipse>`
-      : `<rect x="${x.x}" y="${x.y}" width="${x.w}" height="${x.h}" rx="${Math.min(x.w, x.h) * 0.06}" ${fill}></rect>`;
+      ? `<ellipse cx="${x.x + x.w / 2}" cy="${x.y + x.h / 2}" rx="${Math.max(1, x.w / 2 - inset)}" ry="${Math.max(1, x.h / 2 - inset)}" ${paint}></ellipse>`
+      : `<rect x="${x.x + inset}" y="${x.y + inset}" width="${Math.max(1, x.w - inset * 2)}" height="${Math.max(1, x.h - inset * 2)}" rx="${Math.min(x.w, x.h) * 0.06}" ${paint}></rect>`;
     const fs = Math.round(shapeLabelSize(x));
     const label = x.label
       ? `<text x="${x.x + x.w / 2}" y="${x.y + x.h / 2}" fill="${labelInkOn(x.color)}" font-family="Inter, sans-serif" font-weight="800" font-size="${fs}" text-anchor="middle" dominant-baseline="central">${esc(x.label)}</text>`

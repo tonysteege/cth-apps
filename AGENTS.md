@@ -94,6 +94,10 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
 
 ## Hard rules
 
+0. Box and circle carry an optional additive `outline` (2026-08-27):
+   absent means the light wash they have always drawn, so every saved
+   diagram is unchanged; set, they render as a solid ring. Both `drawEl`
+   (flat.js) and `svgEl` (editor.js) implement it - rule 3 applies.
 1. **Never break saved diagrams.** They live in users' IndexedDB as
    `{ id, name, notes, folder?, created, updated, thumb, state }` where
    `state` is `{ v: 1, w, h, bg, seq, elements, rinkNames? }` and elements
@@ -486,6 +490,29 @@ after a live inspection of it. The two live side by side.
   and the geometry in the same units the editor uses. Number chips and the
   selection ring are scaled back out by `--inv` (1/zoom) or they vanish at
   20%. It was a CSS grid first, which is a contact sheet, not a canvas.
+- **THE BOARD IS THE EDITOR, NOT A PREVIEW** (2026-08-27, third pass).
+  Every frame on the board IS a live stage: its elements select, move,
+  resize and edit in place exactly as in the slide view, and the SLIDE
+  NUMBER is the frame's drag handle - dragging the frame body would fight
+  with dragging what is on it. One `wireStage()` serves both views, and
+  every pointer resolves against the stage it landed on, so `ed.stage`
+  (not `ed.i`) decides which slide an edit belongs to. A selection can
+  never straddle two slides.
+- **THE TOOL BAR BELONGS TO THE APP**, floating over both views. It was
+  built inside the slide view, so the board - the view Tony works in - had
+  no tools at all.
+- **A MEDIA TOOL ASKS FOR ITS FILE FIRST, then waits for a click to place
+  it.** The reverse order is what made the image and video tools unusable:
+  they took a click, THEN opened a picker, so the position was chosen
+  before the file existed and nothing appeared to happen. `askFile` and
+  `askRink` return an asset; the caller places it.
+- **SELECTION CHROME IS THE DIAGRAMS CHROME**: the dashed accent box of
+  `.ed-selbox`, the white square grips of `.ed-grip`, the soft dashed band
+  and the #ff2d55 guides. Chrome inside the board canvas is scaled back out
+  by `--inv` (1/zoom) - at 40% an 11px grip is 4px, which is not a target.
+- A SHAPE CARRIES ITS OWN TEXT, its own corner radius (in slide units, so
+  it does not stretch with the box) and four MINDMAP ARROWS that drop a
+  matching shape in that direction joined by a connector. One click.
 - **THE LOGOS COME FROM `cth/logos`**, copied into `slides/logos/` - the
   canonical files, never redrawn. The horizontal lockup is 1000x286
   (3.5:1), the icon square. Both the authored layouts and the Notion

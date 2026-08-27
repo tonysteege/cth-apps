@@ -388,7 +388,9 @@ blockquote { border-left: 3px solid var(--a-500); margin: 0 0 .8em; padding: .2e
    without a second layout ever being written.
    ============================================================ */
 
-.de { display: flex; flex-direction: column; height: 100dvh; background: var(--page); }
+/* --inv is 1 everywhere except inside the board canvas, which overrides
+   it with 1/zoom. Declaring it here means chrome can always divide by it. */
+.de { display: flex; flex-direction: column; height: 100dvh; background: var(--page); position: relative; --inv: 1; }
 .de-head {
   display: flex; align-items: center; gap: 10px;
   padding: 10px clamp(12px, 2vw, 20px);
@@ -408,7 +410,7 @@ blockquote { border-left: 3px solid var(--a-500); margin: 0 0 .8em; padding: .2e
 .de-name:focus { outline: none; background: var(--cloud); box-shadow: inset 0 0 0 2px var(--select); }
 .de-views { display: flex; gap: 4px; }
 .de-viewbtn.on { background-image: var(--grad-primary); color: #fff; border-color: transparent; box-shadow: var(--shadow-nav); }
-.de-body { flex: 1; min-height: 0; display: flex; }
+.de-body { flex: 1; min-height: 0; display: flex; position: relative; }
 
 /* ---- board: a whiteboard, not a contact sheet ---- */
 /* The canvas moves, the slides do not. Panning is then free and the
@@ -445,14 +447,21 @@ blockquote { border-left: 3px solid var(--a-500); margin: 0 0 .8em; padding: .2e
 .de-frame.on::after { box-shadow: 0 0 0 calc(3px * var(--inv)) var(--select); }
 .de-frame.dragging { z-index: 5; }
 .de-frame.dragging .de-framebox { box-shadow: 0 18px 50px rgb(0 0 0 / 0.22); }
-.de-frameadd {
-  position: absolute; top: 0; width: 1600px; height: 900px;
-  border: 8px dashed var(--n-300); border-radius: 10px;
-  background: none; color: var(--n-300); font: inherit; font-size: 240px;
-  line-height: 1; cursor: pointer;
-  transition: border-color var(--dur) ease, color var(--dur) ease;
+/* INSERT WHERE IT BELONGS. A "+" sits in the gap before every slide and
+   one past the end, so a slide can be born in the middle of a deck rather
+   than made last and dragged back (2026-08-27, Tony's call). They are
+   scaled back out of the canvas transform like the numbers are. */
+.de-insert {
+  position: absolute; top: 50%; width: 56px; height: 56px; margin: -28px 0 0 -28px;
+  transform: scale(var(--inv));
+  border: none; border-radius: 50%; cursor: pointer;
+  background: var(--cloud); color: var(--mist);
+  border: 1px solid var(--edge); box-shadow: var(--shadow-2);
+  font: inherit; font-size: 26px; line-height: 1;
+  opacity: 0; transition: opacity var(--dur) ease, color var(--dur) ease, background var(--dur) ease;
 }
-.de-frameadd:hover { border-color: var(--n-400); color: var(--n-400); }
+.de-board:hover .de-insert { opacity: .5; }
+.de-insert:hover { opacity: 1; background: var(--select); color: #fff; border-color: transparent; }
 .de-zoom {
   position: absolute; right: 14px; bottom: 14px;
   display: flex; align-items: center; gap: 4px;
@@ -507,22 +516,67 @@ blockquote { border-left: 3px solid var(--a-500); margin: 0 0 .8em; padding: .2e
 .de-vslot { width: 100%; height: 100%; }
 .de-vempty { display: flex; width: 100%; height: 100%; align-items: center; justify-content: center; color: #737373; font-size: 13px; }
 
-/* Selection chrome sits in its own layer, so redrawing it never tears
-   down a mounted video underneath. */
-.de-handles { position: absolute; inset: 0; pointer-events: none; }
-.de-ring { position: absolute; outline: 2px solid var(--select); outline-offset: 1px; }
+/* SELECTION CHROME IS THE DIAGRAMS CHROME (2026-08-27, Tony's call): the
+   dashed accent box of `.ed-selbox`, the white square grips of `.ed-grip`,
+   the soft dashed band of `.ed-band` and the pink guides of `.ed-guide` -
+   the same values, so the two editors feel like one hand. It sits in its
+   own layer, so redrawing it never tears down a mounted video underneath. */
+.de-handles { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+.de-ring {
+  position: absolute;
+  outline: calc(2px * var(--inv)) dashed var(--select);
+  outline-offset: calc(1px * var(--inv));
+}
+/* HANDLES DO NOT SHRINK WITH THE CANVAS. At 40% an 11px grip is 4px, which
+   is not a target anyone can hit - so they are scaled back out by 1/zoom,
+   the same way the slide numbers are. */
 .de-h {
   position: absolute; width: 11px; height: 11px; margin: -5.5px 0 0 -5.5px;
-  background: #fff; border: 2px solid var(--select); border-radius: 50%;
+  background: #fff; border: 2px solid var(--select); border-radius: 2px;
   pointer-events: auto; cursor: nwse-resize;
+  transform: scale(var(--inv)); transform-origin: center;
 }
 .de-h[data-h="n"], .de-h[data-h="s"] { cursor: ns-resize; }
 .de-h[data-h="w"], .de-h[data-h="e"] { cursor: ew-resize; }
 .de-h[data-h="ne"], .de-h[data-h="sw"] { cursor: nesw-resize; }
-.de-band { position: absolute; background: var(--select-soft); outline: 1px solid var(--select); pointer-events: none; }
-.de-guides { position: absolute; inset: 0; pointer-events: none; }
-.de-gv { position: absolute; top: 0; bottom: 0; width: 1px; background: #ff3b30; }
-.de-gh { position: absolute; left: 0; right: 0; height: 1px; background: #ff3b30; }
+/* The rounding grip is round and filled, so it never reads as a resize. */
+.de-hr { border-radius: 50%; background: var(--select); cursor: nwse-resize; }
+.de-band {
+  position: absolute; background: var(--select-soft);
+  outline: 1.5px dashed var(--select); pointer-events: none;
+}
+.de-guides { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.de-gv { position: absolute; top: 0; bottom: 0; width: 1px; background: #ff2d55; }
+.de-gh { position: absolute; left: 0; right: 0; height: 1px; background: #ff2d55; }
+
+/* MINDMAP ARROWS: four buttons just off a shape's edges. They appear with
+   the selection and grow on hover, so they read as an offer rather than as
+   permanent furniture. */
+.de-spawn {
+  position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px;
+  border: none; border-radius: 50%; cursor: pointer;
+  background: var(--select); opacity: .55;
+  pointer-events: auto; padding: 0;
+  transform: scale(var(--inv)); transform-origin: center;
+  transition: opacity var(--dur) ease, transform var(--dur) ease;
+}
+.de-spawn::before {
+  content: ''; position: absolute; inset: 0;
+  background: #fff;
+  -webkit-mask: no-repeat center/11px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000'%3E%3Cpath d='M11 5h2v14h-2z'/%3E%3Cpath d='M5 11h14v2H5z'/%3E%3C/svg%3E");
+  mask: no-repeat center/11px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000'%3E%3Cpath d='M11 5h2v14h-2z'/%3E%3Cpath d='M5 11h14v2H5z'/%3E%3C/svg%3E");
+}
+.de-spawn:hover { opacity: 1; transform: scale(calc(var(--inv) * 1.18)); }
+
+/* A shape's own label. Centred, and it never takes the pointer unless it
+   is being edited - clicking a shape must select the shape. */
+.de-shapetext {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  padding: 6% 8%; text-align: center; font-weight: 600;
+  line-height: 1.25; pointer-events: none;
+}
+.de-shapetext .de-textin.editing { pointer-events: auto; }
 
 /* ---- notes + tools ---- */
 .de-notes { padding: 0 18px 8px; }
@@ -534,12 +588,33 @@ blockquote { border-left: 3px solid var(--a-500); margin: 0 0 .8em; padding: .2e
 }
 .de-notes textarea:focus { box-shadow: inset 0 0 0 2px var(--select); }
 .de-tools {
-  display: flex; align-items: center; justify-content: center; gap: 5px;
-  padding: 8px; margin: 0 auto 12px; width: fit-content; max-width: calc(100% - 24px);
-  flex-wrap: wrap;
+  position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%);
+  z-index: 30;
+  display: flex; align-items: center; gap: 4px;
+  padding: 7px 8px; max-width: calc(100vw - 24px);
   background: var(--cloud); border: 1px solid var(--edge);
-  border-radius: 18px; box-shadow: var(--shadow-3);
+  border-radius: 16px; box-shadow: var(--shadow-3);
 }
+/* The icons carry their shortcut, quietly. A 20px glyph with an 8px letter
+   crowding it is what the first pass looked like. */
+.de-tools .tb-btn { width: 38px; height: 38px; border-radius: 10px; }
+.de-tools .tb-btn svg { width: 21px; height: 21px; }
+.de-tools .tb-key {
+  position: absolute; right: 4px; bottom: 2px;
+  font-size: 8px; font-weight: 700; color: var(--n-300); pointer-events: none;
+}
+.de-tools .tb-btn.on .tb-key { color: rgb(255 255 255 / .7); }
+.de-tools .tb-word { width: auto; padding: 0 11px; font-size: 12.5px; font-weight: 500; }
+.de-place {
+  position: absolute; left: 50%; bottom: 68px; transform: translateX(-50%);
+  z-index: 30; display: flex; align-items: center; gap: 10px;
+  padding: 7px 8px 7px 14px; border-radius: 999px;
+  background: var(--ink); color: #fff; font-size: 12.5px;
+  box-shadow: var(--shadow-3);
+}
+.de-place[hidden] { display: none; }
+.de-place .mini { background: rgb(255 255 255 / .16); border-color: transparent; color: #fff; }
+.de-place .mini:hover { background: rgb(255 255 255 / .28); color: #fff; }
 
 /* ---- properties ---- */
 .de-props {

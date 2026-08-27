@@ -171,6 +171,17 @@
 .an-tb .tb-btn.on .tb-key { color: rgba(255, 255, 255, 0.8); }
 .an-tb .tb-word { padding-right: 16px; }
 .an-canvas { cursor: crosshair; }
+/* Fill or outline for boxes and circles, as a segmented pair - it is one
+   choice with two states, not two buttons. */
+.an-seg { display: inline-flex; gap: 2px; padding: 2px; background: var(--n-100); border-radius: 9px; }
+.an-segbtn {
+  border: none; background: none; cursor: pointer;
+  font: inherit; font-size: 11.5px; font-weight: 600; color: var(--mist);
+  padding: 4px 9px; border-radius: 7px;
+  transition: background var(--dur) ease, color var(--dur) ease;
+}
+.an-segbtn:hover { color: var(--ink); }
+.an-segbtn.on { background: var(--cloud); color: var(--ink); box-shadow: var(--shadow-card); }
 
 
 /* ============================================================

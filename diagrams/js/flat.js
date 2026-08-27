@@ -285,12 +285,24 @@ function drawElInner(ctx, x) {
   if (x.type === 'pucks') { drawPucksInto(ctx, x); return; }
   if (x.type === 'box' || x.type === 'circle') {
     ctx.save();
-    ctx.globalAlpha = x.alpha == null ? 0.3 : x.alpha;
-    ctx.fillStyle = colorOf(x.color);
+    // AN OPTIONAL `outline` (2026-08-27, Tony's call, additive): absent
+    // means the light wash these have always drawn, and every saved
+    // diagram keeps that. Set, the shape is a solid ring instead - which
+    // is what you want over busy film, where a wash hides the play.
+    const w = x.width || Math.max(4, Math.min(x.w, x.h) * 0.02);
     ctx.beginPath();
-    if (x.type === 'circle') ctx.ellipse(x.x + x.w / 2, x.y + x.h / 2, x.w / 2, x.h / 2, 0, 0, Math.PI * 2);
-    else ctx.roundRect(x.x, x.y, x.w, x.h, Math.min(x.w, x.h) * 0.06);
-    ctx.fill();
+    if (x.type === 'circle') ctx.ellipse(x.x + x.w / 2, x.y + x.h / 2, Math.max(1, x.w / 2 - (x.outline ? w / 2 : 0)), Math.max(1, x.h / 2 - (x.outline ? w / 2 : 0)), 0, 0, Math.PI * 2);
+    else ctx.roundRect(x.x + (x.outline ? w / 2 : 0), x.y + (x.outline ? w / 2 : 0), Math.max(1, x.w - (x.outline ? w : 0)), Math.max(1, x.h - (x.outline ? w : 0)), Math.min(x.w, x.h) * 0.06);
+    if (x.outline) {
+      ctx.globalAlpha = x.alpha == null ? 1 : Math.max(x.alpha, 0.9);
+      ctx.strokeStyle = colorOf(x.color);
+      ctx.lineWidth = w;
+      ctx.stroke();
+    } else {
+      ctx.globalAlpha = x.alpha == null ? 0.3 : x.alpha;
+      ctx.fillStyle = colorOf(x.color);
+      ctx.fill();
+    }
     ctx.restore();
     drawShapeLabel(ctx, x);
     return;

@@ -34,13 +34,19 @@ let ed = null; // { deck, i, sel:Set, view, zoom, pan, dirty }
 
 const BACK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12H4"/><path d="m10 18-6-6 6-6"/></svg>';
 
+// ONE GRID, ONE STROKE, ONE OPTICAL SIZE (2026-08-27, redrawn). The first
+// set was assembled from whatever was to hand: mixed stroke widths, some
+// paths filling their 24-box and others floating in the middle of it, which
+// at 20px reads as a row of different-sized marks. Every glyph below is
+// drawn on the same 24 grid, sits inside the same 3..21 optical box, and
+// carries the same 1.9 stroke - so the row reads as one set.
 const TOOLS = [
-  ['select', 'Select', 'v', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M4.04 4.69a.5.5 0 0 1 .65-.65l16 6.5a.5.5 0 0 1-.06.94l-6.13 1.58a2 2 0 0 0-1.43 1.44l-1.58 6.12a.5.5 0 0 1-.95.07z"/></svg>'],
-  ['text', 'Text', 't', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M4 7V5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5V7"/><path d="M12 4v16"/><path d="M9 20h6"/></svg>'],
-  ['image', 'Image', 'i', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="m4 17 4.5-4.5a2 2 0 0 1 2.8 0L16 17"/></svg>'],
-  ['rink', 'Rink Diagram', 'r', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2.5" y="6" width="19" height="12" rx="6"/><path d="M12 6v12"/><circle cx="12" cy="12" r="2.6"/></svg>'],
-  ['video', 'Video', 'm', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="m10 9.2 5 2.8-5 2.8z"/></svg>'],
-  ['shape', 'Shape', 's', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4" y="4" width="10" height="10" rx="1.6"/><circle cx="15.5" cy="15.5" r="4.6"/></svg>'],
+  ['select', 'Select', 'v', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M5.2 3.6a.6.6 0 0 1 .82-.55l13.5 5.6a.6.6 0 0 1-.05 1.12l-5.1 1.45a2 2 0 0 0-1.38 1.38l-1.45 5.1a.6.6 0 0 1-1.12.05z"/></svg>'],
+  ['text', 'Text', 't', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.6V4.6h16v2"/><path d="M12 4.6v14.8"/><path d="M8.6 19.4h6.8"/></svg>'],
+  ['image', 'Image', 'i', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="2.6"/><circle cx="8.6" cy="10" r="1.7"/><path d="m3.6 17.4 4.6-4.6a2 2 0 0 1 2.83 0l4.6 4.6"/><path d="m14.4 14.6 1.6-1.6a2 2 0 0 1 2.83 0l1.6 1.6"/></svg>'],
+  ['rink', 'Rink', 'r', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="6"/><path d="M12 6v12"/><circle cx="12" cy="12" r="2.7"/></svg>'],
+  ['video', 'Video', 'm', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.6"/><path d="M10.4 9.3v5.4l4.6-2.7z"/></svg>'],
+  ['shape', 'Shape', 's', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="3" y="3" width="10.5" height="10.5" rx="2"/><circle cx="15.6" cy="15.6" r="5.4"/></svg>'],
 ];
 
 const SHAPES = [['rect', 'Rectangle'], ['ellipse', 'Ellipse'], ['line', 'Line'], ['arrow', 'Arrow']];
@@ -83,7 +89,9 @@ function status(word) {
 }
 
 const slide = () => ed.deck.slides[ed.i];
-const elById = (id) => slide().els.find((e) => e.id === id);
+// Always resolve against the stage the selection lives on - on the board
+// that is whichever frame was last touched, not slide `ed.i`.
+const elById = (id) => (slideOf(activeStage()) || slide()).els.find((e) => e.id === id);
 
 // ------------------------------------------------------------- rendering
 
@@ -115,14 +123,33 @@ export function elHtml(e) {
     const fill = e.fill || 'none';
     const stroke = e.stroke || '#0a0a0a';
     const sw = e.sw || 6;
+    // A CORNER RADIUS IS IN SLIDE UNITS, not in the 0..100 viewBox, or it
+    // would stretch with the shape and stop being a radius. The rect is
+    // therefore drawn in the element's own pixel space.
+    const r = Math.max(0, Math.min(Math.min(e.w, e.h) / 2, e.r || 0));
     let svg;
-    if (e.shape === 'ellipse') svg = `<ellipse cx="50" cy="50" rx="${50 - sw / 4}" ry="${50 - sw / 4}" fill="${fill}" stroke="${stroke}" stroke-width="${sw / 4}" vector-effect="non-scaling-stroke"/>`;
-    else if (e.shape === 'line') svg = `<line x1="0" y1="50" x2="100" y2="50" stroke="${stroke}" stroke-width="${sw / 4}" vector-effect="non-scaling-stroke" stroke-linecap="round"/>`;
-    else if (e.shape === 'arrow') svg = `<line x1="2" y1="50" x2="88" y2="50" stroke="${stroke}" stroke-width="${sw / 4}" vector-effect="non-scaling-stroke" stroke-linecap="round"/><polygon points="100,50 84,40 84,60" fill="${stroke}"/>`;
-    else svg = `<rect x="${sw / 8}" y="${sw / 8}" width="${100 - sw / 4}" height="${100 - sw / 4}" rx="${e.r || 0}" fill="${fill}" stroke="${stroke}" stroke-width="${sw / 4}" vector-effect="non-scaling-stroke"/>`;
-    return `<div class="de-el de-shape" data-el="${e.id}" style="${box}"><svg viewBox="0 0 100 100" preserveAspectRatio="none">${svg}</svg></div>`;
+    if (e.shape === 'ellipse') svg = `<ellipse cx="${e.w / 2}" cy="${e.h / 2}" rx="${Math.max(1, e.w / 2 - sw / 2)}" ry="${Math.max(1, e.h / 2 - sw / 2)}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
+    else if (e.shape === 'line') svg = `<line x1="${sw / 2}" y1="${e.h / 2}" x2="${e.w - sw / 2}" y2="${e.h / 2}" stroke="${stroke}" stroke-width="${sw}" stroke-linecap="round"/>`;
+    else if (e.shape === 'arrow') svg = `<line x1="${sw / 2}" y1="${e.h / 2}" x2="${e.w - sw * 2.6}" y2="${e.h / 2}" stroke="${stroke}" stroke-width="${sw}" stroke-linecap="round"/><polygon points="${e.w},${e.h / 2} ${e.w - sw * 3},${e.h / 2 - sw * 1.7} ${e.w - sw * 3},${e.h / 2 + sw * 1.7}" fill="${stroke}"/>`;
+    else svg = `<rect x="${sw / 2}" y="${sw / 2}" width="${Math.max(1, e.w - sw)}" height="${Math.max(1, e.h - sw)}" rx="${r}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
+    // TEXT LIVES INSIDE THE SHAPE (2026-08-27, Tony's call): a box with a
+    // label in it is one object to move, not two to keep together.
+    const t = String(e.text || '');
+    const tc = e.tcolor || (fill !== 'none' && isDark(fill) ? '#ffffff' : '#0a0a0a');
+    const tsize = e.tsize || 34;
+    const label = `<div class="de-shapetext" style="font-size:${(tsize / SLIDE_H) * 100}cqh;color:${esc(tc)}"><div class="de-textin">${esc(t).replace(/\n/g, '<br>')}</div></div>`;
+    return `<div class="de-el de-shape" data-el="${e.id}" style="${box}">`
+      + `<svg viewBox="0 0 ${e.w} ${e.h}" preserveAspectRatio="none">${svg}</svg>${label}</div>`;
   }
   return '';
+}
+
+// Rough luminance, for deciding whether a filled shape wants light text.
+function isDark(hex) {
+  const h = String(hex).replace('#', '');
+  if (h.length < 6) return false;
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) < 0.55;
 }
 
 export function slideHtml(s) {
@@ -189,6 +216,8 @@ function paintShell() {
         <button class="btn btn-ink" id="edPresent" title="Present This Deck">Present</button>
       </header>
       <div class="de-body" id="edBody"></div>
+      <div class="de-tools" id="edTools"></div>
+      <div class="de-place" id="edPlace" hidden></div>
       <input type="file" id="edFile" accept="image/*,video/*" hidden>
     </div>`;
   $('#edBack').onclick = () => { location.hash = ''; };
@@ -197,6 +226,10 @@ function paintShell() {
   $$('.de-viewbtn').forEach((b) => { b.onclick = () => setView(b.dataset.view); });
   $('#edPresent').onclick = () => { void flush(); location.hash = `#/present/${ed.deck.id}`; };
   paintBody();
+  // THE TOOL BAR BELONGS TO THE APP, NOT TO ONE VIEW (2026-08-27, Tony's
+  // call). It used to be built inside the slide view, so the board - the
+  // view he actually works in - simply had no tools at all.
+  paintTools();
 }
 
 function setView(v) {
@@ -238,28 +271,47 @@ function paintBoard() {
       </div>
     </div>`;
   const canvas = $('#edCanvas');
+  // A frame IS a stage: its slide renders live and its elements are the
+  // same interactive elements the slide view has. Editing on the board was
+  // the point of the board (2026-08-27, Tony's call).
   canvas.innerHTML = ed.deck.slides.map((sl, i) => `
     <div class="de-frame" data-slide="${sl.id}" data-i="${i}">
       <span class="de-framen">${i + 1}</span>
-      <div class="de-framebox">${slideHtml(sl)}</div>
-    </div>`).join('') + '<button class="de-frameadd" id="edBoardAdd" title="New Slide">+</button>';
+      <div class="de-framebox de-stagebox" data-stage="${i}">${slideHtml(sl)}<div class="de-guides"></div></div>
+    </div>`).join('')
+    // A "+" between every pair, and one at each end: inserting a slide
+    // where it belongs beats making it last and dragging it back.
+    + ed.deck.slides.map((_, i) => `<button class="de-insert" data-at="${i}" title="Insert A Slide Here">+</button>`).join('')
+    + `<button class="de-insert de-insert-end" data-at="${ed.deck.slides.length}" title="New Slide">+</button>`;
 
   if (!ed.pan) fitBoard(false);
   applyBoardTransform();
   mountSlideVideos(canvas);
+  paintHandles();
 
-  $('#edBoardAdd').onclick = () => addSlide();
+  $$('[data-at]', canvas).forEach((b) => {
+    b.onclick = (e) => { e.stopPropagation(); addSlide('header', Number(b.dataset.at)); };
+  });
   for (const f of $$('.de-frame', canvas)) {
-    f.addEventListener('pointerdown', (e) => onFrameDown(e, f));
-    f.addEventListener('dblclick', () => { ed.i = Number(f.dataset.i); setView('slide'); });
-    f.oncontextmenu = (e) => { e.preventDefault(); slideMenu(e.clientX, e.clientY, Number(f.dataset.i)); };
+    const i = Number(f.dataset.i);
+    // The NUMBER is the slide's own grab handle - dragging the frame body
+    // would fight with dragging the elements on it.
+    f.querySelector('.de-framen').addEventListener('pointerdown', (e) => onFrameDown(e, f));
+    f.querySelector('.de-framen').addEventListener('dblclick', () => { ed.i = i; setView('slide'); });
+    f.oncontextmenu = (e) => {
+      if (e.target.closest('.de-el')) return;
+      e.preventDefault();
+      slideMenu(e.clientX, e.clientY, i);
+    };
+    wireStage(f.querySelector('.de-stagebox'), i);
   }
   const board = $('#edBoard');
   board.addEventListener('wheel', onBoardWheel, { passive: false });
   board.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('.de-frame') || e.target.closest('.de-zoom')) return;
+    if (e.target.closest('.de-frame') || e.target.closest('.de-zoom') || e.target.closest('.de-insert')) return;
     ed.sel.clear();
     paintBoardSel();
+    paintProps();
     startPan(e);
   });
   $$('[data-z]', board).forEach((b) => {
@@ -280,8 +332,11 @@ function applyBoardTransform() {
     const i = Number(f.dataset.i);
     f.style.left = `${i * (SLIDE_W + GAP)}px`;
   }
-  const add = $('#edBoardAdd');
-  if (add) add.style.left = `${ed.deck.slides.length * (SLIDE_W + GAP)}px`;
+  for (const b of $$('.de-insert', canvas)) {
+    const at = Number(b.dataset.at);
+    // Centred in the gap before slide `at`; the end one sits past the last.
+    b.style.left = `${at * (SLIDE_W + GAP) - GAP / 2}px`;
+  }
   const val = $('#edZoomVal');
   if (val) val.textContent = `${Math.round(ed.zoom * 100)}%`;
   // The number chips and the selection ring must not shrink with the
@@ -387,9 +442,7 @@ function onFrameDown(e, frame) {
 }
 
 function paintBoardSel() {
-  for (const f of $$('.de-frame')) {
-    f.classList.toggle('on', ed.sel.has(f.dataset.slide));
-  }
+  for (const f of $$('.de-frame')) f.classList.toggle('on', ed.frameSel === f.dataset.slide);
 }
 
 // ------------------------------------------------------------- slide view
@@ -403,12 +456,10 @@ function paintSlideView() {
         <div class="de-stage" id="edStage"></div>
       </div>
       <div class="de-notes"><textarea id="edNotes" placeholder="Presenter notes…" spellcheck="false"></textarea></div>
-      <div class="de-tools" id="edTools"></div>
     </div>
     <aside class="de-props" id="edProps"></aside>`;
   paintRail();
   paintStage();
-  paintTools();
   paintProps();
   const notes = $('#edNotes');
   notes.value = slide().notes || '';
@@ -443,42 +494,59 @@ function paintRail() {
 
 function paintStage() {
   const stage = $('#edStage');
+  ed.stage = stage;
   const s = slide();
   stage.style.background = s.bg || '#ffffff';
-  stage.innerHTML = `${(s.els || []).map(elHtml).join('')}<div class="de-guides" id="edGuides"></div>`;
+  stage.innerHTML = `${(s.els || []).map(elHtml).join('')}<div class="de-guides"></div>`;
   mountSlideVideos(stage);
+  wireStage(stage, ed.i);
+  paintHandles();
+}
+
+// ONE STAGE IMPLEMENTATION, USED BY BOTH VIEWS. The slide view has one; the
+// board has one per frame. `si` says which slide the stage is showing, so a
+// pointer on the board edits the slide it is actually over.
+function wireStage(stage, si) {
+  if (!stage || stage.dataset.wired) return;
+  stage.dataset.wired = '1';
+  stage.dataset.si = String(si);
   for (const el of $$('.de-el', stage)) {
     const id = el.dataset.el;
-    if (ed.sel.has(id)) el.classList.add('sel');
-    el.addEventListener('pointerdown', (e) => onElDown(e, id));
+    el.addEventListener('pointerdown', (e) => onElDown(e, id, stage));
     el.addEventListener('dblclick', (e) => {
-      const x = elById(id);
-      if (x?.type === 'text') { e.stopPropagation(); editText(id); }
+      const x = elAt(stage, id);
+      if (x?.type === 'text' || x?.type === 'shape') { e.stopPropagation(); editText(id, stage); }
     });
   }
-  paintHandles();
-  stage.addEventListener('pointerdown', onStageDown);
+  stage.addEventListener('pointerdown', (e) => onStageDown(e, stage));
 }
+
+const siOf = (stage) => Number(stage.dataset.si || ed.i);
+const slideOf = (stage) => ed.deck.slides[siOf(stage)];
+const elAt = (stage, id) => slideOf(stage).els.find((e) => e.id === id);
+// The stage the selection currently lives on.
+const activeStage = () => (ed.stage && ed.stage.isConnected ? ed.stage : $('#edStage'));
 
 // Selection chrome and handles live in their own layer, so a repaint of
 // the selection never re-creates the elements underneath it (which would
 // tear down a mounted video mid-drag).
 function paintHandles() {
-  const stage = $('#edStage');
-  $('#edHandles')?.remove();
-  if (!ed.sel.size) return;
+  $$('.de-handles').forEach((h) => h.remove());
+  const stage = activeStage();
+  if (!stage || !ed.sel.size) return;
+  const sl = slideOf(stage);
   const layer = document.createElement('div');
   layer.className = 'de-handles';
-  layer.id = 'edHandles';
   const pc = (v, total) => `${(v / total) * 100}%`;
+  const find = (id) => sl.els.find((e) => e.id === id);
   for (const id of ed.sel) {
-    const e = elById(id);
+    const e = find(id);
     if (!e) continue;
     layer.insertAdjacentHTML('beforeend',
       `<div class="de-ring" style="left:${pc(e.x, SLIDE_W)};top:${pc(e.y, SLIDE_H)};width:${pc(e.w, SLIDE_W)};height:${pc(e.h, SLIDE_H)}"></div>`);
   }
   if (ed.sel.size === 1) {
-    const e = elById([...ed.sel][0]);
+    const e = find([...ed.sel][0]);
     if (e) {
       for (const k of ['nw', 'ne', 'sw', 'se', 'n', 's', 'w', 'e']) {
         const hx = k.includes('w') ? e.x : k.includes('e') ? e.x + e.w : e.x + e.w / 2;
@@ -486,65 +554,98 @@ function paintHandles() {
         layer.insertAdjacentHTML('beforeend',
           `<span class="de-h" data-h="${k}" style="left:${pc(hx, SLIDE_W)};top:${pc(hy, SLIDE_H)}"></span>`);
       }
+      // A ROUNDING HANDLE, the way every vector editor does it: one dot
+      // inside the top-left corner that only a rectangle gets.
+      if (e.type === 'shape' && (e.shape || 'rect') === 'rect') {
+        const inset = Math.max(18, Math.min(Math.min(e.w, e.h) / 2, (e.r || 0) + 18));
+        layer.insertAdjacentHTML('beforeend',
+          `<span class="de-h de-hr" data-h="radius" title="Round The Corners" style="left:${pc(e.x + inset, SLIDE_W)};top:${pc(e.y + inset, SLIDE_H)}"></span>`);
+      }
+      // MINDMAP ARROWS (2026-08-27, Tony's call): four buttons just off a
+      // shape's edges. Pressing one drops a matching shape in that
+      // direction and joins the two with a connector - the FigJam gesture,
+      // and the whole point is that it takes one click, not five.
+      if (e.type === 'shape') {
+        const off = 26;
+        const spots = {
+          n: [e.x + e.w / 2, e.y - off], s: [e.x + e.w / 2, e.y + e.h + off],
+          w: [e.x - off, e.y + e.h / 2], e: [e.x + e.w + off, e.y + e.h / 2],
+        };
+        for (const [dir, [ax, ay]] of Object.entries(spots)) {
+          layer.insertAdjacentHTML('beforeend',
+            `<button class="de-spawn de-spawn-${dir}" data-spawn="${dir}" title="Add A Connected Shape" style="left:${pc(ax, SLIDE_W)};top:${pc(ay, SLIDE_H)}"></button>`);
+        }
+      }
     }
   }
   stage.appendChild(layer);
-  for (const h of $$('.de-h', layer)) {
-    h.addEventListener('pointerdown', (ev) => onHandleDown(ev, h.dataset.h));
+  for (const h of $$('.de-h', layer)) h.addEventListener('pointerdown', (ev) => onHandleDown(ev, h.dataset.h, stage));
+  for (const b of $$('[data-spawn]', layer)) {
+    b.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+    b.addEventListener('click', (ev) => { ev.stopPropagation(); spawnConnected(b.dataset.spawn, stage); });
   }
 }
 
-// Screen pixels to slide units. Everything that reads a pointer goes
-// through here - the stage scales, the geometry does not.
-function toSlide(e) {
-  const r = $('#edStage').getBoundingClientRect();
+// Screen pixels to slide units, for whichever stage was hit. The stage
+// scales; the geometry does not.
+function toSlide(e, stage) {
+  const r = (stage || activeStage()).getBoundingClientRect();
   return { x: ((e.clientX - r.left) / r.width) * SLIDE_W, y: ((e.clientY - r.top) / r.height) * SLIDE_H };
 }
 
 let drag = null;
 
-function onStageDown(e) {
-  if (e.target.closest('.de-el') || e.target.closest('.de-h')) return;
-  if (ed.tool !== 'select') { placeTool(toSlide(e)); return; }
-  // Rubber band on empty slide.
-  const p = toSlide(e);
+function onStageDown(e, stage) {
+  if (e.target.closest('.de-el') || e.target.closest('.de-h') || e.target.closest('[data-spawn]')) return;
+  e.stopPropagation();
+  ed.stage = stage;
+  ed.i = siOf(stage);
+  ed.frameSel = slideOf(stage).id;
+  if (ed.tool !== 'select') { placeTool(toSlide(e, stage), stage); return; }
+  const p = toSlide(e, stage);
   ed.sel.clear();
-  drag = { kind: 'band', from: p, to: p };
+  drag = { kind: 'band', stage, from: p, to: p };
   paintHandles();
   paintProps();
+  paintBoardSel();
 }
 
-function onElDown(e, id) {
+function onElDown(e, id, stage) {
   if (ed.tool !== 'select') return;
   e.stopPropagation();
-  const p = toSlide(e);
+  // Selection cannot straddle two slides: landing on a new stage starts a
+  // new selection there.
+  if (ed.stage !== stage) { ed.sel.clear(); ed.stage = stage; ed.i = siOf(stage); ed.frameSel = slideOf(stage).id; }
+  const p = toSlide(e, stage);
   if (e.shiftKey) ed.sel.has(id) ? ed.sel.delete(id) : ed.sel.add(id);
   else if (!ed.sel.has(id)) { ed.sel.clear(); ed.sel.add(id); }
   drag = {
-    kind: 'move', from: p,
-    origs: [...ed.sel].map((z) => ({ ...elById(z) })).filter((z) => z.id),
+    kind: 'move', stage, from: p,
+    origs: [...ed.sel].map((z) => ({ ...elAt(stage, z) })).filter((z) => z.id),
   };
   paintHandles();
   paintProps();
+  paintBoardSel();
 }
 
-function onHandleDown(e, k) {
+function onHandleDown(e, k, stage) {
   e.stopPropagation();
   const id = [...ed.sel][0];
-  drag = { kind: 'resize', h: k, from: toSlide(e), orig: { ...elById(id) } };
+  drag = { kind: k === 'radius' ? 'radius' : 'resize', h: k, stage, from: toSlide(e, stage), orig: { ...elAt(stage, id) } };
 }
 
 function onMove(e) {
-  if (!drag || !ed || ed.view !== 'slide') return;
-  const p = toSlide(e);
+  if (!drag || !ed) return;
+  const stage = drag.stage || activeStage();
+  const p = toSlide(e, stage);
   if (drag.kind === 'band') {
     drag.to = p;
     const r = { x: Math.min(drag.from.x, p.x), y: Math.min(drag.from.y, p.y), w: Math.abs(p.x - drag.from.x), h: Math.abs(p.y - drag.from.y) };
     ed.sel.clear();
-    for (const z of slide().els) {
+    for (const z of slideOf(stage).els) {
       if (z.x < r.x + r.w && z.x + z.w > r.x && z.y < r.y + r.h && z.y + z.h > r.y) ed.sel.add(z.id);
     }
-    paintBand(r);
+    paintBand(r, stage);
     paintHandles();
     return;
   }
@@ -555,22 +656,31 @@ function onMove(e) {
     // rest by the same delta, so a multi-selection keeps its shape.
     if (drag.origs.length === 1) {
       const o = drag.origs[0];
-      const snapped = snap(o, dx, dy);
+      const snapped = snap(o, dx, dy, stage);
       dx = snapped.dx; dy = snapped.dy;
-      showGuides(snapped.guides);
+      showGuides(snapped.guides, stage);
     }
     for (const o of drag.origs) {
-      const x = elById(o.id);
+      const x = elAt(stage, o.id);
       if (!x) continue;
       x.x = Math.round(o.x + dx);
       x.y = Math.round(o.y + dy);
     }
-    repaintGeometry();
+    repaintGeometry(stage);
+    return;
+  }
+  if (drag.kind === 'radius') {
+    const o = drag.orig;
+    const x = elAt(stage, o.id);
+    if (!x) return;
+    // The handle's distance from the corner IS the radius.
+    x.r = Math.round(Math.max(0, Math.min(Math.min(o.w, o.h) / 2, Math.max(p.x - o.x, p.y - o.y) - 18)));
+    repaintShape(stage, x);
     return;
   }
   if (drag.kind === 'resize') {
     const o = drag.orig;
-    const x = elById(o.id);
+    const x = elAt(stage, o.id);
     if (!x) return;
     const k = drag.h;
     let left = o.x; let top = o.y; let right = o.x + o.w; let bottom = o.y + o.h;
@@ -582,27 +692,41 @@ function onMove(e) {
     x.y = Math.round(Math.min(top, bottom));
     x.w = Math.max(40, Math.round(Math.abs(right - left)));
     x.h = Math.max(30, Math.round(Math.abs(bottom - top)));
-    repaintGeometry();
+    repaintGeometry(stage);
+    if (x.type === 'shape') repaintShape(stage, x);
   }
+}
+
+// A shape's svg is drawn in its own pixel space, so a resize or a radius
+// change has to redraw it - the box alone is not enough.
+function repaintShape(stage, x) {
+  const host = stage.querySelector(`.de-el[data-el="${x.id}"]`);
+  if (!host) return;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = elHtml(x);
+  host.innerHTML = tmp.firstElementChild.innerHTML;
+  paintHandles();
 }
 
 function onUp() {
   if (!drag) return;
   const was = drag.kind;
+  const stage = drag.stage;
   drag = null;
-  $('#edBandBox')?.remove();
-  showGuides([]);
-  if (was !== 'band') markDirty();
+  $$('.de-band').forEach((b) => b.remove());
+  showGuides([], stage);
+  if (was !== 'band') { markDirty(); paintRailIfOpen(); }
   paintHandles();
   paintProps();
 }
 
+const paintRailIfOpen = () => { if (ed.view === 'slide') paintRail(); };
+
 // Move and resize only change numbers, so only the boxes need updating -
 // re-rendering the slide would tear down a mounted video on every frame.
-function repaintGeometry() {
-  const stage = $('#edStage');
+function repaintGeometry(stage = activeStage()) {
   for (const el of $$('.de-el', stage)) {
-    const e = elById(el.dataset.el);
+    const e = elAt(stage, el.dataset.el);
     if (!e) continue;
     el.style.left = `${(e.x / SLIDE_W) * 100}%`;
     el.style.top = `${(e.y / SLIDE_H) * 100}%`;
@@ -612,13 +736,12 @@ function repaintGeometry() {
   paintHandles();
 }
 
-function paintBand(r) {
-  let b = $('#edBandBox');
+function paintBand(r, stage = activeStage()) {
+  let b = stage.querySelector('.de-band');
   if (!b) {
     b = document.createElement('div');
-    b.id = 'edBandBox';
     b.className = 'de-band';
-    $('#edStage').appendChild(b);
+    stage.appendChild(b);
   }
   b.style.cssText = `left:${(r.x / SLIDE_W) * 100}%;top:${(r.y / SLIDE_H) * 100}%;width:${(r.w / SLIDE_W) * 100}%;height:${(r.h / SLIDE_H) * 100}%`;
 }
@@ -627,9 +750,9 @@ function paintBand(r) {
 // edges. 10 slide units is about 6 screen pixels at a normal stage size -
 // tight enough to feel deliberate, loose enough to catch.
 const SNAP = 10;
-function snap(o, dx, dy) {
+function snap(o, dx, dy, stage = activeStage()) {
   const guides = [];
-  const others = slide().els.filter((z) => z.id !== o.id);
+  const others = slideOf(stage).els.filter((z) => z.id !== o.id);
   const vx = [0, SLIDE_W / 2, SLIDE_W, ...others.flatMap((z) => [z.x, z.x + z.w / 2, z.x + z.w])];
   const vy = [0, SLIDE_H / 2, SLIDE_H, ...others.flatMap((z) => [z.y, z.y + z.h / 2, z.y + z.h])];
   const tryAxis = (edges, cands, delta) => {
@@ -649,8 +772,8 @@ function snap(o, dx, dy) {
   return { dx, dy, guides };
 }
 
-function showGuides(list) {
-  const g = $('#edGuides');
+function showGuides(list, stage = activeStage()) {
+  const g = stage?.querySelector('.de-guides');
   if (!g) return;
   g.innerHTML = (list || []).map((z) => (z.axis === 'x'
     ? `<i class="de-gv" style="left:${(z.at / SLIDE_W) * 100}%"></i>`
@@ -662,22 +785,35 @@ function showGuides(list) {
 // Editing happens IN PLACE, in the element itself, so the type never jumps
 // between a field and the committed slide - the same rule the Clips text
 // tool follows.
-function editText(id) {
-  const e = elById(id);
-  const host = $(`.de-el[data-el="${id}"] .de-textin`, $('#edStage'));
+function editText(id, stage = activeStage()) {
+  const e = elAt(stage, id);
+  const host = stage.querySelector(`.de-el[data-el="${id}"] .de-textin`);
   if (!e || !host) return;
   host.contentEditable = 'plaintext-only';
   host.classList.add('editing');
   if (e.role === 'bullets') host.textContent = e.text || '';
   host.focus();
   document.getSelection()?.selectAllChildren(host);
+  let done = false;
   const finish = () => {
+    if (done) return;
+    done = true;
     host.contentEditable = 'false';
     host.classList.remove('editing');
     e.text = host.innerText.replace(/\n{3,}/g, '\n\n').trim();
     markDirty();
-    paintStage();
+    // Redraw only this element - repainting the stage would tear down a
+    // mounted video and, on the board, everything else on the canvas.
+    const el = stage.querySelector(`.de-el[data-el="${id}"]`);
+    if (el) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = elHtml(e);
+      el.innerHTML = tmp.firstElementChild.innerHTML;
+      el.setAttribute('style', tmp.firstElementChild.getAttribute('style'));
+    }
+    paintHandles();
     paintProps();
+    paintRailIfOpen();
   };
   host.onblur = finish;
   host.onkeydown = (ev) => {
@@ -685,6 +821,55 @@ function editText(id) {
     if (ev.key === 'Escape') { ev.preventDefault(); host.blur(); }
     if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); host.blur(); }
   };
+}
+
+// A shape spawns a matching sibling in a direction and joins the two with a
+// connector. One click; the FigJam gesture.
+function spawnConnected(dir, stage) {
+  const src = elAt(stage, [...ed.sel][0]);
+  if (!src) return;
+  const GAP2 = 90;
+  const d = {
+    n: { x: src.x, y: src.y - src.h - GAP2 },
+    s: { x: src.x, y: src.y + src.h + GAP2 },
+    w: { x: src.x - src.w - GAP2, y: src.y },
+    e: { x: src.x + src.w + GAP2, y: src.y },
+  }[dir];
+  const next = { ...structuredClone(src), id: uid(), x: Math.round(d.x), y: Math.round(d.y), text: '' };
+  clampInto(next);
+  // The connector spans the gap between the two, along the axis it grew on.
+  const vertical = dir === 'n' || dir === 's';
+  const from = dir === 's' ? src.y + src.h : dir === 'n' ? next.y + next.h : src.x + src.w;
+  const to = dir === 's' ? next.y : dir === 'n' ? src.y : dir === 'w' ? src.x : next.x;
+  const link = {
+    id: uid(), type: 'shape', shape: 'arrow',
+    stroke: src.stroke || '#0a0a0a', sw: Math.max(4, (src.sw || 6) - 1), fill: 'none',
+    x: vertical ? src.x + src.w / 2 - 6 : Math.min(from, to),
+    y: vertical ? Math.min(from, to) : src.y + src.h / 2 - 6,
+    w: vertical ? 12 : Math.abs(to - from),
+    h: vertical ? Math.abs(to - from) : 12,
+    rot: vertical ? (dir === 's' ? 90 : 270) : (dir === 'w' ? 180 : 0),
+  };
+  const sl = slideOf(stage);
+  sl.els.push(link, next);
+  ed.sel.clear();
+  ed.sel.add(next.id);
+  markDirty();
+  redrawStage(stage);
+  paintHandles();
+  paintProps();
+  paintRailIfOpen();
+  setTimeout(() => editText(next.id, stage), 40);
+}
+
+// Redraw one stage in place, keeping its wiring.
+function redrawStage(stage) {
+  const sl = slideOf(stage);
+  stage.style.background = sl.bg || '#ffffff';
+  stage.innerHTML = `${(sl.els || []).map(elHtml).join('')}<div class="de-guides"></div>`;
+  delete stage.dataset.wired;
+  mountSlideVideos(stage);
+  wireStage(stage, siOf(stage));
 }
 
 // ------------------------------------------------------------- tools
@@ -696,89 +881,140 @@ function paintTools() {
     <span class="tb-sep"></span>
     <button class="tb-btn tb-word" data-act="layout" title="Replace This Slide's Layout">Layout</button>
     <button class="tb-btn tb-word" data-act="dupe" title="Duplicate This Slide">Duplicate</button>`;
-  for (const b of $$('[data-tool]', bar)) {
-    b.onclick = () => { ed.tool = b.dataset.tool; paintTools(); $('#edStage').style.cursor = ed.tool === 'select' ? 'default' : 'crosshair'; };
-  }
+  for (const b of $$('[data-tool]', bar)) b.onclick = () => armTool(b.dataset.tool);
   bar.querySelector('[data-act="layout"]').onclick = (e) => layoutMenu(e.clientX, e.clientY);
   bar.querySelector('[data-act="dupe"]').onclick = () => dupeSlide(ed.i);
 }
 
+// ARMING A MEDIA TOOL ASKS FOR THE FILE FIRST, then waits for a click to
+// place it - Figma's order, and the reason the old flow was unusable: it
+// asked for a click first and only then opened a picker, so by the time the
+// file came back the intent had gone stale and nothing appeared to happen.
+async function armTool(t) {
+  if (t === 'image' || t === 'video') {
+    const got = await askFile(t);
+    if (!got) { ed.tool = 'select'; paintTools(); return; }
+    ed.pending = got;
+    showPlaceBar(got.name);
+  } else if (t === 'rink') {
+    const got = await askRink();
+    if (!got) { ed.tool = 'select'; paintTools(); return; }
+    ed.pending = got;
+    showPlaceBar(got.name);
+  } else {
+    ed.pending = null;
+    hidePlaceBar();
+  }
+  ed.tool = t;
+  paintTools();
+  setCursor();
+}
+
+function setCursor() {
+  for (const st of $$('.de-stagebox, #edStage')) st.style.cursor = ed.tool === 'select' ? 'default' : 'crosshair';
+}
+
+// The strip that says what is about to be placed, straight out of Figma.
+function showPlaceBar(name) {
+  const bar = $('#edPlace');
+  bar.hidden = false;
+  bar.innerHTML = `<span>Click A Slide To Place <b>${esc(name)}</b></span><button class="mini" data-x="cancel">Cancel</button>`;
+  bar.querySelector('[data-x="cancel"]').onclick = () => { ed.pending = null; ed.tool = 'select'; paintTools(); setCursor(); hidePlaceBar(); };
+}
+function hidePlaceBar() { const b = $('#edPlace'); if (b) { b.hidden = true; b.innerHTML = ''; } }
+
 // A tool click drops its element at the pointer and hands the pointer
 // straight back to Select - placing three boxes in a row is not the common
 // case; adjusting the one you just placed is.
-function placeTool(p) {
+function placeTool(p, stage = activeStage()) {
   const t = ed.tool;
+  ed.stage = stage;
   const at = (w, h) => ({ x: Math.round(Math.max(0, Math.min(SLIDE_W - w, p.x - w / 2))), y: Math.round(Math.max(0, Math.min(SLIDE_H - h, p.y - h / 2))), w, h });
   if (t === 'text') {
-    const e = { ...newText('body'), ...at(620, 90), text: 'Text' };
-    slide().els.push(e);
-    commitPlace(e.id);
-    setTimeout(() => editText(e.id), 30);
+    const e = { ...newText('body'), ...at(620, 96), text: 'Text' };
+    slideOf(stage).els.push(e);
+    commitPlace(e.id, stage);
+    // A text box you have to click again to type into is a text box that
+    // does not work. The redraw has to land first, hence the frame wait.
+    requestAnimationFrame(() => editText(e.id, stage));
     return;
   }
   if (t === 'shape') {
-    const e = { id: uid(), type: 'shape', shape: 'rect', ...at(420, 260), fill: 'none', stroke: '#0a0a0a', sw: 6 };
-    slide().els.push(e);
-    commitPlace(e.id);
+    const e = { id: uid(), type: 'shape', shape: 'rect', ...at(420, 240), fill: '#ffffff', stroke: '#0a0a0a', sw: 6, r: 16, text: '' };
+    slideOf(stage).els.push(e);
+    commitPlace(e.id, stage);
     return;
   }
-  if (t === 'image' || t === 'video') { pickFile(t, p); return; }
-  if (t === 'rink') { pickRink(p); return; }
+  const got = ed.pending;
+  if (!got) { ed.tool = 'select'; paintTools(); return; }
+  ed.pending = null;
+  hidePlaceBar();
+  if (got.kind === 'video') {
+    const e = { id: uid(), type: 'video', asset: got.asset, url: got.url, name: got.name, ...at(880, 495), in: 0, out: 0 };
+    slideOf(stage).els.push(e);
+    commitPlace(e.id, stage);
+    return;
+  }
+  const w = got.kind === 'rink' ? 760 : 700;
+  const h = Math.round(w / (got.ratio || 1.6));
+  const e = { id: uid(), type: got.kind === 'rink' ? 'rink' : 'image', asset: got.asset, src: got.url, ...at(w, h), fit: 'contain' };
+  slideOf(stage).els.push(e);
+  commitPlace(e.id, stage);
 }
 
-function commitPlace(id) {
+function commitPlace(id, stage = activeStage()) {
   ed.tool = 'select';
   ed.sel.clear();
   ed.sel.add(id);
+  ed.stage = stage;
   markDirty();
   paintTools();
-  paintStage();
+  setCursor();
+  redrawStage(stage);
+  paintHandles();
   paintProps();
+  paintRailIfOpen();
 }
 
 // An image or a video is stored as a BLOB in its own store and referenced
 // by an object URL. Base64 on the deck record would rewrite the whole deck
 // on every nudge and blow past what IndexedDB will happily hold.
-function pickFile(kind, p) {
-  const inp = $('#edFile');
-  inp.accept = kind === 'video' ? 'video/*' : 'image/*';
-  inp.onchange = async () => {
-    const f = inp.files?.[0];
+//
+// These ASK for a file and hand it back; the caller decides where it goes.
+// The old pair placed the element themselves, which is why the media tools
+// only worked from the slide view and only at a position chosen before the
+// picker had even opened.
+function askFile(kind) {
+  return new Promise((res) => {
+    const inp = $('#edFile');
+    inp.accept = kind === 'video' ? 'video/*' : 'image/*';
     inp.value = '';
-    if (!f) return;
-    const aid = uid();
-    await putAsset(aid, f);
-    const url = URL.createObjectURL(f);
-    if (kind === 'video') {
-      const e = { id: uid(), type: 'video', asset: aid, url, name: f.name, x: Math.round(p.x - 400), y: Math.round(p.y - 225), w: 800, h: 450, in: 0, out: 0 };
-      clampInto(e);
-      slide().els.push(e);
-      commitPlace(e.id);
-      return;
-    }
-    // Size an image to its own aspect, so it lands looking right.
-    const img = new Image();
-    img.onload = () => {
-      const ratio = img.naturalWidth / Math.max(1, img.naturalHeight);
-      const w = 700;
-      const e = { id: uid(), type: 'image', asset: aid, src: url, x: Math.round(p.x - w / 2), y: Math.round(p.y - (w / ratio) / 2), w, h: Math.round(w / ratio), fit: 'contain' };
-      clampInto(e);
-      slide().els.push(e);
-      commitPlace(e.id);
+    let settled = false;
+    const done = (v) => { if (!settled) { settled = true; res(v); } };
+    inp.onchange = async () => {
+      const f = inp.files?.[0];
+      inp.value = '';
+      if (!f) return done(null);
+      const asset = uid();
+      await putAsset(asset, f);
+      const url = URL.createObjectURL(f);
+      if (kind === 'video') return done({ kind: 'video', asset, url, name: f.name });
+      // Size an image to its own aspect so it lands looking right.
+      const img = new Image();
+      img.onload = () => done({ kind: 'image', asset, url, name: f.name, ratio: img.naturalWidth / Math.max(1, img.naturalHeight) });
+      img.onerror = () => done({ kind: 'image', asset, url, name: f.name, ratio: 1.6 });
+      img.src = url;
     };
-    img.src = url;
-  };
-  inp.click();
-}
-
-function clampInto(e) {
-  e.x = Math.max(0, Math.min(SLIDE_W - e.w, e.x));
-  e.y = Math.max(0, Math.min(SLIDE_H - e.h, e.y));
+    // A cancelled picker fires no event at all; the window regaining focus
+    // is the only signal there is.
+    window.addEventListener('focus', () => setTimeout(() => { if (!inp.files?.length) done(null); }, 400), { once: true });
+    inp.click();
+  });
 }
 
 // Rink diagrams come from the cth folder the other apps already write to,
 // so a PNG saved out of Diagrams is one click from a slide.
-async function pickRink(p) {
+async function askRink() {
   let files = [];
   try {
     const fs = await import('../../clips/js/localfs.js');
@@ -789,44 +1025,46 @@ async function pickRink(p) {
     }
   } catch (e) { console.warn('rink listing failed', e.message); }
 
-  const veil = document.createElement('div');
-  veil.className = 'sheet-veil';
-  veil.innerHTML = `
-    <div class="sheet sheet-wide" role="dialog" aria-modal="true">
-      <h3>Add A Rink Diagram</h3>
-      <p>${files.length ? 'From your cth/diagrams folder.' : 'No cth folder connected - choose a file instead.'}</p>
-      <div class="de-rinks">${files.map((f, i) => `<button class="de-rinkpick" data-i="${i}">${esc(f.name)}</button>`).join('')}</div>
-      <div class="sheet-row">
-        <button class="btn" data-x="file">Choose File…</button>
-        <span class="de-flex"></span>
-        <button class="btn" data-x="cancel">Cancel</button>
-      </div>
-    </div>`;
-  document.body.appendChild(veil);
-  const close = () => veil.remove();
-  veil.addEventListener('mousedown', (e) => { if (e.target === veil) close(); });
-  veil.querySelector('[data-x="cancel"]').onclick = close;
-  veil.querySelector('[data-x="file"]').onclick = () => { close(); ed.tool = 'image'; pickFile('image', p); };
-  for (const b of veil.querySelectorAll('[data-i]')) {
-    b.onclick = async () => {
-      close();
-      try {
-        const fs = await import('../../clips/js/localfs.js');
-        const file = await fs.fsGetFile(files[Number(b.dataset.i)].path);
-        const aid = uid();
-        await putAsset(aid, file);
-        const url = URL.createObjectURL(file);
-        // A rink is 2:1 - the geometry rink.js is measured against.
-        const w = 760;
-        const e = { id: uid(), type: 'rink', asset: aid, src: url, x: Math.round(p.x - w / 2), y: Math.round(p.y - w / 4), w, h: Math.round(w / 2), fit: 'contain' };
-        clampInto(e);
-        slide().els.push(e);
-        commitPlace(e.id);
-      } catch (err) {
-        toast(err.message || 'Could Not Open That Diagram', true);
-      }
-    };
-  }
+  return new Promise((res) => {
+    const veil = document.createElement('div');
+    veil.className = 'sheet-veil';
+    veil.innerHTML = `
+      <div class="sheet sheet-wide" role="dialog" aria-modal="true">
+        <h3>Add A Rink Diagram</h3>
+        <p>${files.length ? 'From your cth/diagrams folder.' : 'No cth folder connected - choose a file instead.'}</p>
+        <div class="de-rinks">${files.map((f, i) => `<button class="de-rinkpick" data-i="${i}">${esc(f.name)}</button>`).join('')}</div>
+        <div class="sheet-row">
+          <button class="btn" data-x="file">Choose File…</button>
+          <span class="de-flex"></span>
+          <button class="btn" data-x="cancel">Cancel</button>
+        </div>
+      </div>`;
+    document.body.appendChild(veil);
+    const close = (v) => { veil.remove(); res(v); };
+    veil.addEventListener('mousedown', (e) => { if (e.target === veil) close(null); });
+    veil.querySelector('[data-x="cancel"]').onclick = () => close(null);
+    veil.querySelector('[data-x="file"]').onclick = async () => { veil.remove(); res(await askFile('image')); };
+    for (const b of veil.querySelectorAll('[data-i]')) {
+      b.onclick = async () => {
+        try {
+          const fs = await import('../../clips/js/localfs.js');
+          const file = await fs.fsGetFile(files[Number(b.dataset.i)].path);
+          const asset = uid();
+          await putAsset(asset, file);
+          // A rink is 2:1 - the geometry rink.js is measured against.
+          close({ kind: 'rink', asset, url: URL.createObjectURL(file), name: file.name, ratio: 2 });
+        } catch (err) {
+          toast(err.message || 'Could Not Open That Diagram', true);
+          close(null);
+        }
+      };
+    }
+  });
+}
+
+function clampInto(e) {
+  e.x = Math.max(0, Math.min(SLIDE_W - e.w, e.x));
+  e.y = Math.max(0, Math.min(SLIDE_H - e.h, e.y));
 }
 
 // ------------------------------------------------------------- properties
@@ -836,15 +1074,15 @@ function paintProps() {
   if (!box) return;
   const ids = [...ed.sel];
   if (!ids.length) {
-    const s = slide();
+    const s = slideOf(activeStage());
     box.innerHTML = `
-      <div class="pe-title">Slide ${ed.i + 1}</div>
+      <div class="pe-title">Slide ${siOf(activeStage()) + 1}</div>
       <label class="bs-row"><span>Background</span>
         <span class="de-sw">${SWATCHES.map((h) => `<button class="de-swatch${(s.bg || '').toLowerCase() === h ? ' on' : ''}" data-bg="${h}" style="--c:${h}"></button>`).join('')}</span>
       </label>
       <p class="bs-note">Click a tool below and then the slide to place something. Double-click any text to edit it.</p>`;
     for (const b of $$('[data-bg]', box)) {
-      b.onclick = () => { s.bg = b.dataset.bg; markDirty(); paintStage(); paintRail(); paintProps(); };
+      b.onclick = () => { s.bg = b.dataset.bg; markDirty(); redrawStage(activeStage()); paintHandles(); paintRailIfOpen(); paintProps(); };
     }
     return;
   }
@@ -863,12 +1101,18 @@ function paintProps() {
     rows.push(`<label class="bs-row"><span>Shape</span>
       <select data-k="shape">${SHAPES.map(([k, l]) => `<option value="${k}"${e.shape === k ? ' selected' : ''}>${l}</option>`).join('')}</select></label>`);
     rows.push(`<label class="bs-row"><span>Line</span><input type="number" data-k="sw" min="1" max="40" value="${e.sw || 6}"></label>`);
+    if ((e.shape || 'rect') === 'rect') rows.push(`<label class="bs-row"><span>Corners</span><input type="number" data-k="r" min="0" max="400" value="${e.r || 0}"></label>`);
+    rows.push(`<label class="bs-row"><span>Label Size</span><input type="number" data-k="tsize" min="12" max="160" value="${e.tsize || 34}"></label>`);
     rows.push(`<label class="bs-row"><span>Stroke</span><span class="de-sw">${SWATCHES.map((h) => `<button class="de-swatch${(e.stroke || '').toLowerCase() === h ? ' on' : ''}" data-stroke="${h}" style="--c:${h}"></button>`).join('')}</span></label>`);
     rows.push(`<label class="bs-row"><span>Fill</span><span class="de-sw"><button class="de-swatch de-none${(e.fill || 'none') === 'none' ? ' on' : ''}" data-fill="none"></button>${SWATCHES.map((h) => `<button class="de-swatch${(e.fill || '').toLowerCase() === h ? ' on' : ''}" data-fill="${h}" style="--c:${h}"></button>`).join('')}</span></label>`);
   }
   if (e.type === 'image' || e.type === 'rink') {
     rows.push(`<label class="bs-row"><span>Fit</span>
       <select data-k="fit">${['contain', 'cover'].map((f) => `<option${(e.fit || 'contain') === f ? ' selected' : ''}>${f}</option>`).join('')}</select></label>`);
+  }
+  if (e.type === 'logo') {
+    rows.push(`<label class="bs-row"><span>Mark</span>
+      <select data-k="variant">${Object.keys(LOGOS).map((v) => `<option value="${v}"${e.variant === v ? ' selected' : ''}>${v.replace('-', ' ')}</option>`).join('')}</select></label>`);
   }
   if (e.type === 'video') {
     rows.push(`<label class="bs-row"><span>Start</span><input type="number" data-k="in" min="0" step="0.1" value="${e.in || 0}"></label>`);
@@ -897,8 +1141,9 @@ function paintProps() {
         if (t) t[k] = v;
       }
       markDirty();
-      paintStage();
-      paintRail();
+      redrawStage(activeStage());
+      paintHandles();
+      paintRailIfOpen();
       if (['role', 'shape'].includes(k)) paintProps();
     };
     f.onchange = commit;
@@ -908,7 +1153,7 @@ function paintProps() {
     for (const b of $$(`[${attr}]`, box)) {
       b.onclick = () => {
         for (const id of ed.sel) { const t = elById(id); if (t) t[key] = b.getAttribute(attr); }
-        markDirty(); paintStage(); paintRail(); paintProps();
+        markDirty(); redrawStage(activeStage()); paintHandles(); paintRailIfOpen(); paintProps();
       };
     }
   }
@@ -920,29 +1165,30 @@ function paintProps() {
       const t = elById(id);
       if (t) { t.x = Math.round((SLIDE_W - t.w) / 2); }
     }
-    markDirty(); paintStage(); paintRail(); paintHandles();
+    markDirty(); redrawStage(activeStage()); paintRailIfOpen(); paintHandles();
   });
   act('del', () => deleteSelection());
 }
 
 function reorderEls(where) {
-  const s = slide();
+  const s = slideOf(activeStage());
   const picked = s.els.filter((e) => ed.sel.has(e.id));
   s.els = s.els.filter((e) => !ed.sel.has(e.id));
   if (where === 'front') s.els.push(...picked); else s.els.unshift(...picked);
   markDirty();
-  paintStage();
-  paintRail();
+  redrawStage(activeStage());
+  paintHandles();
+  paintRailIfOpen();
 }
 
 function deleteSelection() {
-  const s = slide();
+  const s = slideOf(activeStage());
   for (const e of s.els) if (ed.sel.has(e.id) && e.asset) void deleteAsset(e.asset);
   s.els = s.els.filter((e) => !ed.sel.has(e.id));
   ed.sel.clear();
   markDirty();
-  paintStage();
-  paintRail();
+  redrawStage(activeStage());
+  paintRailIfOpen();
   paintProps();
 }
 
@@ -1074,13 +1320,11 @@ function onKey(e) {
     if (e.key === '1' || e.key === '!') { e.preventDefault(); fitBoard(true); return; }
     if (e.key === 'Enter' && ed.sel.size) { e.preventDefault(); setView('slide'); return; }
   }
-  if (ed.view !== 'slide') return;
-
   if (e.key === 'Escape') { e.preventDefault(); if (ed.tool !== 'select') { ed.tool = 'select'; paintTools(); } else { ed.sel.clear(); paintHandles(); paintProps(); } return; }
   if ((e.key === 'Backspace' || e.key === 'Delete') && ed.sel.size) { e.preventDefault(); deleteSelection(); return; }
   if (e.key === 'Enter' && ed.sel.size === 1) {
     const x = elById([...ed.sel][0]);
-    if (x?.type === 'text') { e.preventDefault(); editText(x.id); return; }
+    if (x?.type === 'text' || x?.type === 'shape') { e.preventDefault(); editText(x.id, activeStage()); return; }
   }
   // Arrows nudge; shift makes it a stride.
   const step = e.shiftKey ? 20 : 2;
@@ -1089,13 +1333,13 @@ function onKey(e) {
     e.preventDefault();
     for (const id of ed.sel) { const x = elById(id); if (x) { x.x += nudge[0]; x.y += nudge[1]; } }
     markDirty();
-    repaintGeometry();
+    repaintGeometry(activeStage());
     return;
   }
   if (e.key === 'PageDown' || (e.key === 'ArrowRight' && !ed.sel.size)) { e.preventDefault(); if (ed.i < ed.deck.slides.length - 1) { ed.i++; ed.sel.clear(); paintSlideView(); } return; }
   if (e.key === 'PageUp' || (e.key === 'ArrowLeft' && !ed.sel.size)) { e.preventDefault(); if (ed.i > 0) { ed.i--; ed.sel.clear(); paintSlideView(); } return; }
   const tool = TOOLS.find(([, , key]) => key === k);
-  if (tool) { e.preventDefault(); ed.tool = tool[0]; paintTools(); $('#edStage').style.cursor = ed.tool === 'select' ? 'default' : 'crosshair'; }
+  if (tool) { e.preventDefault(); void armTool(tool[0]); }
 }
 
 window.addEventListener('pointermove', onMove);

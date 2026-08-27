@@ -323,7 +323,14 @@ function onDown(e) {
     return;
   }
   if (an.tool === 'box' || an.tool === 'circle') {
-    const x = { id: uid(), type: an.tool, x: p.x, y: p.y, w: 0, h: 0, color: an.color, alpha: 0.3 };
+    // Fill or outline, whichever the bar is set to. A wash reads well over
+    // plain ice and hides the play over a busy frame; an outline is the
+    // opposite, so both have to be one click away (2026-08-27, Tony).
+    const solid = an.shapeStyle === 'outline';
+    const x = {
+      id: uid(), type: an.tool, x: p.x, y: p.y, w: 0, h: 0, color: an.color,
+      alpha: solid ? 1 : 0.3, ...(solid ? { outline: true, width: 9 * s } : {}),
+    };
     an.els.push(x);
     an.drag = { id: x.id, kind: 'shape', start: p };
     return;
@@ -564,6 +571,11 @@ function paintBar() {
     <span class="tb-sep"></span>
     ${COLORS.map(([, hex]) => `<button class="tb-swatch${an.color === hex ? ' on' : ''}" data-color="${hex}" style="--c:${hex}"></button>`).join('')}
     <span class="tb-sep"></span>
+    <span class="an-seg" role="group" aria-label="Shape Style">
+      <button class="an-segbtn${an.shapeStyle !== 'outline' ? ' on' : ''}" data-shape="fill" title="Boxes And Circles As A Light Wash">Fill</button>
+      <button class="an-segbtn${an.shapeStyle === 'outline' ? ' on' : ''}" data-shape="outline" title="Boxes And Circles As A Solid Outline">Outline</button>
+    </span>
+    <span class="tb-sep"></span>
     <label class="an-hold" title="How Long The Exported Clip Holds On This Frame">Hold <input id="anHold" type="number" min="0" max="30" value="${an.freeze.hold ?? 3}">s</label>
     <span class="tb-sep"></span>
     <button class="tb-btn tb-word" data-act="clear" title="Remove Every Drawing (${(an.actKeys.clear || ACT_KEYS.clear).toUpperCase()})">Clear${key(an.actKeys.clear || ACT_KEYS.clear)}</button>
@@ -592,6 +604,23 @@ function paintBar() {
       for (const id of an.sel) {
         const x = an.els.find((z) => z.id === id);
         if (x) { x.color = an.color; markDirty(); }
+      }
+      paintBar();
+      redraw();
+    };
+  });
+  bar.querySelectorAll('[data-shape]').forEach((b) => {
+    b.onclick = () => {
+      an.shapeStyle = b.dataset.shape;
+      // Also restyle whatever is selected, so the choice can be made after
+      // the shape is drawn rather than only before.
+      const solid = an.shapeStyle === 'outline';
+      for (const id of an.sel) {
+        const x = an.els.find((z) => z.id === id);
+        if (!x || (x.type !== 'box' && x.type !== 'circle')) continue;
+        if (solid) { x.outline = true; x.alpha = 1; x.width = x.width || 9 * vs(); }
+        else { delete x.outline; x.alpha = 0.3; }
+        markDirty();
       }
       paintBar();
       redraw();
@@ -649,6 +678,7 @@ export function openAnnotate(freeze, frameCanvas, { onDone, onExport, keys, actK
     sel: new Set(),
     drag: null,
     band: null,
+    shapeStyle: 'fill',
     keys: { ...DEFAULT_KEYS, ...(keys || {}) },
     actKeys: { ...ACT_KEYS, ...(actKeys || {}) },
     onKeys,
