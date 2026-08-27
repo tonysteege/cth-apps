@@ -6,3 +6,8 @@ workers_dev = false
 routes = [
   { pattern = "apps-api.coachtonyhockey.com/*", zone_name = "coachtonyhockey.com" },
 ]
+
+# Workers AI powers the CTH Bots endpoints. No key: inference is billed to
+# this Cloudflare account, which is why the bots need no secret at all.
+[ai]
+binding = "AI"

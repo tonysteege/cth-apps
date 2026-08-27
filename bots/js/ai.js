@@ -1,16 +1,17 @@
 // CTH Bots - the model client.
 //
 // Every call goes to the SAME Worker the Slides app already uses
-// (apps-api.coachtonyhockey.com, present-worker/): the provider keys live
-// there as Worker secrets, never in this repo and never in the browser.
-// Three endpoints:
+// (apps-api.coachtonyhockey.com, present-worker/), which runs the models on
+// Workers AI. Three endpoints:
 //
-//   POST /ai/text    { system, prompt }              -> { text }
-//   POST /ai/vision  { prompt, image }               -> { text }
-//   POST /ai/image   { prompt, aspect, n }           -> { images: [dataUrl] }
+//   POST /ai/text    { system, prompt, quality? }    -> { text }
+//   POST /ai/vision  { prompt, image, quality? }     -> { text }
+//   POST /ai/image   { prompt, aspect, n, quality? } -> { images: [dataUrl] }
 //
-// The app is still account-free and stores nothing server-side; the Worker
-// holds no state and logs no prompts.
+// The models are WORKERS AI, billed to the Cloudflare account the Worker
+// runs on - there is no API key anywhere in this app, and because the work
+// happens at the edge the bots run with the laptop shut. The app stays
+// account-free; the Worker holds no state and logs no prompts.
 
 const API = location.hostname === 'localhost'
   ? 'https://apps-api.coachtonyhockey.com'
@@ -36,8 +37,8 @@ async function post(path, body, signal) {
   let data = null;
   try { data = await r.json(); } catch (_) { /* non-JSON error body */ }
   if (!r.ok) {
-    if (r.status === 404) throw new AiError('The AI Service Is Not Deployed Yet - See Setup In Settings', 'missing');
-    if (r.status === 401 || r.status === 403) throw new AiError('The AI Service Has No Key Configured Yet - See Setup In Settings', 'nokey');
+    if (r.status === 404) throw new AiError('The CTH Worker Needs One Deploy Before The Bots Can Run', 'missing');
+    if (r.status === 503) throw new AiError('Workers AI Is Not Bound Yet - Redeploy The CTH Worker', 'missing');
     if (r.status === 429) throw new AiError('Rate Limited By The Model Provider - Try Again In A Moment', 'rate');
     throw new AiError(data?.error || `The AI Service Returned ${r.status}`, 'http');
   }

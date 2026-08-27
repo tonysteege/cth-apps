@@ -40,16 +40,19 @@
     header h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; line-height: 1; }
     main {
       flex: 1;
-      display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-      gap: 18px; align-content: start;
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+      gap: 14px; align-content: start;
       padding: 28px clamp(20px, 4vw, 48px);
-      width: 100%; max-width: 1200px; margin: 0 auto;
+      width: 100%; max-width: 1100px; margin: 0 auto;
     }
+    /* Compact tiles: icon, name, arrow. No description - the names carry
+       the meaning and a short board beats a tall one (2026-08-27). */
     .app-card {
       position: relative;
-      display: block; text-decoration: none; color: inherit;
+      display: flex; align-items: center; gap: 14px;
+      text-decoration: none; color: inherit;
       background: #fff; border: 1px solid var(--n-200);
-      border-radius: 16px; padding: 22px;
+      border-radius: 16px; padding: 14px 16px;
       box-shadow: var(--shadow-card);
       transition: box-shadow var(--dur) ease, transform var(--dur) ease, border-color var(--dur) ease;
     }
@@ -57,19 +60,20 @@
     .app-card:focus-visible { outline: 2px solid var(--a-500); outline-offset: 2px; }
     .app-card:active { transform: scale(0.99); }
     .app-card .ic {
-      width: 52px; height: 52px; border-radius: 12px; margin-bottom: 16px;
+      flex: none;
+      width: 44px; height: 44px; border-radius: 12px;
       display: flex; align-items: center; justify-content: center;
       background: var(--n-100); color: var(--n-700);
       border: 1px solid var(--n-200);
       transition: background var(--dur) ease, color var(--dur) ease, border-color var(--dur) ease;
     }
     .app-card:hover .ic { background: var(--a-50); color: var(--a-700); border-color: var(--a-100); }
-    .app-card .ic svg { width: 30px; height: 30px; }
-    .app-card h2 { margin: 0 0 5px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
-    .app-card p { margin: 0; color: var(--n-500); font-size: 13px; line-height: 1.5; }
+    .app-card .ic svg { width: 24px; height: 24px; }
+    .app-card h2 { flex: 1; margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
     .app-card .go {
-      position: absolute; top: 22px; right: 20px;
-      color: var(--n-300); transition: color var(--dur) ease, transform var(--dur) ease;
+      flex: none;
+      color: var(--n-300); display: flex;
+      transition: color var(--dur) ease, transform var(--dur) ease;
     }
     .app-card .go svg { width: 18px; height: 18px; }
     .app-card:hover .go { color: var(--a-600); transform: translateX(2px); }
@@ -88,29 +92,25 @@
     <h1>CTH Apps</h1>
   </header>
   <main>
-    <a class="app-card" href="diagrams/">
-      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="5" width="20" height="14" rx="6.5"/><path d="M12 5v14"/><circle cx="12" cy="12" r="2.4"/></svg></div>
+    <a class="app-card" href="bots/">
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2m16 0h2m-7-1v2m-6-2v2"/></svg></div>
+      <h2>Bots</h2>
       <span class="go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
-      <h2>Diagrams</h2>
-      <p>Design drills and plays on a full rink. Save, sequence, and export game-ready images.</p>
     </a>
     <a class="app-card" href="clips/">
       <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2.75" y="5" width="18.5" height="14" rx="3"/><path d="m10 9.2 5 2.8-5 2.8z" fill="currentColor" stroke="none"/></svg></div>
-      <span class="go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
       <h2>Clips</h2>
-      <p>Tag and clip game film at speed. Freeze frames, annotate, and export straight to your folder.</p>
-    </a>
-    <a class="app-card" href="bots/">
-      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2m16 0h2m-7-1v2m-6-2v2"/></svg></div>
       <span class="go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
-      <h2>Bots</h2>
-      <p>Small single-purpose AI helpers: coaching cues, teaching visuals and thumbnails.</p>
+    </a>
+    <a class="app-card" href="diagrams/">
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="5" width="20" height="14" rx="6.5"/><path d="M12 5v14"/><circle cx="12" cy="12" r="2.4"/></svg></div>
+      <h2>Diagrams</h2>
+      <span class="go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
     </a>
     <a class="app-card" href="slides/">
       <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2.75" y="4" width="18.5" height="13" rx="2.5"/><path d="M8 21h8M12 17v4"/></svg></div>
-      <span class="go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
       <h2>Slides</h2>
-      <p>Turn any Notion page into film-session slides with scrubbable video and live drawing.</p>
+      <span class="go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
     </a>
   </main>
   <footer>Coach Tony Hockey</footer>

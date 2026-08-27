@@ -2,38 +2,40 @@
    the Clips sheet (for the panel-editor recipes the settings sheet reuses).
    Only what Bots adds lives here. */
 
-/* ---------------------------------------------------------- the board */
+/* ---------------------------------------------------------- the board
+   ONE PAGE: a card is not a link to a bot, the card IS the bot. It holds
+   its own inputs, Run button, results and recent runs, and grows with
+   what it is showing - so several bots can be worked at once and nothing
+   ever navigates away. */
 .bot-board {
   flex: 1;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
-  grid-auto-rows: 186px;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  align-items: start;
   gap: 16px;
   align-content: start;
-  padding: 24px clamp(16px, 3vw, 40px);
+  padding: 22px clamp(16px, 3vw, 40px) 48px;
   background: var(--page);
   overflow-y: auto;
 }
 .bot-card[data-w="2"] { grid-column: span 2; }
-.bot-card[data-h="2"] { grid-row: span 2; }
 
 .bot-card {
   --bot: var(--a-500);
+  --out-max: 300px;
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 18px;
+  gap: 10px;
+  padding: 16px 16px 18px;
   background: var(--cloud);
   border: 1px solid var(--edge);
   border-radius: 16px;
   box-shadow: var(--shadow-card);
-  cursor: default;
   overflow: hidden;
-  transition: box-shadow var(--dur) ease, border-color var(--dur) ease, transform var(--dur) ease;
+  transition: box-shadow var(--dur) ease, border-color var(--dur) ease;
 }
-/* The bot's colour as a top edge - enough identity to tell cards apart on
-   a glance without turning the board into a paint chart. */
+.bot-card[data-h="2"] { --out-max: 620px; }
 .bot-card::before {
   content: '';
   position: absolute;
@@ -41,44 +43,56 @@
   height: 3px;
   background: linear-gradient(90deg, var(--bot) 0%, color-mix(in oklab, var(--bot) 45%, transparent) 78%, transparent 100%);
 }
-.bot-card:hover { box-shadow: var(--shadow-2); border-color: var(--n-300); }
-.bot-card:focus-visible { outline: 2px solid var(--a-500); outline-offset: 2px; }
+.bot-card:hover { box-shadow: var(--shadow-2); }
+.bot-card:focus-within { border-color: var(--n-300); }
 .bot-card.dragging { opacity: 0.45; border-color: var(--a-400); }
-.bot-card.is-hidden { opacity: 0.5; }
-.bot-card.is-hidden .bot-ic { filter: grayscale(1); }
+.bot-card.is-hidden { opacity: 0.55; }
+.bot-card.is-hidden .bc-form, .bot-card.is-hidden .bc-out, .bot-card.is-hidden .bc-hist, .bot-card.is-hidden .bot-blurb { display: none; }
+.bot-card.is-busy { border-color: color-mix(in srgb, var(--bot) 40%, var(--edge)); }
 
-.bot-grip {
-  position: absolute;
-  top: 14px; right: 14px;
-  width: 16px; height: 16px;
-  cursor: grab;
-  opacity: 0;
-  background: var(--n-300);
-  -webkit-mask: url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Ccircle cx=%226%22 cy=%223.5%22 r=%221.3%22/%3E%3Ccircle cx=%2210%22 cy=%223.5%22 r=%221.3%22/%3E%3Ccircle cx=%226%22 cy=%228%22 r=%221.3%22/%3E%3Ccircle cx=%2210%22 cy=%228%22 r=%221.3%22/%3E%3Ccircle cx=%226%22 cy=%2212.5%22 r=%221.3%22/%3E%3Ccircle cx=%2210%22 cy=%2212.5%22 r=%221.3%22/%3E%3C/svg%3E') center / contain no-repeat;
-  mask: url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Ccircle cx=%226%22 cy=%223.5%22 r=%221.3%22/%3E%3Ccircle cx=%2210%22 cy=%223.5%22 r=%221.3%22/%3E%3Ccircle cx=%226%22 cy=%228%22 r=%221.3%22/%3E%3Ccircle cx=%2210%22 cy=%228%22 r=%221.3%22/%3E%3Ccircle cx=%226%22 cy=%2212.5%22 r=%221.3%22/%3E%3Ccircle cx=%2210%22 cy=%2212.5%22 r=%221.3%22/%3E%3C/svg%3E') center / contain no-repeat;
-  transition: opacity var(--dur) ease;
-}
-.bot-card:hover .bot-grip { opacity: 1; }
-
+.bc-head { display: flex; align-items: center; gap: 10px; }
 .bot-ic {
   display: flex; align-items: center; justify-content: center;
-  width: 40px; height: 40px;
-  margin-bottom: 4px;
-  border-radius: 11px;
+  width: 34px; height: 34px; flex: none;
+  border-radius: 10px;
   background: color-mix(in srgb, var(--bot) 12%, transparent);
   color: var(--bot);
 }
-.bot-ic svg { width: 22px; height: 22px; }
+.bot-ic svg { width: 19px; height: 19px; }
 .bot-name { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
-.bot-blurb {
-  margin: 0; flex: 1; min-height: 0;
-  color: var(--mist); font-size: 12.5px; line-height: 1.5;
-  overflow: hidden;
-}
-.bot-foot { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
-.bot-foot .btn { height: 30px; padding: 0 12px; font-size: 12.5px; }
+.bot-blurb { margin: -4px 0 0; color: var(--mist); font-size: 12px; line-height: 1.45; }
 .bot-flex { flex: 1; }
-.bot-card .btn-ink { background-image: linear-gradient(180deg, var(--bot) 0%, color-mix(in oklab, var(--bot) 82%, #000) 100%); }
+.bc-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; flex: none;
+  border: none; border-radius: 8px;
+  background: none; color: var(--soft); cursor: pointer;
+  transition: background var(--dur) ease, color var(--dur) ease;
+}
+.bc-icon svg { width: 16px; height: 16px; }
+.bc-icon:hover { background: var(--n-100); color: var(--ink); }
+.bot-grip {
+  width: 16px; height: 22px; flex: none;
+  cursor: grab; opacity: 0;
+  background: var(--n-300);
+  -webkit-mask: url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Ccircle cx=%226%22 cy=%223.5%22 r=%221.3%22/%3E%3Ccircle cx=%2210%22 cy=%223.5%22 r=%221.3%22/%3E%3Ccircle cx=%226%22 cy=%228%22 r=%221.3%22/%3E%3Ccircle cx=%2210%22 cy=%228%22 r=%221.3%22/%3E%3Ccircle cx=%226%22 cy=%2212.5%22 r=%221.3%22/%3E%3Ccircle cx=%2210%22 cy=%2212.5%22 r=%221.3%22/%3E%3C/svg%3E') center / 14px no-repeat;
+  mask: url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Ccircle cx=%226%22 cy=%223.5%22 r=%221.3%22/%3E%3Ccircle cx=%2210%22 cy=%223.5%22 r=%221.3%22/%3E%3Ccircle cx=%226%22 cy=%228%22 r=%221.3%22/%3E%3Ccircle cx=%2210%22 cy=%228%22 r=%221.3%22/%3E%3Ccircle cx=%226%22 cy=%2212.5%22 r=%221.3%22/%3E%3Ccircle cx=%2210%22 cy=%2212.5%22 r=%221.3%22/%3E%3C/svg%3E') center / 14px no-repeat;
+  transition: opacity var(--dur) ease;
+}
+.bot-card:hover .bot-grip { opacity: 1; }
+.bot-grip:active { cursor: grabbing; }
+
+.bc-form { display: flex; flex-direction: column; gap: 10px; }
+.bc-go { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.bc-go .btn { height: 32px; padding: 0 14px; font-size: 13px; }
+.bot-card .btn-ink {
+  background-image: linear-gradient(180deg, var(--bot) 0%, color-mix(in oklab, var(--bot) 82%, #000) 100%);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.14), var(--shadow-card);
+}
+/* The results and the run log both scroll inside the card rather than
+   stretching the board; the resize handle sets how tall they may get. */
+.bc-out:not(:empty) { max-height: var(--out-max); overflow-y: auto; }
+.bc-hist:not(:empty) { border-top: 1px solid var(--edge-soft); padding-top: 10px; }
 
 .bot-resize {
   position: absolute;
@@ -104,32 +118,12 @@
 }
 .run-ic svg { width: 20px; height: 20px; }
 
-.run-wrap {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  width: 100%;
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: 24px clamp(16px, 3vw, 40px) 48px;
-  background: var(--page);
-  overflow-y: auto;
-}
-.run-form {
-  display: flex; flex-direction: column; gap: 14px;
-  padding: 18px;
-  background: var(--cloud);
-  border: 1px solid var(--edge);
-  border-radius: 16px;
-  box-shadow: var(--shadow-card);
-}
 .run-field { display: flex; flex-direction: column; gap: 6px; }
-.run-field > span { font-size: 12px; font-weight: 500; color: var(--mist); }
+.run-field > span { font-size: 11.5px; font-weight: 500; color: var(--mist); }
 .run-field textarea, .run-field input {
   width: 100%;
-  padding: 10px 12px;
-  font: inherit; font-size: 13.5px;
+  padding: 9px 11px;
+  font: inherit; font-size: 13px;
   border: none; border-radius: var(--r-md);
   background: var(--field); color: var(--ink);
   box-shadow: inset 0 0 0 2px transparent;
@@ -170,8 +164,8 @@
 }
 
 /* ---- text results ------------------------------------------------- */
-.cue-list { list-style: none; margin: 0; padding: 6px; display: flex; flex-direction: column; gap: 3px;
-  background: var(--cloud); border: 1px solid var(--edge); border-radius: 16px; box-shadow: var(--shadow-card); }
+.cue-list { list-style: none; margin: 0; padding: 4px; display: flex; flex-direction: column; gap: 2px;
+  background: var(--n-50); border: 1px solid var(--edge); border-radius: 12px; }
 .cue-item { display: flex; align-items: flex-start; gap: 12px; padding: 11px 12px; border-radius: var(--r-sm); }
 .cue-item:hover { background: var(--n-50); }
 .cue-n {
@@ -181,7 +175,7 @@
   font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums;
 }
 .cue-body { flex: 1; min-width: 0; }
-.cue-text { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.cue-text { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
 .cue-why { margin: 3px 0 0; color: var(--mist); font-size: 12.5px; line-height: 1.45; }
 
 .run-skel { display: flex; flex-direction: column; gap: 8px; padding: 14px;
@@ -201,7 +195,7 @@
 @media (prefers-reduced-motion: reduce) { .skel-line::after, .img-skel::after { animation: none; } }
 
 /* ---- image results ------------------------------------------------ */
-.img-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+.img-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .img-card {
   margin: 0; overflow: hidden;
   background: var(--cloud);
@@ -219,8 +213,7 @@
 .refine-box { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
 
 /* ---- history ------------------------------------------------------ */
-.hist-list { display: flex; flex-direction: column; gap: 2px;
-  background: var(--cloud); border: 1px solid var(--edge); border-radius: 16px; box-shadow: var(--shadow-card); padding: 6px; }
+.hist-list { display: flex; flex-direction: column; gap: 1px; }
 .hist-row {
   display: flex; align-items: center; gap: 12px; width: 100%;
   padding: 9px 10px; border: none; border-radius: var(--r-sm);
@@ -228,7 +221,7 @@
   transition: background var(--dur) ease;
 }
 .hist-row:hover { background: var(--n-50); color: var(--ink); }
-.hist-when { flex: none; width: 108px; color: var(--soft); font-size: 12px; }
+.hist-when { flex: none; width: 86px; color: var(--soft); font-size: 11.5px; }
 .hist-what { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hist-del { flex: none; color: var(--soft); padding: 0 4px; border-radius: 5px; font-size: 15px; line-height: 1; }
 .hist-del:hover { color: var(--danger); background: var(--danger-soft); }
@@ -275,8 +268,8 @@
 .bs-note { margin: 8px 0 0; color: var(--soft); font-size: 12px; line-height: 1.5; }
 
 @media (max-width: 620px) {
-  .bot-board { grid-template-columns: 1fr; grid-auto-rows: auto; }
-  .bot-card[data-w="2"], .bot-card[data-h="2"] { grid-column: auto; grid-row: auto; }
+  .bot-board { grid-template-columns: 1fr; }
+  .bot-card[data-w="2"] { grid-column: auto; }
   .bot-resize { display: none; }
   .bs-row { flex-wrap: wrap; }
   .bs-row > span:first-child { width: 100%; }

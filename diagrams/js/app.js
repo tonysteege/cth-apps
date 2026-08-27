@@ -303,13 +303,12 @@ async function paintEdSide(currentId) {
   const folderList = [...folders(), ...[...known].filter((f) => !folders().includes(f))];
   const closedSet = collapsed();
 
-  // Every diagram row leads with a small rink glyph: rows of bare text gave
-  // the eye nothing to land on, and the glyph also separates a diagram from
-  // a folder at a glance (2026-08-27, Tony's call).
-  const DOC_ICON = '<svg class="eside-doc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="6.5" width="18" height="11" rx="5"/><path d="M12 6.5v11"/></svg>';
+  // A FILE CARRIES NO ICON (2026-08-27, Tony's call): only folders do, the
+  // way Finder and Obsidian draw a tree. Every glyph on every row was
+  // noise and cost a row of density.
   const row = (d) => `
     <div class="eside-row${d.id === currentId ? ' on' : ''}" data-open="${d.id}" draggable="true" tabindex="0">
-      ${DOC_ICON}<span class="eside-name">${esc(d.name || 'Untitled Diagram')}</span>
+      <span class="eside-name">${esc(d.name || 'Untitled Diagram')}</span>
     </div>`;
   const loose = drills.filter((d) => !(d.folder || ''));
   side.innerHTML = `
@@ -319,16 +318,15 @@ async function paintEdSide(currentId) {
       <button class="eside-new" id="esideNewF" title="Folders Organize The Tree - Drag Diagrams Onto Them">+ Folder</button>
     </div>
     <div class="eside-list" id="esideList">
-      <div class="eside-folder eside-root" data-root>Diagrams</div>
-      <div data-rootrows>${loose.map(row).join('') || '<div class="eside-empty">None Yet</div>'}</div>
       ${folderList.map((f) => `
         <div class="eside-folder${closedSet.has(f) ? ' closed' : ''}" data-folder="${esc(f)}" draggable="true">
-          <svg class="eside-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m9 6 6 6-6 6"/></svg>
-          ${FOLDER_ICON}${esc(f)}<span class="eside-count">${drills.filter((d) => (d.folder || '') === f).length}</span>
+          <svg class="eside-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+          ${FOLDER_ICON}<span class="eside-fname">${esc(f)}</span><span class="eside-count">${drills.filter((d) => (d.folder || '') === f).length}</span>
         </div>
-        <div data-rows="${esc(f)}"${closedSet.has(f) ? ' hidden' : ''}>
-          ${drills.filter((d) => (d.folder || '') === f).map(row).join('') || '<div class="eside-empty">Empty - Drag Diagrams Here</div>'}
+        <div class="eside-kids" data-rows="${esc(f)}"${closedSet.has(f) ? ' hidden' : ''}>
+          ${drills.filter((d) => (d.folder || '') === f).map(row).join('') || '<div class="eside-empty">Empty</div>'}
         </div>`).join('')}
+      <div class="eside-loose" data-rootrows data-root>${loose.map(row).join('') || '<div class="eside-empty">No Loose Diagrams</div>'}</div>
     </div>
     <div class="eside-foot">
       <button class="mini" id="esideImport" title="Open A Diagram PNG Or Restore A Backup JSON">Import</button>
@@ -505,7 +503,7 @@ async function showEditor(id) {
           <button class="btn" id="edRedo" title="Redo (Shift+Cmd+Z)">Redo</button>
           <span class="ed-sep"></span>
           <button class="btn" id="edRinks" hidden title="Copy, Print Or Export Chosen Rinks From This Sequence">Rinks</button>
-          <button class="btn" id="edAnim" title="Animate The Drill - Players And Pucks Follow Your Arrows (Then Save A GIF Or Video)">Animate</button>
+          <button class="btn" id="edAnim" title="Animate The Drill - Players And Pucks Follow Your Arrows (Then Save A GIF Or Video). Right-click for the guide">Animate</button>
           <button class="btn" id="edSaveImg" title="Save This Diagram As A PNG In Your cth/diagrams Folder">Save PNG</button>
           <button class="btn" id="edCopy" title="Copy The Finished Picture To The Clipboard">Copy</button>
           <button class="btn" id="edPrint" title="Print This Diagram">Print</button>
@@ -605,6 +603,8 @@ async function showEditor(id) {
   };
   $('#edRinks').onclick = () => showRinksSheet(drill);
   $('#edSaveImg').onclick = () => void savePngToFolder(drill, null);
+  // Right-click Animate for the written guide to getting a good one.
+  $('#edAnim').oncontextmenu = (e) => { e.preventDefault(); window.open('../diagrams/ANIMATE.md', '_blank', 'noopener'); };
   $('#edAnim').onclick = async () => {
     try {
       await saveNow();

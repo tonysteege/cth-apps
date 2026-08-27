@@ -30,15 +30,64 @@ async function saveCfg(bot, patch) {
 }
 
 // ------------------------------------------------------------- the board
+//
+// ONE PAGE (2026-08-27, Tony's call). A card is not a link to a bot - the
+// card IS the bot: its inputs, its Run button, its results and its recent
+// runs all live inside it. Nothing navigates away, several bots can be
+// working at once, and the board is the whole app.
 
 const DEF_LAYOUT = () => ({ order: BOTS.map((b) => b.id), size: {}, hidden: [] });
 
 async function layout() {
   const l = (await getLayout()) || DEF_LAYOUT();
-  // A bot added to the registry later still appears, at the end.
   const known = new Set(l.order || []);
   const order = [...(l.order || []).filter((id) => botById(id)), ...BOTS.filter((b) => !known.has(b.id)).map((b) => b.id)];
   return { order, size: l.size || {}, hidden: l.hidden || [] };
+}
+
+const GEAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.35.44.6.81.71H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
+
+function cardHtml(bot, cfg, sz, hidden) {
+  const styles = cfg.styles || [];
+  return `
+    <article class="bot-card${hidden ? ' is-hidden' : ''}" data-bot="${bot.id}" data-w="${sz.w}" data-h="${sz.h}"
+             style="--bot:${esc(cfg.color || bot.color)}">
+      <header class="bc-head">
+        <span class="bot-ic">${bot.icon}</span>
+        <h2 class="bot-name">${esc(bot.name)}</h2>
+        <span class="bot-flex"></span>
+        <button class="bc-icon" data-cfg title="Bot Settings" aria-label="Bot Settings">${GEAR}</button>
+        <span class="bot-grip" title="Drag To Rearrange" aria-hidden="true"></span>
+      </header>
+      <p class="bot-blurb">${esc(bot.blurb)}</p>
+      <div class="bc-form">
+        ${(bot.inputs || []).map((f) => `
+          <label class="run-field">
+            <span>${esc(f.label)}</span>
+            ${f.type === 'textarea'
+              ? `<textarea data-in="${f.key}" rows="3" placeholder="${esc(f.placeholder || '')}"></textarea>`
+              : `<input type="${f.type === 'url' ? 'url' : 'text'}" data-in="${f.key}" placeholder="${esc(f.placeholder || '')}">`}
+          </label>`).join('')}
+        ${bot.kind === 'image' && styles.length ? `
+          <div class="run-field">
+            <span>Style</span>
+            <div class="run-styles" data-styles>
+              <button class="style-chip on" data-style="best" title="Let the bot pick the strongest style for this subject">${ICONS.sparkle}Best</button>
+              ${styles.map((st) => `<button class="style-chip" data-style="${esc(st.id)}">${esc(st.name)}</button>`).join('')}
+            </div>
+          </div>` : ''}
+        <div class="bc-go">
+          <button class="btn btn-ink" data-run>${esc(bot.kind === 'image' ? 'Generate' : 'Run')}</button>
+          <span class="run-status" data-status aria-live="polite"></span>
+          <span class="bot-flex"></span>
+          <button class="mini" data-stop hidden>Stop</button>
+          <button class="mini" data-hide title="${hidden ? 'Show' : 'Hide'} This Bot">${hidden ? 'Show' : 'Hide'}</button>
+        </div>
+      </div>
+      <div class="bc-out" data-out></div>
+      <div class="bc-hist" data-hist></div>
+      <span class="bot-resize" title="Drag To Resize" aria-hidden="true"></span>
+    </article>`;
 }
 
 async function showBoard() {
@@ -46,29 +95,6 @@ async function showBoard() {
   const l = await layout();
   const cfgs = new Map();
   for (const b of BOTS) cfgs.set(b.id, await cfgOf(b));
-
-  const card = (id) => {
-    const b = botById(id);
-    if (!b) return '';
-    const c = cfgs.get(id);
-    const sz = l.size[id] || { w: 1, h: 1 };
-    const hidden = l.hidden.includes(id);
-    return `
-      <article class="bot-card${hidden ? ' is-hidden' : ''}" data-bot="${id}" data-w="${sz.w}" data-h="${sz.h}"
-               style="--bot:${esc(c.color || b.color)}" draggable="true" tabindex="0">
-        <span class="bot-grip" title="Drag To Rearrange" aria-hidden="true"></span>
-        <span class="bot-ic">${b.icon}</span>
-        <h2 class="bot-name">${esc(b.name)}</h2>
-        <p class="bot-blurb">${esc(b.blurb)}</p>
-        <div class="bot-foot">
-          <button class="btn btn-ink bot-run" data-run="${id}">Open</button>
-          <button class="mini" data-cfg="${id}" title="Bot Settings">Settings</button>
-          <span class="bot-flex"></span>
-          <button class="mini bot-eye" data-hide="${id}" title="${hidden ? 'Show On The Board' : 'Hide From The Board'}" aria-label="Hide">${hidden ? 'Show' : 'Hide'}</button>
-        </div>
-        <span class="bot-resize" title="Drag To Resize" aria-hidden="true"></span>
-      </article>`;
-  };
 
   $('#app').innerHTML = `
     <header class="lib-head">
@@ -83,7 +109,12 @@ async function showBoard() {
         <button class="btn" id="botSetup">Setup</button>
       </div>
     </header>
-    <main class="bot-board" id="botBoard">${l.order.map(card).join('')}</main>`;
+    <main class="bot-board" id="botBoard">
+      ${l.order.map((id) => {
+        const b = botById(id);
+        return b ? cardHtml(b, cfgs.get(id), l.size[id] || { w: 1, h: 1 }, l.hidden.includes(id)) : '';
+      }).join('')}
+    </main>`;
 
   $('#botHome').onclick = () => { location.href = '../'; };
   $('#botSetup').onclick = () => showSetup();
@@ -91,31 +122,76 @@ async function showBoard() {
   $('#botReset').onclick = async () => { await putLayout(DEF_LAYOUT()); showBoard(); };
 
   const board = $('#botBoard');
-  board.querySelectorAll('[data-run]').forEach((b) => { b.onclick = () => { location.hash = `#/b/${b.dataset.run}`; }; });
-  board.querySelectorAll('[data-cfg]').forEach((b) => { b.onclick = () => showSettings(botById(b.dataset.cfg)); });
-  board.querySelectorAll('[data-hide]').forEach((b) => {
-    b.onclick = async () => {
-      const id = b.dataset.hide;
-      const hidden = l.hidden.includes(id) ? l.hidden.filter((x) => x !== id) : [...l.hidden, id];
-      await putLayout({ ...l, hidden });
-      showBoard();
-    };
-  });
-  board.querySelectorAll('.bot-card').forEach((el) => {
-    el.addEventListener('dblclick', (e) => { if (!e.target.closest('button')) location.hash = `#/b/${el.dataset.bot}`; });
-    el.addEventListener('keydown', (e) => { if (e.key === 'Enter') location.hash = `#/b/${el.dataset.bot}`; });
-  });
-
+  for (const el of board.querySelectorAll('.bot-card')) await wireCard(el, l);
   wireDrag(board, l);
   wireResize(board, l);
 }
 
-// Drag to reorder: the same drop-before-or-after the Clips tag panel uses.
+// Everything one card needs, scoped to that card - so two bots can run at
+// the same time without touching each other's state.
+async function wireCard(card, l) {
+  const bot = botById(card.dataset.bot);
+  if (!bot) return;
+  const cfg = await cfgOf(bot);
+  const q = (sel) => card.querySelector(sel);
+  const status = q('[data-status]');
+  const say = (m) => { status.textContent = m; };
+  let style = 'best';
+  let ctrl = null;
+
+  card.querySelectorAll('[data-style]').forEach((b) => {
+    b.onclick = () => {
+      style = b.dataset.style;
+      card.querySelectorAll('[data-style]').forEach((o) => o.classList.toggle('on', o === b));
+    };
+  });
+  q('[data-cfg]').onclick = () => showSettings(bot);
+  q('[data-hide]').onclick = async () => {
+    const id = bot.id;
+    const hidden = l.hidden.includes(id) ? l.hidden.filter((x) => x !== id) : [...l.hidden, id];
+    await putLayout({ ...l, hidden });
+    showBoard();
+  };
+
+  const go = q('[data-run]');
+  const stop = q('[data-stop]');
+  go.onclick = async () => {
+    const vals = {};
+    for (const f of bot.inputs || []) vals[f.key] = q(`[data-in="${f.key}"]`)?.value.trim() || '';
+    const first = bot.inputs?.[0];
+    if (first && !vals[first.key]) { toast(`${first.label} Is Empty`, true); q(`[data-in="${first.key}"]`)?.focus(); return; }
+    ctrl = new AbortController();
+    go.disabled = true;
+    stop.hidden = false;
+    stop.onclick = () => ctrl.abort();
+    card.classList.add('is-busy');
+    try {
+      const fresh = await cfgOf(bot);
+      if (bot.kind === 'text') await runText(card, bot, fresh, vals, say, ctrl.signal);
+      else await runImage(card, bot, fresh, vals, style, say, ctrl.signal);
+    } catch (e) {
+      if (e.name === 'AbortError') { say('Stopped'); q('[data-out]').innerHTML = ''; }
+      else { console.error(e); say(''); paintError(card, e); toast(e.message || 'That Run Failed', true); }
+    }
+    go.disabled = false;
+    stop.hidden = true;
+    card.classList.remove('is-busy');
+    ctrl = null;
+  };
+
+  await paintHistory(card, bot);
+}
+
+// Drag by the grip only: the card is full of text fields now, and a
+// draggable card steals every selection and caret drag inside it.
 function wireDrag(board, l) {
   let dragEl = null;
   board.querySelectorAll('.bot-card').forEach((el) => {
+    const grip = el.querySelector('.bot-grip');
+    grip.addEventListener('pointerdown', () => { el.draggable = true; });
+    grip.addEventListener('pointerup', () => { el.draggable = false; });
     el.addEventListener('dragstart', (e) => {
-      if (e.target.closest('button')) { e.preventDefault(); return; }
+      if (!el.draggable) { e.preventDefault(); return; }
       dragEl = el;
       el.classList.add('dragging');
       e.dataTransfer.effectAllowed = 'move';
@@ -123,6 +199,7 @@ function wireDrag(board, l) {
     });
     el.addEventListener('dragend', async () => {
       el.classList.remove('dragging');
+      el.draggable = false;
       dragEl = null;
       await putLayout({ ...l, order: [...board.querySelectorAll('.bot-card')].map((c) => c.dataset.bot) });
     });
@@ -135,8 +212,8 @@ function wireDrag(board, l) {
   });
 }
 
-// Resize: drag the corner. Cards snap to a 1-2 column by 1-2 row span, so
-// the board stays a grid instead of becoming a pile of arbitrary boxes.
+// Resize: width snaps to 1 or 2 columns; height sets how tall the results
+// area is allowed to grow before it scrolls inside the card.
 function wireResize(board, l) {
   board.querySelectorAll('.bot-resize').forEach((h) => {
     h.addEventListener('pointerdown', (e) => {
@@ -145,13 +222,10 @@ function wireResize(board, l) {
       const card = h.closest('.bot-card');
       const r = card.getBoundingClientRect();
       const colW = r.width / Number(card.dataset.w || 1);
-      const rowH = r.height / Number(card.dataset.h || 1);
       h.setPointerCapture(e.pointerId);
       const move = (ev) => {
-        const w = Math.max(1, Math.min(2, Math.round((ev.clientX - r.left) / colW)));
-        const hh = Math.max(1, Math.min(2, Math.round((ev.clientY - r.top) / rowH)));
-        card.dataset.w = String(w);
-        card.dataset.h = String(hh);
+        card.dataset.w = String(Math.max(1, Math.min(2, Math.round((ev.clientX - r.left) / colW))));
+        card.dataset.h = String((ev.clientY - r.top) > r.height * 1.15 ? 2 : 1);
       };
       const up = async () => {
         h.removeEventListener('pointermove', move);
@@ -287,7 +361,7 @@ async function showSettings(bot) {
     cfgCache.delete(bot.id);
     close();
     toast('Settings Reset');
-    if (!location.hash.startsWith('#/b/')) showBoard();
+    showBoard();
   };
   veil.querySelector('[data-x="save"]').onclick = async () => {
     const patch = { color };
@@ -306,7 +380,7 @@ async function showSettings(bot) {
     await saveCfg(bot, patch);
     close();
     toast('Settings Saved');
-    if (location.hash.startsWith('#/b/')) showRunner(bot.id); else showBoard();
+    showBoard();
   };
 }
 
@@ -325,12 +399,11 @@ function showSetup() {
   veil.innerHTML = `
     <div class="sheet sheet-wide" role="dialog" aria-modal="true">
       <h3>How CTH Bots Runs</h3>
-      <p>The bots call models through the CTH Worker you already run for Slides, at <code>apps-api.coachtonyhockey.com</code>. The provider keys live there as Worker secrets, never in the site and never in this browser.</p>
-      <p>One-time setup, from the repo:</p>
-      <div class="ph-formula"><code>cd present-worker &amp;&amp; npx wrangler secret put ANTHROPIC_API_KEY</code></div>
-      <div class="ph-formula"><code>npx wrangler secret put OPENAI_API_KEY</code></div>
-      <div class="ph-formula"><code>npx wrangler deploy</code></div>
-      <p class="bs-note">The first key powers the text bots and reading a style from a screenshot. The second powers image generation. Add only the one you need; a bot that has no key says so plainly instead of failing quietly.</p>
+      <p>The bots run on <strong>Workers AI</strong>, inside the same Cloudflare Worker that already serves Slides. There is <strong>no API key to create and nothing to paste</strong> - inference is billed to the Cloudflare account this Worker runs on.</p>
+      <p>Because it runs at Cloudflare's edge rather than on your Mac, the bots work with your laptop shut.</p>
+      <p>One command, once:</p>
+      <div class="ph-formula"><code>cd ~/cth/work/cth-apps/present-worker &amp;&amp; npx wrangler deploy</code></div>
+      <p class="bs-note">Speed is the tie-break everywhere: images use the four-step FLUX.2 klein models and text uses the fast Llama build, with the options for a run generated in parallel. The free allowance is 10,000 Neurons a day, then about a penny per thousand.</p>
       <div class="sheet-row"><button class="btn btn-ink" data-x="ok">Got It</button></div>
     </div>`;
   document.body.appendChild(veil);
@@ -339,106 +412,13 @@ function showSetup() {
   veil.querySelector('[data-x="ok"]').onclick = close;
 }
 
-// ------------------------------------------------------------- the runner
+// ------------------------------------------------------- running a card
+//
+// Every renderer takes the CARD as its root, so two bots running at once
+// never write into each other's results.
 
-let running = null;
-
-async function showRunner(id) {
-  const bot = botById(id);
-  if (!bot) { location.hash = '#/'; return; }
-  const cfg = await cfgOf(bot);
-  document.title = `${bot.name} - CTH Bots`;
-  const styles = cfg.styles || [];
-
-  $('#app').innerHTML = `
-    <header class="lib-head">
-      <div class="brand">
-        <button class="btn btn-back" id="runBack" title="Back To The Board">${BACK_ICON}</button>
-        <span class="run-ic" style="--bot:${esc(cfg.color || bot.color)}">${bot.icon}</span>
-        <div class="brand-word"><h1>${esc(bot.name)}</h1></div>
-      </div>
-      <div class="lib-actions">
-        <button class="mini" id="runCfg">Settings</button>
-      </div>
-    </header>
-    <main class="run-wrap">
-      <section class="run-form">
-        ${(bot.inputs || []).map((f) => `
-          <label class="run-field">
-            <span>${esc(f.label)}</span>
-            ${f.type === 'textarea'
-              ? `<textarea data-in="${f.key}" rows="4" placeholder="${esc(f.placeholder || '')}"></textarea>`
-              : `<input type="${f.type === 'url' ? 'url' : 'text'}" data-in="${f.key}" placeholder="${esc(f.placeholder || '')}">`}
-          </label>`).join('')}
-        ${bot.kind === 'image' && styles.length ? `
-          <div class="run-field">
-            <span>Style</span>
-            <div class="run-styles" id="runStyles">
-              <button class="style-chip on" data-style="best" title="Let the bot pick the strongest style for this subject">${ICONS.sparkle}Best</button>
-              ${styles.map((s) => `<button class="style-chip" data-style="${esc(s.id)}">${esc(s.name)}</button>`).join('')}
-            </div>
-          </div>` : ''}
-        <div class="run-go">
-          <button class="btn btn-ink" id="runGo">Run ${esc(bot.name.replace(/ Bot$/, ''))}</button>
-          <span class="run-status" id="runStatus" aria-live="polite"></span>
-          <span class="bot-flex"></span>
-          <button class="mini" id="runStop" hidden>Stop</button>
-        </div>
-      </section>
-      <section class="run-out" id="runOut"></section>
-      <section class="run-hist" id="runHist"></section>
-    </main>`;
-
-  $('#runBack').onclick = () => { location.hash = '#/'; };
-  $('#runCfg').onclick = () => showSettings(bot);
-  let style = 'best';
-  $$('#runStyles .style-chip').forEach((b) => {
-    b.onclick = () => {
-      style = b.dataset.style;
-      $$('#runStyles .style-chip').forEach((o) => o.classList.toggle('on', o === b));
-    };
-  });
-
-  const status = $('#runStatus');
-  const say = (m) => { status.textContent = m; };
-  const go = $('#runGo');
-  const stop = $('#runStop');
-
-  go.onclick = async () => {
-    const vals = {};
-    for (const f of bot.inputs || []) vals[f.key] = $(`[data-in="${f.key}"]`)?.value.trim() || '';
-    const first = bot.inputs?.[0];
-    if (first && !vals[first.key]) { toast(`${first.label} Is Empty`, true); return; }
-    const ctrl = new AbortController();
-    running = ctrl;
-    go.disabled = true;
-    stop.hidden = false;
-    stop.onclick = () => ctrl.abort();
-    try {
-      if (bot.kind === 'text') await runText(bot, cfg, vals, say, ctrl.signal);
-      else await runImage(bot, cfg, vals, style, say, ctrl.signal);
-    } catch (e) {
-      // A failed run must not leave its loading bones on screen.
-      if (e.name === 'AbortError') { say('Stopped'); $('#runOut').innerHTML = ''; }
-      else {
-        console.error(e);
-        say('');
-        paintError(e);
-        toast(e.message || 'That Run Failed', true);
-      }
-    }
-    go.disabled = false;
-    stop.hidden = true;
-    running = null;
-  };
-
-  await paintHistory(bot);
-}
-
-// The run failed. Say what went wrong and, where the cause is setup rather
-// than a bad prompt, give the button that fixes it.
-function paintError(e) {
-  const out = $('#runOut');
+function paintError(card, e) {
+  const out = card.querySelector('[data-out]');
   if (!out) return;
   const setup = e.code === 'missing' || e.code === 'nokey';
   out.innerHTML = `
@@ -447,7 +427,7 @@ function paintError(e) {
       <div>
         <p class="run-error-t">${esc(e.message || 'That run did not finish')}</p>
         <p class="run-error-b">${setup
-          ? 'The bots call models through your CTH Worker. It needs one deploy and its keys set before any bot can run.'
+          ? 'The bots run on Workers AI through your CTH Worker. It needs one deploy before any bot can run.'
           : 'Nothing was saved. Adjust the input and run it again.'}</p>
       </div>
       ${setup ? '<button class="btn" data-setup>Open Setup</button>' : ''}
@@ -455,10 +435,10 @@ function paintError(e) {
   out.querySelector('[data-setup]')?.addEventListener('click', () => showSetup());
 }
 
-async function runText(bot, cfg, vals, say, signal) {
+async function runText(card, bot, cfg, vals, say, signal) {
   say('Thinking…');
-  const out = $('#runOut');
-  out.innerHTML = `<div class="run-skel">${'<div class="skel-line"></div>'.repeat(Math.min(6, cfg.count || 5))}</div>`;
+  const out = card.querySelector('[data-out]');
+  out.innerHTML = `<div class="run-skel">${'<div class="skel-line"></div>'.repeat(Math.min(5, cfg.count || 5))}</div>`;
   const text = await aiText(cfg.system || bot.system, bot.prompt(vals, cfg), signal);
   const parsed = parseJson(text);
   const items = Array.isArray(parsed) ? parsed
@@ -467,12 +447,12 @@ async function runText(bot, cfg, vals, say, signal) {
   say('');
   const run = { id: uid(), bot: bot.id, at: Date.now(), kind: 'text', input: vals, items };
   await addRun(run);
-  paintText(bot, run);
-  await paintHistory(bot);
+  paintText(card, run);
+  await paintHistory(card, bot);
 }
 
-function paintText(bot, run) {
-  const out = $('#runOut');
+function paintText(card, run) {
+  const out = card.querySelector('[data-out]');
   if (!out) return;
   out.innerHTML = `
     <div class="run-head"><span class="pe-title">Results</span><span class="bot-flex"></span>
@@ -499,18 +479,16 @@ function paintText(bot, run) {
 
 const ASPECTS = { 'Landscape 16:9': '16:9', 'Square 1:1': '1:1', 'Portrait 4:5': '4:5' };
 
-async function runImage(bot, cfg, vals, styleId, say, signal, extra = '') {
+async function runImage(card, bot, cfg, vals, styleId, say, signal, extra = '') {
   const n = Math.max(1, Math.min(4, Number(cfg.count) || 3));
-  const out = $('#runOut');
-  out.innerHTML = `<div class="img-grid">${`<div class="img-skel"></div>`.repeat(n)}</div>`;
+  const out = card.querySelector('[data-out]');
+  out.innerHTML = `<div class="img-grid">${'<div class="img-skel"></div>'.repeat(n)}</div>`;
 
-  // "Best" asks the text model to choose and write the strongest style for
-  // this subject; a named style uses its own description directly.
-  let style = (cfg.styles || []).find((s) => s.id === styleId) || null;
+  let style = (cfg.styles || []).find((st) => st.id === styleId) || null;
   if (styleId === 'best') {
     say('Choosing A Style…');
     try {
-      const names = (cfg.styles || []).map((s) => `${s.name}: ${s.prompt}`).join('\n');
+      const names = (cfg.styles || []).map((st) => `${st.name}: ${st.prompt}`).join('\n');
       const pick = await aiText(
         cfg.system || bot.system,
         `Subject: ${vals.brief}\n\nCandidate styles:\n${names}\n\nChoose the single most effective style for this subject - or invent a better one. Return JSON: {"name":"...","prompt":"the full style description"}`,
@@ -520,11 +498,10 @@ async function runImage(bot, cfg, vals, styleId, say, signal, extra = '') {
       if (got?.prompt) style = { id: 'best', name: got.name || 'Best', prompt: got.prompt };
     } catch (e) {
       if (e.name === 'AbortError') throw e;
-      // A missing text key must not block image generation.
       console.error(e);
     }
   }
-  say(`Generating ${n} Option${n > 1 ? 's' : ''}…`);
+  say(`Generating ${n}…`);
   const prompt = `${bot.prompt(vals, cfg, style)}${extra ? `\n${extra}` : ''}`;
   const images = await aiImage(prompt, ASPECTS[cfg.aspect] || '16:9', n, signal);
   say('');
@@ -533,22 +510,22 @@ async function runImage(bot, cfg, vals, styleId, say, signal, extra = '') {
     input: vals, style: style ? style.name : 'Best', prompt, images,
   };
   await addRun(run);
-  paintImages(bot, cfg, run);
-  await paintHistory(bot);
+  paintImages(card, bot, cfg, run);
+  await paintHistory(card, bot);
 }
 
-function paintImages(bot, cfg, run) {
-  const out = $('#runOut');
+function paintImages(card, bot, cfg, run) {
+  const out = card.querySelector('[data-out]');
   if (!out) return;
   out.innerHTML = `
     <div class="run-head"><span class="pe-title">Results</span>
       <span class="chip-neutral">${esc(run.style)}</span>
       <span class="bot-flex"></span>
-      <button class="mini" data-saveall>Save All To ${esc(cfg.folder)}</button></div>
+      <button class="mini" data-saveall>Save All</button></div>
     <div class="img-grid">
       ${run.images.map((src, i) => `
         <figure class="img-card" data-i="${i}">
-          <img src="${src}" alt="Option ${i + 1}">
+          <img src="${src}" alt="Option ${i + 1}" loading="lazy">
           <figcaption>
             <button class="mini" data-save="${i}">Save</button>
             <button class="mini" data-regen="${i}">Refine</button>
@@ -557,23 +534,20 @@ function paintImages(bot, cfg, run) {
           </figcaption>
         </figure>`).join('')}
     </div>`;
-
-  out.querySelectorAll('[data-save]').forEach((b) => {
-    b.onclick = () => saveImage(cfg, run, Number(b.dataset.save));
-  });
+  out.querySelectorAll('[data-save]').forEach((b) => { b.onclick = () => saveImage(cfg, run, Number(b.dataset.save)); });
   out.querySelector('[data-saveall]').onclick = async () => {
     for (let i = 0; i < run.images.length; i++) await saveImage(cfg, run, i, true);
     toast(`Saved ${run.images.length} To ${cfg.folder}`);
   };
   out.querySelectorAll('[data-regen]').forEach((b) => {
-    b.onclick = () => openRefine(bot, cfg, run, Number(b.dataset.regen));
+    b.onclick = () => openRefine(card, bot, cfg, run, Number(b.dataset.regen));
   });
 }
 
 // Refine: mark a region on the option and say what to change. The box is
 // turned into words for the prompt, which is what an image model can act
 // on - it keeps the "point at it" feel without pretending to inpaint.
-function openRefine(bot, cfg, run, i) {
+function openRefine(card, bot, cfg, run, i) {
   const veil = document.createElement('div');
   veil.className = 'sheet-veil';
   veil.innerHTML = `
@@ -639,9 +613,9 @@ function openRefine(bot, cfg, run, i) {
       where = `Focus the change on the ${row} ${col} area of the image. `;
     }
     close();
-    const say = (m) => { const s = $('#runStatus'); if (s) s.textContent = m; };
+    const say = (m) => { const st = card.querySelector('[data-status]'); if (st) st.textContent = m; };
     try {
-      await runImage(bot, cfg, run.input, 'best', say, undefined,
+      await runImage(card, bot, cfg, run.input, 'best', say, undefined,
         `Keep the overall composition of the previous version. ${where}${note ? `Change: ${note}` : 'Produce a stronger variation.'}`);
     } catch (e) { toast(e.message || 'Refine Failed', true); }
   };
@@ -671,19 +645,19 @@ async function saveImage(cfg, run, i, quiet = false) {
   }
 }
 
-async function paintHistory(bot) {
-  const box = $('#runHist');
+async function paintHistory(card, bot) {
+  const box = card.querySelector('[data-hist]');
   if (!box) return;
-  const runs = (await listRuns()).filter((r) => r.bot === bot.id).slice(0, 8);
+  const runs = (await listRuns()).filter((r) => r.bot === bot.id).slice(0, 5);
   if (!runs.length) { box.innerHTML = ''; return; }
   box.innerHTML = `
-    <div class="run-head"><span class="pe-title">Recent Runs</span></div>
+    <div class="run-head"><span class="pe-title">Recent</span></div>
     <div class="hist-list">
       ${runs.map((r) => `
         <button class="hist-row" data-open="${r.id}">
           <span class="hist-when">${new Date(r.at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
-          <span class="hist-what">${esc(String(Object.values(r.input || {})[0] || '').slice(0, 80))}</span>
-          <span class="chip-neutral">${r.kind === 'image' ? `${r.images?.length || 0} images` : `${r.items?.length || 0} cues`}</span>
+          <span class="hist-what">${esc(String(Object.values(r.input || {})[0] || '').slice(0, 60))}</span>
+          <span class="chip-neutral">${r.kind === 'image' ? `${r.images?.length || 0}` : `${r.items?.length || 0}`}</span>
           <span class="hist-del" data-del="${r.id}" title="Remove">&times;</span>
         </button>`).join('')}
     </div>`;
@@ -691,25 +665,16 @@ async function paintHistory(bot) {
     b.onclick = async (e) => {
       if (e.target.closest('[data-del]')) {
         await deleteRun(e.target.dataset.del);
-        await paintHistory(bot);
+        await paintHistory(card, bot);
         return;
       }
       const r = runs.find((x) => x.id === b.dataset.open);
       if (!r) return;
-      if (r.kind === 'image') paintImages(bot, await cfgOf(bot), r); else paintText(bot, r);
+      if (r.kind === 'image') paintImages(card, bot, await cfgOf(bot), r); else paintText(card, r);
     };
   });
 }
 
-// ------------------------------------------------------------- routing
-
-async function go() {
-  running?.abort();
-  running = null;
-  const h = location.hash || '#/';
-  if (h.startsWith('#/b/')) await showRunner(h.slice(4));
-  else await showBoard();
-}
-
-window.addEventListener('hashchange', () => void go());
-void go();
+// ------------------------------------------------------------- start
+// One page: there is no route but the board.
+void showBoard();

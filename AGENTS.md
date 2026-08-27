@@ -406,6 +406,10 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
     quiet text, chevron separators are masked SVGs.
   - COUNTS (`.clib-count`, `.log-count`, `.eside-count`) are neutral
     chips: n-200 surface, n-500 medium text, radius 6.
+- **The hub lists apps ALPHABETICALLY, always** (2026-08-27, Tony's call),
+  as compact tiles: icon, name, arrow. No descriptions - a short board
+  beats a tall one. A new app is inserted in alphabetical order, never
+  appended.
 - **Type ramp.** Chrome tops out at 600 (400 body / 500 labels / 600
   headings). 700 is used only for SLIDE CONTENT, which is read across a
   room. 800 is NOT in the BoardUI ramp and survives in exactly four places,
@@ -456,8 +460,35 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   `/ai/vision`, `/ai/image` on apps-api.coachtonyhockey.com. Setup is
   `wrangler secret put ANTHROPIC_API_KEY` (text and vision),
   `wrangler secret put OPENAI_API_KEY` (images), then `wrangler deploy`.
-  A missing key or an undeployed Worker must surface as a plain-words
-  error with a Setup button - never a silent failure or a dead spinner.
+  An undeployed Worker must surface as a plain-words error with a Setup
+  button - never a silent failure or a dead spinner.
+- **ONE PAGE** (2026-08-27, Tony's call). A card is not a link to a bot:
+  the card IS the bot, holding its own inputs, Run button, results and
+  recent runs. There is no second route in this app and no `location.hash`
+  handling - do not reintroduce a detail page. Renderers take the CARD as
+  their root so two bots can run at once without crossing state, and the
+  drag handle is the grip alone (a draggable card steals every caret drag
+  inside its own text fields).
+- **THE MODELS ARE WORKERS AI**, through the `AI` binding on the same
+  Worker (`[ai] binding = "AI"` in wrangler.toml). THERE IS NO API KEY -
+  inference bills to the Cloudflare account the Worker already runs on,
+  which is also why the bots work with the laptop shut: the work happens
+  at the edge, not on the Mac. Setup is one `wrangler deploy`, no secret.
+  Speed is the tie-break: images use the four-step FLUX.2 klein models
+  (`flux-2-klein-4b` fast, `-9b` on `quality: true`), text uses the fast
+  Llama build, vision uses llama-4-scout, and a run's options generate in
+  parallel. Do not swap in a slower default model. Anything on Tony's Mac
+  (an MCP server, a local agent) CANNOT serve this app - it fails the
+  laptop-shut requirement - and a consumer Claude.ai subscription has no
+  API to call, so neither is an option however convenient it sounds.
+
+## Diagrams file tree
+
+- A FILE ROW CARRIES NO ICON (2026-08-27, Tony's call); only folders do,
+  the way Finder and Obsidian draw a tree. Rows and folder rows share one
+  24px rhythm so the column scans, folders sort above loose diagrams, and
+  a folder's children indent behind a 1px rail under a rotating caret.
+  Density is the point: do not add per-row glyphs, padding or badges.
 
 ## Verifying a change
 

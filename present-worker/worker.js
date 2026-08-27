@@ -15,9 +15,8 @@
 // no prompts; CORS admits the same two CTH origins as everything else.
 //
 // Deploy: cd present-worker && npx wrangler deploy
-// Secrets: npx wrangler secret put NOTION_TOKEN
-//          npx wrangler secret put ANTHROPIC_API_KEY   (text + vision)
-//          npx wrangler secret put OPENAI_API_KEY      (images)
+// Secret: npx wrangler secret put NOTION_TOKEN   (Slides only - the bots
+//         need no key at all, see the Workers AI note below)
 
 const ALLOWED_ORIGINS = [
   'https://apps.coachtonyhockey.com',
@@ -130,96 +129,126 @@ function pageTitle(page) {
 
 // ---------------------------------------------------------------- CTH Bots
 //
-// Three endpoints, all POST, all JSON. Prompts are passed straight through
-// and nothing is stored. The size caps below are the only guard rails: a
-// static site cannot be trusted to bound its own request.
+// The bots run on WORKERS AI (2026-08-27, Tony's call, replacing the
+// Anthropic/OpenAI proxy that was here for a few hours). That choice is the
+// whole architecture:
+//
+//   - NO API KEY EXISTS. Workers AI is billed to the Cloudflare account
+//     this Worker already runs on, through the `AI` binding. There is no
+//     secret to set, nothing to leak, and no second vendor.
+//   - IT RUNS AT THE EDGE, so the bots work with Tony's laptop shut. A
+//     provider reached from the browser, or anything on the Mac (an MCP
+//     server, a local agent), cannot do that.
+//   - SPEED IS THE TIE-BREAK. The image models are the distilled FLUX.2
+//     [klein] pair - a fixed four-step inference built for latency - and
+//     the text model is the fp8 "fast" build. `quality: true` on a request
+//     moves up one rung; nothing here ever picks a slow model by default.
+//
+// Free allowance is 10,000 Neurons a day, then $0.011 per 1,000.
 
 const MAX_PROMPT = 8000;
-const MAX_IMAGE_IN = 6_000_000;   // a pasted screenshot, base64
-const TEXT_MODEL = 'claude-sonnet-4-5-20250929';
-const IMAGE_MODEL = 'gpt-image-1';
+const MAX_IMAGE_IN = 6_000_000;
 
-const ASPECT_SIZE = {
-  '16:9': '1536x1024',
-  '1:1': '1024x1024',
-  '4:5': '1024x1536',
+const MODELS = {
+  text: { fast: '@cf/meta/llama-3.1-8b-instruct-fast', good: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' },
+  vision: { fast: '@cf/meta/llama-4-scout-17b-16e-instruct', good: '@cf/meta/llama-4-scout-17b-16e-instruct' },
+  image: { fast: '@cf/black-forest-labs/flux-2-klein-4b', good: '@cf/black-forest-labs/flux-2-klein-9b' },
 };
 
-async function anthropic(env, body) {
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': env.ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify(body),
+// FLUX wants multiples of 32. These are the three shapes the bots offer.
+const ASPECT_WH = {
+  '16:9': [1024, 576],
+  '1:1': [1024, 1024],
+  '4:5': [896, 1120],
+};
+
+const b64 = (buf) => {
+  const bytes = new Uint8Array(buf);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+};
+
+// FLUX.2 takes multipart form data even for a bare prompt, and answers with
+// the image bytes as a stream. FormData will not hand over its own boundary,
+// so it is serialized through a Response first - that is the documented way.
+async function fluxImage(env, model, prompt, aspect) {
+  const [w, h] = ASPECT_WH[aspect] || ASPECT_WH['16:9'];
+  const form = new FormData();
+  form.append('prompt', prompt);
+  form.append('width', String(w));
+  form.append('height', String(h));
+  const fr = new Response(form);
+  const out = await env.AI.run(model, {
+    multipart: { body: fr.body, contentType: fr.headers.get('content-type') },
   });
-  const data = await r.json().catch(() => null);
-  if (!r.ok) {
-    const msg = data?.error?.message || `Anthropic returned ${r.status}`;
-    const err = new Error(msg);
-    err.status = r.status;
-    throw err;
-  }
-  return (data?.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('\n').trim();
+  // Depending on the model the binding gives back a stream, a plain
+  // ArrayBuffer, or an object carrying base64 - accept all three.
+  if (out && typeof out.getReader === 'function') return `data:image/png;base64,${b64(await new Response(out).arrayBuffer())}`;
+  if (out instanceof ArrayBuffer) return `data:image/png;base64,${b64(out)}`;
+  if (out && out.image) return `data:image/png;base64,${out.image}`;
+  if (out && out.body) return `data:image/png;base64,${b64(await new Response(out.body).arrayBuffer())}`;
+  throw new Error('The image model returned nothing usable');
 }
 
 async function handleAi(request, env, path) {
   if (request.method !== 'POST') return json(request, { error: 'method' }, 405);
+  if (!env.AI) return json(request, { error: 'no_binding', message: 'Workers AI is not bound to this Worker. Redeploy it.' }, 503);
   let body;
   try { body = await request.json(); } catch (_) { return json(request, { error: 'bad_json' }, 400); }
+  const tier = body.quality ? 'good' : 'fast';
+  const prompt = String(body.prompt || '').slice(0, MAX_PROMPT);
+  if (!prompt) return json(request, { error: 'empty' }, 400);
 
-  if (path === '/ai/text' || path === '/ai/vision') {
-    if (!env.ANTHROPIC_API_KEY) return json(request, { error: 'no_key', message: 'ANTHROPIC_API_KEY is not set on this Worker.' }, 401);
-    const prompt = String(body.prompt || '').slice(0, MAX_PROMPT);
-    if (!prompt) return json(request, { error: 'empty' }, 400);
-    const system = String(body.system || '').slice(0, MAX_PROMPT);
-    let content = prompt;
+  try {
+    if (path === '/ai/text') {
+      const system = String(body.system || '').slice(0, MAX_PROMPT);
+      const r = await env.AI.run(MODELS.text[tier], {
+        messages: [
+          ...(system ? [{ role: 'system', content: system }] : []),
+          { role: 'user', content: prompt },
+        ],
+        max_tokens: 1200,
+      });
+      return json(request, { text: (r?.response || '').trim() });
+    }
+
     if (path === '/ai/vision') {
       const img = String(body.image || '');
-      const m2 = img.match(/^data:(image\/[a-z+]+);base64,(.+)$/i);
+      const m2 = img.match(/^data:image\/[a-z+]+;base64,(.+)$/i);
       if (!m2 || img.length > MAX_IMAGE_IN) return json(request, { error: 'bad_image' }, 400);
-      content = [
-        { type: 'image', source: { type: 'base64', media_type: m2[1], data: m2[2] } },
-        { type: 'text', text: prompt },
-      ];
-    }
-    try {
-      const text = await anthropic(env, {
-        model: TEXT_MODEL,
-        max_tokens: 1500,
-        ...(system ? { system } : {}),
-        messages: [{ role: 'user', content }],
+      const r = await env.AI.run(MODELS.vision[tier], {
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'image_url', image_url: { url: img } },
+          ],
+        }],
+        max_tokens: 700,
       });
-      return json(request, { text });
-    } catch (e) {
-      return json(request, { error: 'model', message: e.message }, e.status === 429 ? 429 : 502);
+      return json(request, { text: (r?.response || '').trim() });
     }
-  }
 
-  if (path === '/ai/image') {
-    if (!env.OPENAI_API_KEY) return json(request, { error: 'no_key', message: 'OPENAI_API_KEY is not set on this Worker.' }, 401);
-    const prompt = String(body.prompt || '').slice(0, MAX_PROMPT);
-    if (!prompt) return json(request, { error: 'empty' }, 400);
-    const n = Math.max(1, Math.min(4, Number(body.n) || 1));
-    const size = ASPECT_SIZE[body.aspect] || ASPECT_SIZE['16:9'];
-    try {
-      const r = await fetch('https://api.openai.com/v1/images/generations', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${env.OPENAI_API_KEY}` },
-        body: JSON.stringify({ model: IMAGE_MODEL, prompt, n, size, quality: 'high' }),
-      });
-      const data = await r.json().catch(() => null);
-      if (!r.ok) {
-        const msg = data?.error?.message || `Image provider returned ${r.status}`;
-        return json(request, { error: 'model', message: msg }, r.status === 429 ? 429 : 502);
+    if (path === '/ai/image') {
+      const n = Math.max(1, Math.min(4, Number(body.n) || 1));
+      const model = MODELS.image[tier];
+      // Run the options concurrently: four four-step generations in
+      // parallel is the difference between a wait and a pause.
+      const settled = await Promise.allSettled(
+        Array.from({ length: n }, () => fluxImage(env, model, prompt, body.aspect)),
+      );
+      const images = settled.filter((x) => x.status === 'fulfilled').map((x) => x.value);
+      if (!images.length) {
+        const why = settled.find((x) => x.status === 'rejected')?.reason;
+        return json(request, { error: 'model', message: String(why?.message || why || 'Image generation failed') }, 502);
       }
-      const images = (data?.data || []).map((d) => (d.b64_json ? `data:image/png;base64,${d.b64_json}` : d.url)).filter(Boolean);
       return json(request, { images });
-    } catch (e) {
-      return json(request, { error: 'model', message: e.message }, 502);
     }
+  } catch (e) {
+    const msg = String(e?.message || e);
+    const rate = /rate|429|capacity|limit/i.test(msg);
+    return json(request, { error: 'model', message: msg }, rate ? 429 : 502);
   }
   return json(request, { error: 'not_found' }, 404);
 }

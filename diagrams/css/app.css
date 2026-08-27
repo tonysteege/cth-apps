@@ -544,11 +544,11 @@ input:focus, select:focus, textarea:focus { outline: none; }
 .ed-side {
   display: flex;
   flex-direction: column;
-  width: 240px;
+  width: 232px;
   flex-shrink: 0;
   overflow-y: auto;
   margin: 14px 0 14px 14px;
-  padding: 12px 10px;
+  padding: 10px 8px;
   background: var(--n-100);
   border: 1px solid var(--cloud);
   border-radius: 24px;
@@ -592,25 +592,23 @@ input:focus, select:focus, textarea:focus { outline: none; }
   color: var(--soft);
   margin: 12px 8px 4px;
 }
+/* A FILE ROW: no icon, tight, and as many on screen as will fit. 24px is
+   the Finder / Obsidian rhythm - lower than that and a long list stops
+   being scannable. */
 .eside-row {
   display: flex;
   align-items: center;
-  gap: 7px;
   width: 100%;
   text-align: left;
   border: none;
   background: none;
-  border-radius: var(--r-sm);
-  padding: 6px 8px;
-  min-height: 28px;
+  border-radius: 6px;
+  padding: 3px 8px;
+  min-height: 24px;
   color: var(--graphite);
-  font-size: 13px;
+  font-size: 12.5px;
   transition: background var(--dur) ease, color var(--dur) ease;
 }
-/* The rink glyph each diagram row leads with. */
-.eside-doc { width: 15px; height: 15px; flex: none; color: var(--soft); }
-.eside-row:hover .eside-doc { color: var(--mist); }
-.eside-row.on .eside-doc { color: rgba(255, 255, 255, 0.85); }
 .eside-row:hover { background: var(--sunken); color: var(--ink); }
 .eside-row.on {
   background-image: var(--grad-primary);
@@ -622,13 +620,15 @@ input:focus, select:focus, textarea:focus { outline: none; }
 
 /* Folder contents nest: indented behind a rail, so what belongs to which
    folder is visible without reading. */
-.eside-list [data-rows] {
-  margin: 1px 0 4px 13px;
-  padding-left: 7px;
-  border-left: 1px solid var(--n-300);
+/* A folder's children sit indented behind the disclosure rail, so the
+   nesting is visible without reading - the point of a tree. */
+.eside-kids {
+  margin: 0 0 2px 15px;
+  padding-left: 6px;
+  border-left: 1px solid var(--n-200);
 }
-.eside-list [data-rootrows] { margin-bottom: 4px; }
-.eside-empty { color: var(--soft); font-size: 12px; padding: 4px 10px; }
+.eside-loose { margin-top: 2px; }
+.eside-empty { color: var(--soft); font-size: 11.5px; padding: 3px 8px; }
 
 /* the cone art reads oversized next to the flat glyphs - pull it in */
 .tb-btn img.ic-cone { width: 19px; height: 19px; }
@@ -1060,25 +1060,39 @@ input:focus, select:focus, textarea:focus { outline: none; }
 .fic { width: 15px; height: 15px; flex-shrink: 0; color: var(--soft); }
 
 /* ---------------------------------------------- file tree extras */
-.eside-actions { display: flex; gap: 6px; margin-bottom: 10px; }
+.eside-actions { display: flex; gap: 6px; margin-bottom: 8px; }
 .eside-actions .eside-new { margin-bottom: 0; flex: 1; white-space: nowrap; }
 .eside-row { cursor: pointer; user-select: none; }
+/* A FOLDER ROW: caret, folder, name, count - the standard tree line, at
+   the same 24px rhythm as a file so the list reads as one column. */
 .eside-folder {
   display: flex; align-items: center; gap: 5px;
-  cursor: pointer; user-select: none; border-radius: 7px; padding: 5px 8px;
+  cursor: pointer; user-select: none;
+  border-radius: 6px; padding: 3px 8px 3px 3px;
+  min-height: 24px;
+  font-size: 12.5px; font-weight: 500;
+  text-transform: none; letter-spacing: 0;
+  color: var(--n-700);
+  margin: 0;
 }
 .eside-folder:hover { background: var(--sunken); color: var(--ink); }
 .eside-folder.side-drop { background: var(--select-soft); box-shadow: inset 0 0 0 1.5px var(--select); }
-.eside-root { margin-top: 2px; }
-.eside-caret { width: 12px; height: 12px; transform: rotate(90deg); transition: transform .12s; }
+.eside-fname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eside-caret {
+  width: 13px; height: 13px; flex: none;
+  color: var(--n-400);
+  transform: rotate(90deg);
+  transition: transform 120ms ease;
+}
 .eside-folder.closed .eside-caret { transform: none; }
+.eside-folder .fic { color: var(--n-400); }
 .eside-count {
-  margin-left: auto;
-  padding: 1px 7px;
-  border-radius: 6px;
+  flex: none;
+  padding: 0 5px;
+  border-radius: 5px;
   background: var(--n-200);
   color: var(--n-500);
-  font-weight: 500; font-size: 11px;
+  font-weight: 500; font-size: 10.5px;
   font-variant-numeric: tabular-nums;
 }
 .eside-list { flex: 1; }
