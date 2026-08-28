@@ -37,6 +37,7 @@ import {
 import { openAnnotate, annotationElements, paintIdleBar, onAnnotateIdle, applyToolStyle } from './annotate.js';
 import { recordRange, deliver, fileStem, CROP_PRESETS, openMic } from './export.js';
 import { openCompare, closeCompare, comparing } from './compare.js';
+import { openVideoEditor } from './videoedit.js';
 import { drawEl } from '/diagrams/js/flat.js';
 import { toast, esc, confirmSheet, fmtDate } from './ui.js';
 import { putDrill, uid as drillUid } from '/diagrams/js/store.js';
@@ -474,6 +475,7 @@ async function showPlayer(id) {
               <button class="tbtn" id="vpFrameF" title="Next Frame"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 17l5-5-5-5"/><path d="M18 6v12"/></svg></button>
               <button class="tbtn" id="vpFwd5" title="Forward 5s"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 17l5-5-5-5"/><path d="M6 17l5-5-5-5"/></svg></button>
               <button class="tbtn tbtn-word" id="vpSpeed" title="Playback Speed">1x</button>
+              <button class="tbtn tbtn-word" id="vpEdit" title="Trim, Crop, Colour, Patch And Compress This Video">Edit</button>
             </span>
             <!-- The timeline moved INTO the transport bar, which is where a
                  scrubber belongs anyway: the clock, the transport and the
@@ -502,6 +504,15 @@ async function showPlayer(id) {
   $('#vpFreeze').oncontextmenu = (e) => { e.preventDefault(); void editBuffer('freezeBuf', 'Freeze'); };
   $('#vpRecord').onclick = () => void openRecord(game);
   $('#vpCompare').onclick = () => void openCompare({ name: game.name, url: src, startAt: video().currentTime });
+  $('#vpEdit').onclick = () => void openVideoEditor({
+    game,
+    video: video(),
+    src,
+    // The file on disk changed under the player, so the whole view is rebuilt
+    // rather than patched: the duration, the timeline and every clip position
+    // all moved together.
+    onReplaced: () => { void showPlayer(id); },
+  });
   wirePanels();
 
   // The toolbar is on screen from the moment the player is, so it needs a

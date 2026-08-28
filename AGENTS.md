@@ -349,6 +349,35 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   you type - `pe-key--dup` (danger ring: two buttons on one letter, only the
   first fires) and `pe-key--takes` (grey ring: this button takes a transport
   key over) - so a takeover is a choice, never a surprise.
+- **THE VIDEO EDITOR** (`clips/js/videoedit.js`, 2026-08-27, Tony's spec):
+  trim, crop, colour, watermark patch and compress, reached from Edit on the
+  transport bar. Finishing REPLACES the file in `videos/`. What it is, and the
+  limits that shaped every decision in it:
+  - THERE IS NO FFMPEG AND NO SERVER. Everything is a frame painted into a
+    canvas and captured by MediaRecorder (`recordRange`, extended here with
+    `filter`, `scale` and `bitrate`). So: EDITING IS INSTANT because every
+    control previews through a CSS filter and a transform, and RENDERING IS
+    REAL TIME because a recorder captures a playing video. Trim first; it is
+    the only control that makes the others cheaper. Do not "upgrade" this to
+    ffmpeg.wasm without Tony asking - it is a ~30MB vendored blob, it breaks
+    the no-build rule, and it will not survive a 90 minute game in memory.
+  - ONE FILTER STRING drives the preview AND the render (`filterString`), so
+    what is on screen is what lands in the file. Two code paths would drift.
+  - "ENHANCE" IS A FILTER PRESET, not AI upscaling. "REMOVE WATERMARK"
+    PATCHES with a blur or a solid block, it does not inpaint. Both are
+    labelled that way in the UI and must stay labelled that way.
+  - THE ORIGINAL IS COPIED TO `/videos/.originals/<name>` BEFORE the first
+    overwrite and ONLY the first: a second edit must never overwrite an
+    untouched original with an already edited file, or Revert restores the
+    wrong thing.
+  - **THE TRIM SHIFT IS A PURE OFFSET AND IS NEVER CLAMPED** (`shiftGame`).
+    Clips, freezes and the timeline all store absolute seconds, so trimming
+    the front moves every one of them. The first version clamped to zero and
+    DESTROYED DATA - a clip at 5s trimmed by 30 became 0, and reverting added
+    30 back to give 30. Lossless arithmetic is what makes Revert exact. A
+    negative in-point is fine; seeking already clamps at playback.
+    `clipsOutside` warns which tags a trim would strand, before Apply. It
+    never fixes them silently: which clips matter is the coach's call.
 - **THE ANNOTATION TOOLBAR IS ALWAYS ON SCREEN** (2026-08-27, Tony's call).
   It used to live inside `#anRoot`, so it existed only once a freeze was
   already open - the tools were invisible exactly when you were deciding

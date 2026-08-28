@@ -102,14 +102,18 @@ function pickMime() {
 export async function recordRange(video, {
   from, to, holdAt = null, hold = 0, crop = null,
   paint = null, audio = 'video', mic = null, onFrame = null,
+  filter = null, scale = 1, bitrate = 12_000_000,
 } = {}) {
   if (!video.captureStream) throw new Error('This Browser Cannot Record - Use Chrome');
 
   const vw = video.videoWidth || 1280;
   const vh = video.videoHeight || 720;
   const c = crop || { x: 0, y: 0, w: 1, h: 1 };
-  const cw = Math.max(2, Math.round(vw * c.w));
-  const ch = Math.max(2, Math.round(vh * c.h));
+  // `scale` shrinks the output frame, which is the only compression lever
+  // that actually changes what the encoder is given rather than how hard it
+  // squeezes. Bitrate does the rest.
+  const cw = Math.max(2, Math.round(vw * c.w * scale));
+  const ch = Math.max(2, Math.round(vh * c.h * scale));
   const cv = document.createElement('canvas');
   // Even dimensions: some H.264 encoders refuse an odd one.
   cv.width = cw - (cw % 2);
@@ -124,7 +128,7 @@ export async function recordRange(video, {
   for (const t of mic?.getAudioTracks() || []) stream.addTrack(t);
 
   const mime = pickMime();
-  const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 12_000_000 });
+  const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: bitrate });
   const parts = [];
   rec.ondataavailable = (e) => { if (e.data.size) parts.push(e.data); };
 
@@ -136,7 +140,12 @@ export async function recordRange(video, {
   let frozenUntil = 0;
 
   const drawFrame = () => {
+    // The colour filter has to be set BEFORE the frame is drawn - it applies
+    // to the draw, not to what is already on the canvas - and cleared after,
+    // or every overlay `paint` adds would be filtered too.
+    if (filter) ctx.filter = filter;
     ctx.drawImage(video, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
+    ctx.filter = 'none';
     paint?.(ctx, cv, { sx, sy, sw, sh });
   };
 
