@@ -36,7 +36,7 @@ import {
   applyGrade,
   applyBtnHeights,
 } from './player.js';
-import { openAnnotate, annotationElements, paintIdleBar, onAnnotateIdle, applyToolStyle } from './annotate.js';
+import { openAnnotate, annotationElements, paintIdleBar, onAnnotateIdle, applyToolStyle, setToolPrefs, onToolPrefs } from './annotate.js';
 import { recordRange, deliver, fileStem, CROP_PRESETS, openMic } from './export.js';
 import { openCompare, closeCompare, comparing } from './compare.js';
 import { openVideoEditor } from './videoedit.js';
@@ -441,6 +441,9 @@ async function showPlayer(id) {
           <button class="btn" id="vpPull" title="Export The Clip Around The Playhead (Right-Click To Set The Buffer)">Pull</button>
           <button class="btn" id="vpRecord" title="Record The Player With Your Voice And Drawings">Record</button>
           <button class="btn" id="vpCompare" title="Put A Second Video Beside This One">Compare</button>
+          <label class="vp-hold" title="How Long An Exported Freeze Holds On The Frame, In Seconds. Active While A Freeze Is Open">
+            Hold <input id="vpHold" type="number" min="0" max="30" value="3" disabled>s
+          </label>
           <span class="ed-sep"></span>
           <button class="btn" id="vpSettings" title="Clips Settings">Settings</button>
           <button class="btn" id="vpLogBtn" title="Show Or Hide The Clip Log">Clips</button>
@@ -523,6 +526,17 @@ async function showPlayer(id) {
   // The toolbar is on screen from the moment the player is, so it needs a
   // resting state and a way back to it. Picking a tool from the idle row
   // freezes the current frame and arms that tool in one gesture.
+  // The toolbar reads its keys, styles, swatches, order and shape style from
+  // one module-level record, so it can be edited before a freeze exists. Seed
+  // it from settings here, and write any change on the bar straight back -
+  // the same round trip a rebound key has always had, now covering all six.
+  const bootSt = playerSettings() || await getSettings();
+  setToolPrefs(bootSt);
+  onToolPrefs(async (patch) => {
+    const live = playerSettings();
+    if (live) Object.assign(live, patch);
+    await putSettings({ ...(live || (await getSettings())), ...patch });
+  });
   const showIdleBar = () => paintIdleBar((tool) => addFreezeHere(tool));
   onAnnotateIdle(showIdleBar);
   showIdleBar();
@@ -541,13 +555,12 @@ async function showPlayer(id) {
         positions: st.positions,
         armTool,
         keys: st.toolKeys,
-        // A rebound key is written straight back to settings, so it holds
-        // across sessions the way every other preference here does.
-        onKeys: async (keys) => {
-          const live = playerSettings();
-          if (live) live.toolKeys = keys;
-          await putSettings({ ...(live || st), toolKeys: keys });
-        },
+        // The hold field lives in the player header now, so a change to it
+        // has to reach the game record itself rather than waiting for some
+        // other edit to trigger an autosave.
+        onFreeze: (f) => updateFreeze(f),
+        toolOrder: st.toolOrder,
+        shapeStyle: st.shapeStyle,
         autoSelect: st.autoSelect !== false,
         colorPresets: st.colorPresets,
         textSize: st.textSize,
@@ -1275,9 +1288,11 @@ export async function openClipSettings(focus = null) {
           ${seg('exportKind', 'Export Button Writes', [['clip', 'Clip'], ['png', 'PNG']], s.exportKind || 'clip',
             'What the toolbar Export button produces: the held video clip, or a PNG of the annotated frame. Nothing is ever written until you press Export.')}
           ${num('holdSec', 'Default Hold', s.holdSec, 1, 15, 'How long an exported freeze holds on the frame, in seconds.')}
+          ${seg('shapeStyle', 'Boxes And Circles', [['fill', 'Fill'], ['outline', 'Outline']], s.shapeStyle || 'fill',
+            'A light wash reads well over plain ice; a solid outline reads better over a busy frame. This used to be a pair of buttons on the toolbar, which was the only text control in a row of glyphs.')}
           ${num('textSize', 'Caption Size', s.textSize ?? 34, 14, 90, 'Telestration text size, measured on a 1280-wide frame so it looks the same on any clip.')}
-          <label class="bs-row"><span>Colour Presets${info('The three swatches on the annotation toolbar. Any of them can be any colour.')}</span>
-            <span class="cs-swatches">${(s.colorPresets || ['#ff3b30', '#ffd60a', '#0a84ff']).map((hex, i) =>
+          <label class="bs-row"><span>Colour Presets${info('The three swatches on the annotation toolbar. Any of them can be any colour, here or by right-clicking the swatch itself.')}</span>
+            <span class="cs-swatches">${(s.colorPresets || ['#1e1e1e', '#75d8ff', '#d9d9d9']).map((hex, i) =>
               `<input type="color" data-k="colorPresets.${i}" value="${esc(hex)}" aria-label="Colour ${i + 1}">`).join('')}</span>
           </label>
         </section>
@@ -1387,7 +1402,7 @@ export async function openClipSettings(focus = null) {
     toast('Settings Saved');
     paintBar();
     // A freeze open behind the sheet takes the new styles immediately.
-    applyToolStyle(next.toolStyle, next.positions);
+    applyToolStyle(next);
     applyBtnHeights(next.btnH);
   };
 }

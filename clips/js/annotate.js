@@ -37,8 +37,10 @@ const CYAN = '#75d8ff';
 // were four more decisions than a coach makes mid-period; three covers home,
 // away and a highlight. The values live in `settings.colorPresets` and are
 // edited in Settings, so any of them can be any colour.
-const DEFAULT_COLORS = ['#ff3b30', '#ffd60a', '#0a84ff'];
-const colorsOf = () => (an?.colorPresets || DEFAULT_COLORS);
+// They default to the SAME three the player buttons wear (2026-08-29, Tony's
+// call): black, the CTH cyan, grey. Right-click any swatch to change it.
+const DEFAULT_COLORS = ['#1e1e1e', '#75d8ff', '#d9d9d9'];
+const colorsOf = () => prefs.colors;
 
 const TOOLS = [
   ['select', 'Select & Move', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M4.04 4.69a.5.5 0 0 1 .65-.65l16 6.5a.5.5 0 0 1-.06.94l-6.13 1.58a2 2 0 0 0-1.43 1.44l-1.58 6.12a.5.5 0 0 1-.95.07z"/></svg>'],
@@ -63,8 +65,10 @@ const TOOLS = [
 // drawn on a rink were different objects wearing different colours. One
 // vocabulary, two apps.
 const PLAYER_SLOTS = ['#1e1e1e', '#75d8ff', '#d9d9d9'];
-// The same list the rink editor offers, so a coach learns one vocabulary.
-const PLAYER_LABELS = ['1', '2', '3', '4', '5', 'C', 'D1', 'D2', 'F1', 'F2', 'F3', 'G', 'LD', 'LW', 'O', 'RD', 'RW', 'X'];
+// THE HOVER MENU OF POSITIONS IS GONE (2026-08-29, Tony's call). It existed
+// to choose a label before placing, and a two-character field typed straight
+// onto the disc does the same job in fewer moves and without a panel opening
+// under the pointer. A player button now does one thing: place a player.
 
 // The three actions are ICON-ONLY (2026-08-29, Tony's call): three words plus
 // their key badges were the widest thing in the row, and these are the three
@@ -89,8 +93,58 @@ const DEFAULT_STYLE = {
   pos: { color: '#0a84ff', width: 8, dash: false },
 };
 
+// EVERY TOOL PREFERENCE LIVES IN ONE PLACE (2026-08-29). The toolbar is on
+// screen before a freeze exists, so anything edited from the idle bar has no
+// `an` to live on - and a second copy hanging off `an` is exactly how a
+// colour picked in Settings and a colour picked on the bar drift apart.
+// `prefs` is the single reader for keys, per-tool style, the three swatches,
+// the tool order and the shape style, in BOTH states, and `savePrefs` is the
+// single writer: it updates the reader and hands the same settings-shaped
+// patch to the app to persist.
+const DEFAULT_ORDER = TOOLS.map(([t]) => t);
+let prefs = {
+  keys: { ...DEFAULT_KEYS },
+  style: { ...DEFAULT_STYLE },
+  colors: DEFAULT_COLORS,
+  order: DEFAULT_ORDER,
+  shapeStyle: 'fill',
+  actKeys: { ...ACT_KEYS },
+};
+let prefsHook = null;
+
+// A tool added after an order was saved is APPENDED rather than dropped, so
+// an old record can never hide a new tool.
+function orderList(list) {
+  const known = new Set(DEFAULT_ORDER);
+  const seen = new Set();
+  const out = [];
+  for (const t of list || []) if (known.has(t) && !seen.has(t)) { seen.add(t); out.push(t); }
+  for (const t of DEFAULT_ORDER) if (!seen.has(t)) out.push(t);
+  return out;
+}
+
+/** Take whatever a settings record carries. Every field is optional, so a
+ *  record written before any of these existed reads exactly as it did. */
+export function setToolPrefs(p = {}) {
+  if (p.toolKeys) prefs.keys = { ...DEFAULT_KEYS, ...p.toolKeys };
+  if (p.toolStyle) prefs.style = { ...DEFAULT_STYLE, ...p.toolStyle };
+  if (p.colorPresets && p.colorPresets.length === 3) prefs.colors = p.colorPresets;
+  if (p.toolOrder) prefs.order = orderList(p.toolOrder);
+  if (p.shapeStyle) prefs.shapeStyle = p.shapeStyle;
+  if (p.actKeys) prefs.actKeys = { ...ACT_KEYS, ...p.actKeys };
+}
+export function onToolPrefs(fn) { prefsHook = fn; }
+function savePrefs(patch) {
+  setToolPrefs(patch);
+  prefsHook?.(patch);
+}
+const orderedTools = () => prefs.order.map((t) => TOOLS.find((x) => x[0] === t)).filter(Boolean);
+
 const vs = () => (an ? an.vw / 1280 : 1); // element sizes scale with the video
-const keyFor = (t) => (an?.keys?.[t] || DEFAULT_KEYS[t] || '');
+// `??`, NOT `||`: a key deliberately CLEARED is the empty string, and falling
+// back to the default there would quietly hand the tool its old letter back -
+// which is the duplicate the takeover just resolved.
+const keyFor = (t) => (prefs.keys[t] ?? DEFAULT_KEYS[t] ?? '');
 
 // THE STYLE IS RESOLVED ONTO THE ELEMENT AS IT IS CREATED, never read back
 // at render time. A freeze saved today keeps the look it was drawn with even
@@ -98,7 +152,7 @@ const keyFor = (t) => (an?.keys?.[t] || DEFAULT_KEYS[t] || '');
 // every other stored record here makes.
 function styleFor(t) {
   const d = DEFAULT_STYLE[t] || DEFAULT_STYLE.pen;
-  const st = { ...d, ...((an?.style || {})[t] || {}) };
+  const st = { ...d, ...(prefs.style[t] || {}) };
   // The colour swatch on the bar is a live override for the active tool, so
   // picking red then drawing does what it looks like it will do.
   const color = (an && an.tool === t && an.colorSet) ? an.color : st.color;
@@ -125,10 +179,14 @@ export function paintIdleBar(onPick) {
   // already frozen a frame some other way.
   for (const b of bar.querySelectorAll('[data-idleslot]')) {
     const slot = Number(b.dataset.idleslot);
-    b.onpointerenter = () => showPlayerMenu(slot, b, onPick);
-    b.onpointerleave = () => hidePlayerMenu(true);
-    b.onclick = () => { pendingPos = { color: PLAYER_SLOTS[slot], label: '' }; hidePlayerMenu(); onPick?.('pos'); };
+    b.onclick = () => { pendingPos = { color: PLAYER_SLOTS[slot], label: '' }; onPick?.('pos'); };
   }
+  for (const b of bar.querySelectorAll('[data-idle]')) {
+    b.oncontextmenu = (ev) => { ev.preventDefault(); openToolMenu(b.dataset.idle, b); };
+  }
+  wireToolDrag(bar);
+  wireSwatches(bar, false);
+  wireHold();
 }
 
 // The choice made on the idle bar, held across the freeze. `openAnnotator`
@@ -460,10 +518,12 @@ function onDown(e) {
     return;
   }
   if (an.tool === 'box' || an.tool === 'circle') {
-    // Fill or outline, whichever the bar is set to. A wash reads well over
-    // plain ice and hides the play over a busy frame; an outline is the
-    // opposite, so both have to be one click away (2026-08-27, Tony).
-    const solid = an.shapeStyle === 'outline';
+    // FILL OR OUTLINE IS A SETTING NOW (2026-08-29, Tony's call), not a
+    // segmented control on the bar. A wash reads well over plain ice and an
+    // outline reads better over a busy frame, but it is a decision made once
+    // for how a coach draws, not one made between two marks - and it was the
+    // only text control in a row of glyphs.
+    const solid = prefs.shapeStyle === 'outline';
     const st = styleFor(an.tool);
     const x = {
       id: uid(), type: an.tool, x: p.x, y: p.y, w: 0, h: 0, color: st.color,
@@ -764,6 +824,7 @@ function openPlayerLabelInput(x) {
 // ------------------------------------------------------------- keys
 
 function onKey(e) {
+  if (toolMenuEl && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeToolMenu(); return; }
   if (!an) return;
   const t = e.target;
   if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
@@ -792,8 +853,8 @@ function onKey(e) {
   for (const [tool] of TOOLS) {
     if (k && k === keyFor(tool)) { e.preventDefault(); setTool(tool); return; }
   }
-  if (k === (an.actKeys.clear || ACT_KEYS.clear)) { e.preventDefault(); clearAll(); return; }
-  if (k === (an.actKeys.export || ACT_KEYS.export)) { e.preventDefault(); an.onExport?.(composite(), an.freeze); }
+  if (k === (prefs.actKeys.clear || ACT_KEYS.clear)) { e.preventDefault(); clearAll(); return; }
+  if (k === (prefs.actKeys.export || ACT_KEYS.export)) { e.preventDefault(); an.onExport?.(composite(), an.freeze); }
 }
 
 let dirty = false;
@@ -804,7 +865,7 @@ function setTool(t) {
   // Switching tools drops the swatch override and shows the new tool's own
   // colour, so the bar always tells the truth about what will be drawn.
   an.colorSet = false;
-  const st = { ...DEFAULT_STYLE[t], ...((an.style || {})[t] || {}) };
+  const st = { ...DEFAULT_STYLE[t], ...(prefs.style[t] || {}) };
   if (st.color) an.color = st.color;
   if (t !== 'select') an.sel.clear();
   paintBar();
@@ -844,76 +905,180 @@ function barHtml(live) {
   const key = (k) => (k ? `<span class="tb-key">${k.toUpperCase()}</span>` : '');
   const dis = live ? '' : ' disabled';
   return `
-    ${TOOLS.map(([t, label, icon]) => {
+    ${orderedTools().map(([t, label, icon]) => {
       const on = live && an.tool === t;
-      const k = live ? keyFor(t) : (DEFAULT_KEYS[t] || '');
+      const k = keyFor(t);
       const attr = live ? `data-tool="${t}"` : `data-idle="${t}"`;
-      const tip = live ? `${label} (${k.toUpperCase()}) - Right-Click To Change The Key` : `${label} - Freezes This Frame And Starts Drawing`;
-      return `<button class="tb-btn${on ? ' on' : ''}" ${attr} title="${tip}" aria-label="${label}">${icon}${key(k)}</button>`;
+      const tip = live
+        ? `${label} (${k.toUpperCase()}) - Right-Click For Its Settings, Drag To Reorder`
+        : `${label} - Freezes This Frame And Starts Drawing. Right-Click For Its Settings, Drag To Reorder`;
+      return `<button class="tb-btn${on ? ' on' : ''}" ${attr} data-toolid="${t}" draggable="true" title="${tip}" aria-label="${label}">${icon}${key(k)}</button>`;
     }).join('')}
     <span class="tb-sep"></span>
-    ${(live ? colorsOf() : DEFAULT_COLORS).map((hex, i) => `<button class="tb-swatch${live && an.color === hex ? ' on' : ''}" data-color="${hex}" style="--c:${hex}" title="Colour ${i + 1} - Change It In Settings" aria-label="Colour ${i + 1}"${dis}></button>`).join('')}
+    ${colorsOf().map((hex, i) => `<button class="tb-swatch${live && an.color === hex ? ' on' : ''}" data-color="${hex}" data-preset="${i}" style="--c:${hex}" title="Colour ${i + 1}${live ? '' : ' (Pick A Tool First)'} - Right-Click To Change It" aria-label="Colour ${i + 1}"></button>`).join('')}
     <span class="tb-sep"></span>
-    <span class="an-seg" role="group" aria-label="Shape Style">
-      <button class="an-segbtn${live && an.shapeStyle !== 'outline' ? ' on' : ''}" data-shape="fill" title="Boxes And Circles As A Light Wash"${dis}>Fill</button>
-      <button class="an-segbtn${live && an.shapeStyle === 'outline' ? ' on' : ''}" data-shape="outline" title="Boxes And Circles As A Solid Outline"${dis}>Outline</button>
-    </span>
+    ${PLAYER_SLOTS.map((c, i) => `<button class="tb-player${live && an.tool === 'pos' && an.posColor === c ? ' on' : ''}" ${live ? `data-slot="${i}"` : `data-idleslot="${i}"`} style="--c:${c}" title="${live ? 'Place A Player - Type Two Letters On It' : 'Place A Player - Freezes This Frame And Starts Drawing'}" aria-label="Player ${i + 1}"></button>`).join('')}
     <span class="tb-sep"></span>
-    ${PLAYER_SLOTS.map((c, i) => `<button class="tb-player${live && an.tool === 'pos' && an.posColor === c ? ' on' : ''}" ${live ? `data-slot="${i}"` : `data-idleslot="${i}"`} style="--c:${c}" title="${live ? 'Place A Player - Hover For A Position' : 'Place A Player - Freezes This Frame And Starts Drawing. Hover For A Position'}" aria-label="Player ${i + 1}"></button>`).join('')}
-    <span class="tb-sep"></span>
-    <label class="an-hold" title="How Long The Exported Clip Holds On This Frame - Seconds"><input id="anHold" type="number" min="0" max="30" value="${live ? (an.freeze.hold ?? 3) : 3}"${dis}>s</label>
-    <span class="tb-sep"></span>
-    <button class="tb-btn" data-act="clear" title="Clear Every Drawing (${(live ? an.actKeys.clear : ACT_KEYS.clear).toUpperCase()})" aria-label="Clear"${dis}>${ICON_CLEAR}${key(live ? an.actKeys.clear : ACT_KEYS.clear)}</button>
-    <button class="tb-btn" data-act="export" title="Export This Freeze - Nothing Leaves This App Until You Press It (${(live ? an.actKeys.export : ACT_KEYS.export).toUpperCase()})" aria-label="Export"${dis}>${ICON_EXPORT}${key(live ? an.actKeys.export : ACT_KEYS.export)}</button>
+    <button class="tb-btn" data-act="clear" title="Clear Every Drawing (${prefs.actKeys.clear.toUpperCase()})" aria-label="Clear"${dis}>${ICON_CLEAR}${key(prefs.actKeys.clear)}</button>
+    <button class="tb-btn" data-act="export" title="Export This Freeze - Nothing Leaves This App Until You Press It (${prefs.actKeys.export.toUpperCase()})" aria-label="Export"${dis}>${ICON_EXPORT}${key(prefs.actKeys.export)}</button>
     <button class="tb-btn tb-done${live ? ' on' : ''}" data-act="done" title="Finish Without Exporting (Return Or Escape)" aria-label="Done"${dis}>${ICON_DONE}</button>`;
 }
 
+// ---------------------------------------------------------- the tool menu
+//
+// RIGHT-CLICK A TOOL FOR ITS SETTINGS (2026-08-29, Tony's call). Right-click
+// used to raise a bare `prompt()` for the key and nothing else, so the colour,
+// thickness and dash of a tool could only be reached through the Settings
+// sheet - four clicks away from the tool you were already pointing at. This
+// edits the SAME `settings.toolStyle` and `settings.toolKeys` records, so
+// there is one source of truth and Settings still shows what was set here.
+let toolMenuEl = null;
+function closeToolMenu() { toolMenuEl?.remove(); toolMenuEl = null; }
 
-// THE PLAYER LETTER MENU, ported from the rink editor's `showPlayerMenu` so
-// the gesture is identical in both apps: hover a player button, pick a label,
-// the tool arms with that label AND that colour. A 250ms close delay is what
-// lets the pointer travel from the button to the menu without it vanishing.
-let pmenuEl = null;
-let pmenuTimer = null;
-function hidePlayerMenu(soon = false) {
-  clearTimeout(pmenuTimer);
-  if (soon) { pmenuTimer = setTimeout(() => hidePlayerMenu(), 250); return; }
-  pmenuEl?.remove();
-  pmenuEl = null;
-}
-function showPlayerMenu(slot, btn, onPick = null) {
-  clearTimeout(pmenuTimer);
-  if (pmenuEl?.dataset.slot === String(slot)) return;
-  hidePlayerMenu();
-  const c = PLAYER_SLOTS[slot];
-  const ink = labelInkOn(c);
-  pmenuEl = document.createElement('div');
-  pmenuEl.className = 'pmenu';
-  pmenuEl.dataset.slot = String(slot);
-  pmenuEl.innerHTML = `
-    <button class="pmenu-chip pmenu-blank" data-label="">Blank</button>
-    ${PLAYER_LABELS.map((l) => `<button class="pmenu-chip" data-label="${l}" style="--c:${c};--i:${ink}">${l}</button>`).join('')}`;
-  document.body.appendChild(pmenuEl);
+// It closes on a click anywhere else and on Escape. Both listeners are
+// installed once, at module level, because the panel outlives every repaint
+// of the bar that opened it - it is parented to the body for exactly that
+// reason, and a listener rebound per repaint would leak one per paint.
+document.addEventListener('pointerdown', (e) => {
+  if (!toolMenuEl) return;
+  if (e.target.closest?.('.tmenu')) return;
+  closeToolMenu();
+}, true);
+document.addEventListener('keydown', (e) => {
+  if (!toolMenuEl || e.key !== 'Escape') return;
+  e.preventDefault();
+  e.stopPropagation();
+  closeToolMenu();
+}, true);
+
+function openToolMenu(tool, btn) {
+  closeToolMenu();
+  const meta = TOOLS.find((x) => x[0] === tool);
+  const styled = !!DEFAULT_STYLE[tool];
+  const st = { ...DEFAULT_STYLE[tool], ...(prefs.style[tool] || {}) };
+  const m = document.createElement('div');
+  m.className = 'tmenu';
+  m.innerHTML = `
+    <div class="tmenu-head">${meta ? meta[1] : tool}</div>
+    <label class="tmenu-row"><span>Shortcut</span>
+      <input class="tmenu-key" maxlength="1" value="${keyFor(tool)}" spellcheck="false" aria-label="Shortcut"></label>
+    ${styled ? `
+    <label class="tmenu-row"><span>Colour</span>
+      <input class="tmenu-color" type="color" value="${st.color}" aria-label="Colour"></label>
+    <label class="tmenu-row"><span>Thickness</span>
+      <input class="tmenu-width" type="number" min="1" max="40" value="${st.width}" aria-label="Thickness"></label>
+    <label class="tmenu-row"><span>Dashed</span>
+      <input class="tmenu-dash" type="checkbox"${st.dash ? ' checked' : ''} aria-label="Dashed"></label>` : ''}`;
+  document.body.appendChild(m);
+  toolMenuEl = m;
   const r = btn.getBoundingClientRect();
-  const mw = pmenuEl.offsetWidth;
-  pmenuEl.style.left = `${Math.max(8, Math.min(window.innerWidth - mw - 8, r.left + r.width / 2 - mw / 2))}px`;
-  pmenuEl.style.top = `${Math.max(8, r.top - pmenuEl.offsetHeight - 10)}px`;
-  pmenuEl.addEventListener('pointerenter', () => clearTimeout(pmenuTimer));
-  pmenuEl.addEventListener('pointerleave', () => hidePlayerMenu(true));
-  for (const b of pmenuEl.querySelectorAll('[data-label]')) {
-    b.onclick = () => {
-      hidePlayerMenu();
-      if (onPick) {
-        // Idle: there is no editor to arm yet, so park the choice and freeze.
-        pendingPos = { color: c, label: b.dataset.label };
-        onPick('pos');
-        return;
-      }
-      an.posLabel = b.dataset.label;
-      an.posColor = c;
-      setTool('pos');
-      toast(b.dataset.label ? `Placing A "${b.dataset.label}" Player - Click The Picture` : 'Placing A Blank Player - Type Two Letters On It');
-    };
+  m.style.left = `${Math.max(8, Math.min(window.innerWidth - m.offsetWidth - 8, r.left + r.width / 2 - m.offsetWidth / 2))}px`;
+  m.style.top = `${Math.max(8, r.top - m.offsetHeight - 10)}px`;
+
+  const q = (c) => m.querySelector(c);
+  // A key another tool holds is TAKEN, and the loser is cleared - the same
+  // rule the tag panel's editor follows, for the same reason: a shortcut
+  // that silently never fires is invisible until the moment it is needed.
+  q('.tmenu-key').oninput = (e) => {
+    const k = (e.target.value || '').trim().slice(0, 1).toLowerCase();
+    e.target.value = k;
+    const keys = { ...prefs.keys };
+    let lost = null;
+    if (k) for (const [t2, k2] of Object.entries(keys)) if (t2 !== tool && k2 === k) { keys[t2] = ''; lost = t2; }
+    keys[tool] = k;
+    savePrefs({ toolKeys: keys });
+    if (lost) toast(`${k.toUpperCase()} Moved To ${meta ? meta[1] : tool} - ${TOOLS.find((x) => x[0] === lost)?.[1] || lost} Has No Key Now`, true);
+    repaintBar();
+  };
+  const setStyle = (patch) => {
+    const style = { ...prefs.style, [tool]: { ...st, ...patch } };
+    savePrefs({ toolStyle: style });
+    Object.assign(st, patch);
+    // A tool already armed takes the change immediately, or it reads as
+    // ignored until the next time it is picked.
+    if (an && an.tool === tool && patch.color) { an.color = patch.color; an.colorSet = false; }
+    repaintBar();
+  };
+  q('.tmenu-key').onkeydown = (e) => e.stopPropagation();
+  if (styled) {
+    q('.tmenu-color').oninput = (e) => setStyle({ color: e.target.value });
+    q('.tmenu-width').onchange = (e) => setStyle({ width: Math.max(1, Math.min(40, Number(e.target.value) || 1)) });
+    q('.tmenu-width').onkeydown = (e) => e.stopPropagation();
+    q('.tmenu-dash').onchange = (e) => setStyle({ dash: e.target.checked });
+  }
+  setTimeout(() => q('.tmenu-key').focus(), 0);
+}
+
+// The bar repaints in whichever state it is in. A menu open over it must
+// survive that repaint, so it lives on document.body and is never rebuilt.
+function repaintBar() {
+  if (an) paintBar();
+  else idleHook?.();
+}
+
+// DRAG TO REARRANGE (2026-08-29, Tony's call). The order is a settings record
+// like everything else here, so it holds across sessions and across freezes.
+function wireToolDrag(bar) {
+  let from = null;
+  for (const b of bar.querySelectorAll('[data-toolid]')) {
+    b.addEventListener('dragstart', (e) => {
+      from = b.dataset.toolid;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', from);
+      b.classList.add('tb-dragging');
+    });
+    b.addEventListener('dragend', () => b.classList.remove('tb-dragging'));
+    b.addEventListener('dragover', (e) => { e.preventDefault(); b.classList.add('tb-over'); });
+    b.addEventListener('dragleave', () => b.classList.remove('tb-over'));
+    b.addEventListener('drop', (e) => {
+      e.preventDefault();
+      b.classList.remove('tb-over');
+      const to = b.dataset.toolid;
+      if (!from || from === to) return;
+      const next = prefs.order.filter((t) => t !== from);
+      next.splice(next.indexOf(to), 0, from);
+      savePrefs({ toolOrder: next });
+      from = null;
+      repaintBar();
+    });
+  }
+}
+
+// Right-click a swatch to change it. Left-click still arms it for the tool in
+// hand, which is done a hundred times a session; changing a preset is done
+// twice a year, so it lives behind the second button. The picker opens in the
+// SAME `.tmenu` panel the tools use rather than as a hidden native input
+// triggered by script - one panel recipe on this bar, and a control the eye
+// can find before it is clicked.
+function openSwatchMenu(i, btn) {
+  closeToolMenu();
+  const m = document.createElement('div');
+  m.className = 'tmenu';
+  m.innerHTML = `
+    <div class="tmenu-head">Colour ${i + 1}</div>
+    <label class="tmenu-row"><span>Colour</span>
+      <input class="tmenu-color" type="color" value="${colorsOf()[i]}" aria-label="Colour ${i + 1}"></label>`;
+  document.body.appendChild(m);
+  toolMenuEl = m;
+  const r = btn.getBoundingClientRect();
+  m.style.left = `${Math.max(8, Math.min(window.innerWidth - m.offsetWidth - 8, r.left + r.width / 2 - m.offsetWidth / 2))}px`;
+  m.style.top = `${Math.max(8, r.top - m.offsetHeight - 10)}px`;
+  m.querySelector('.tmenu-color').oninput = (e) => {
+    const next = [...colorsOf()];
+    next[i] = e.target.value;
+    savePrefs({ colorPresets: next });
+    // The swatch under the pointer updates without rebuilding the bar, which
+    // would tear this panel's own anchor out from under it.
+    btn.style.setProperty('--c', e.target.value);
+    btn.dataset.color = e.target.value;
+  };
+}
+
+function wireSwatches(bar, live) {
+  for (const b of bar.querySelectorAll('[data-preset]')) {
+    const i = Number(b.dataset.preset);
+    b.oncontextmenu = (e) => { e.preventDefault(); openSwatchMenu(i, b); };
+    if (!live) b.onclick = () => toast('Pick A Tool First - The Swatch Colours What You Draw');
   }
 }
 
@@ -922,28 +1087,16 @@ function paintBar() {
   bar.innerHTML = barHtml(true);
   bar.querySelectorAll('[data-tool]').forEach((b) => {
     b.onclick = () => setTool(b.dataset.tool);
-    // Right-click a tool to rebind its key - the same idea the Diagrams
-    // toolbar uses for its colour presets.
-    b.oncontextmenu = (ev) => {
-      ev.preventDefault();
-      const cur = keyFor(b.dataset.tool);
-      const next = prompt(`One key for ${b.dataset.tool}`, cur);
-      if (next == null) return;
-      const k = next.trim().toLowerCase().slice(0, 1);
-      an.keys[b.dataset.tool] = k;
-      an.onKeys?.({ ...an.keys });
-      paintBar();
-    };
+    b.oncontextmenu = (ev) => { ev.preventDefault(); openToolMenu(b.dataset.tool, b); };
   });
   for (const b of bar.querySelectorAll('[data-slot]')) {
     const slot = Number(b.dataset.slot);
-    b.onpointerenter = () => showPlayerMenu(slot, b);
-    b.onpointerleave = () => hidePlayerMenu(true);
-    b.onclick = () => { an.posColor = PLAYER_SLOTS[slot]; setTool('pos'); hidePlayerMenu(); };
+    // No hover menu any more: a player button places a player, and its label
+    // is typed on the disc.
+    b.onclick = () => { an.posColor = PLAYER_SLOTS[slot]; an.posLabel = ''; setTool('pos'); };
   }
-  bar.querySelectorAll('[data-pos]').forEach((b) => {
-    b.onclick = () => { an.posLabel = b.dataset.pos; setTool('pos'); };
-  });
+  wireToolDrag(bar);
+  wireSwatches(bar, true);
   bar.querySelectorAll('[data-color]').forEach((b) => {
     b.onclick = () => {
       an.color = b.dataset.color;
@@ -960,25 +1113,7 @@ function paintBar() {
       redraw();
     };
   });
-  bar.querySelectorAll('[data-shape]').forEach((b) => {
-    b.onclick = () => {
-      an.shapeStyle = b.dataset.shape;
-      // Also restyle whatever is selected, so the choice can be made after
-      // the shape is drawn rather than only before.
-      const solid = an.shapeStyle === 'outline';
-      for (const id of an.sel) {
-        const x = an.els.find((z) => z.id === id);
-        if (!x || (x.type !== 'box' && x.type !== 'circle')) continue;
-        if (solid) { x.outline = true; x.alpha = 1; x.width = x.width || 9 * vs(); }
-        else { delete x.outline; x.alpha = 0.3; }
-        markDirty();
-      }
-      paintBar();
-      redraw();
-    };
-  });
-  el('anHold').onchange = (e) => { an.freeze.hold = Math.max(0, Number(e.target.value) || 0); markDirty(); };
-  el('anHold').onkeydown = (e) => e.stopPropagation();
+  wireHold();
   const act = (n, f) => { bar.querySelector(`[data-act="${n}"]`).onclick = f; };
   act('clear', clearAll);
   act('export', () => an.onExport?.(composite(), an.freeze));
@@ -1013,8 +1148,32 @@ function done() {
   if (cb) cb(f, wasDirty);
 }
 
+// THE HOLD FIELD MOVED TO THE TOP BAR (2026-08-29, Tony's call). It is the
+// one control on the annotation strip that is not a drawing decision - it
+// sizes the export - and a number field in a row of glyphs was the widest
+// thing there. It lives in the player header now and is disabled until a
+// freeze is open, because a hold with nothing to hold on is meaningless.
+function wireHold() {
+  const h = el('vpHold');
+  if (!h) return;
+  h.disabled = !an;
+  h.value = an ? (an.freeze.hold ?? 3) : (h.value || 3);
+  // The hold is written back to the GAME RECORD, not just to the live
+  // session. It never was: the field used to sit on the annotation bar and
+  // only set `an.freeze.hold`, so the number survived only if the game
+  // happened to autosave for some other reason before Done. Moving the
+  // control somewhere permanent made that visible.
+  h.onchange = () => {
+    if (!an) return;
+    an.freeze.hold = Math.max(0, Number(h.value) || 0);
+    markDirty();
+    an.onFreeze?.(an.freeze);
+  };
+  h.onkeydown = (e) => e.stopPropagation();
+}
+
 function teardown() {
-  hidePlayerMenu();
+  closeToolMenu();
   el('anRoot').hidden = true;
   an = null;
   dirty = false;
@@ -1029,35 +1188,39 @@ function teardown() {
 let idleHook = null;
 export function onAnnotateIdle(fn) { idleHook = fn; }
 
-// Saving Settings while a freeze is open pushes the new styles straight into
-// it. Without this a colour change would look ignored until the next freeze,
-// which reads as a bug rather than as a scoping rule.
-export function applyToolStyle(style, positions) {
-  if (!an) return;
-  if (style) an.style = { ...DEFAULT_STYLE, ...style };
-  if (positions) an.positions = positions;
+// Saving Settings pushes the whole record back into `prefs` and repaints
+// whichever bar is on screen. Without this a colour change would look ignored
+// until the next freeze, which reads as a bug rather than as a scoping rule.
+// It takes the SETTINGS OBJECT now, not two loose arguments, because there
+// are six fields the bar reads and they all arrive together.
+export function applyToolStyle(settings = {}) {
+  setToolPrefs(settings);
+  if (!an) { idleHook?.(); return; }
+  if (settings.positions) an.positions = settings.positions;
   an.colorSet = false;
-  const st = { ...DEFAULT_STYLE[an.tool], ...((an.style || {})[an.tool] || {}) };
+  const st = { ...DEFAULT_STYLE[an.tool], ...(prefs.style[an.tool] || {}) };
   if (st.color) an.color = st.color;
   paintBar();
+  redraw();
 }
 
 // ------------------------------------------------------------- open
 
 let wired = false;
-export function openAnnotate(freeze, frameCanvas, { onDone, onExport, keys, actKeys, onKeys, style, positions, armTool, autoSelect = true, onDraw, colorPresets, textSize } = {}) {
+export function openAnnotate(freeze, frameCanvas, { onDone, onExport, onFreeze, keys, actKeys, style, positions, armTool, autoSelect = true, onDraw, colorPresets, textSize, toolOrder, shapeStyle } = {}) {
   const root = el('anRoot');
   root.hidden = false;
+  // Preferences are module state, not per-freeze state: the bar is on screen
+  // before any freeze exists and has to read the same values then.
+  setToolPrefs({ toolKeys: keys, toolStyle: style, colorPresets, toolOrder, shapeStyle, actKeys });
   an = {
     freeze,
     els: structuredClone(freeze.elements || []),
     tool: freeze.elements?.length ? 'select' : 'pen',
-    color: (style?.pen?.color) || DEFAULT_COLORS[0],
+    color: prefs.style.pen.color,
     sel: new Set(),
     drag: null,
     band: null,
-    shapeStyle: 'fill',
-    style: { ...DEFAULT_STYLE, ...(style || {}) },
     positions: positions || ['D1', 'D2', 'C', 'W1', 'W2', 'F1', 'F2', 'F3'],
     posLabel: pendingPos?.label ?? '',
     colorSet: false,
@@ -1068,12 +1231,12 @@ export function openAnnotate(freeze, frameCanvas, { onDone, onExport, keys, actK
     posColor: pendingPos?.color || PLAYER_SLOTS[0],
     keys: { ...DEFAULT_KEYS, ...(keys || {}) },
     actKeys: { ...ACT_KEYS, ...(actKeys || {}) },
-    onKeys,
     vw: frameCanvas.width,
     vh: frameCanvas.height,
     frame: frameCanvas,
     onDone,
     onExport,
+    onFreeze,
   };
   // Read once: a parked choice belongs to the freeze it opened, not to the
   // next one.

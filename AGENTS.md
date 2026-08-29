@@ -541,6 +541,69 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
     rect in place returns the PREVIOUS tip's height, which put one of them 12px
     off the top - and then clamped on both axes, so no arithmetic mistake can
     put it off screen. Verified across every glyph at six scroll positions.
+- **EVERY TOOL PREFERENCE READS FROM ONE `prefs` RECORD** (`annotate.js`,
+  2026-08-29). The bar is on screen before a freeze exists, so anything edited
+  from the idle row has no `an` to live on - and a second copy hanging off
+  `an` is exactly how a colour picked in Settings and a colour picked on the
+  bar drift apart. `prefs` is the single READER for keys, per-tool style, the
+  three swatches, the tool order and the shape style, in both states;
+  `savePrefs` is the single WRITER and hands the same settings-shaped patch to
+  the app to persist. `setToolPrefs` takes every field optionally, so a record
+  written before any of them existed reads exactly as it did.
+  - `keyFor` uses `??`, NOT `||`. A key deliberately CLEARED is the empty
+    string, and falling back to the default there hands the tool its old
+    letter straight back - the duplicate the takeover just resolved.
+- **RIGHT-CLICK A TOOL FOR ITS SETTINGS** (2026-08-29, Tony's call). Shortcut,
+  colour, thickness and dash in a `.tmenu` panel on the tool you are already
+  pointing at. It used to raise a bare `prompt()` for the key alone, so
+  everything else was four clicks away in the Settings sheet. It writes the
+  SAME `settings.toolKeys` / `settings.toolStyle` records, so Settings still
+  shows what was set here. Taking a key another tool holds MOVES it and clears
+  the loser, with a toast naming it - the tag panel's rule, for the tag
+  panel's reason. Right-clicking a SWATCH opens the same panel with a colour
+  field; it never opens a script-triggered native picker.
+  - The panel is parented to `document.body` and its close listeners are
+    installed ONCE at module level: it outlives every repaint of the bar that
+    opened it, and a listener rebound per repaint would leak one per paint.
+    Escape is checked at the TOP of `onKey` as well, because that handler is
+    on `window` and captures before `document` - otherwise Escape would step
+    out of the freeze instead of closing the panel over it.
+- **TOOLS DRAG TO REARRANGE** (`settings.toolOrder`, 2026-08-29, Tony's call).
+  A tool added after an order was saved is APPENDED rather than dropped, so an
+  old record can never hide a new tool.
+- **A SWATCH IS NOT A PLAYER** (2026-08-29, Tony's call). The presets now
+  default to the same black / `#75d8ff` / `#d9d9d9` the player buttons wear,
+  so only size told the two rows apart. A swatch is a 20px rounded SQUARE with
+  a hairline; a player is a 30px circle with a ring. Different shape,
+  different size, no confusion. THE DEFAULT CHANGE NEEDED A MIGRATION
+  (`migratePresets` in store.js): `colorPresets` has been written on every
+  settings save since it was added, so a stored copy of the old triple sat in
+  front of the new default. It replaces the saved list only where it is still
+  exactly the old default - a colour Tony picked is his. Same rule as the Bots
+  style migration.
+- **THE KEY BADGE IS 9px, PINNED TO THE CORNER, WITH THE GLYPH LIFTED 2px**
+  (2026-08-29, Tony's call). At 11px/700 centred under the icon it crowded
+  every glyph's lower right and read as part of the drawing. It is n-400 at
+  rest so the icon leads, graphite on hover, and near-white on the accent
+  pill, where it has to hold up against a saturated fill.
+- **FILL VS OUTLINE IS A SETTING** (`settings.shapeStyle`, 2026-08-29, Tony's
+  call), not a segmented control on the bar. It is how a coach draws, not a
+  decision made between two marks, and it was the only text control in a row
+  of glyphs.
+- **THE HOLD FIELD IS IN THE PLAYER HEADER** (2026-08-29, Tony's call). It is
+  the one control on the annotation strip that is not a drawing decision - it
+  sizes the export - and a number field in a row of glyphs was the widest
+  thing there. It is DISABLED until a freeze is open, and it now writes back
+  to the GAME RECORD through `onFreeze`. It never did: it only set
+  `an.freeze.hold`, so the number survived solely if the game happened to
+  autosave for some other reason before Done. Moving the control somewhere
+  permanent is what made that visible.
+- **THE PLAYER HOVER MENU IS GONE** (2026-08-29, Tony's call), Blank chip and
+  all. It existed to pick a label before placing, and a two-character field
+  typed straight onto the disc does the same job in fewer moves and without a
+  panel opening under the pointer. A player button does one thing now: place a
+  player. `PLAYER_LABELS`, `showPlayerMenu` and `hidePlayerMenu` are deleted;
+  `settings.positions` still feeds the Diagrams-side chips.
 - **THE PLAYER BUTTONS ARE THE DIAGRAMS PLAYER BUTTONS** (2026-08-29, Tony's
   call). Three coloured circles - home `#ff3b30`, away `#0a84ff`, neutral
   `#1e1e1e` - each opening the rink editor's own hover menu of position labels

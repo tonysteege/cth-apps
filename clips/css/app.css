@@ -206,8 +206,16 @@
 .an-tb .tb-btn { width: 36px; height: 36px; border-radius: var(--r-md); }
 .an-tb .tb-btn svg { width: 18px; height: 18px; }
 .an-tb .tb-player { width: 30px; height: 30px; margin: 2px; }
-.an-tb .tb-swatch { width: 30px; height: 30px; }
-.an-tb .an-hold input { width: 38px; }
+/* A SWATCH IS NOT A PLAYER (2026-08-29, Tony's call). Both were 30px circles
+   sitting six apart in the same row, and now that the presets default to the
+   same three colours the player buttons wear, only their size told them
+   apart. A swatch is a small rounded SQUARE - a different shape, two thirds
+   the size, no ring - so the row reads as two kinds of control at a glance. */
+.an-tb .tb-swatch {
+  width: 20px; height: 20px; margin: 0 1px;
+  border-radius: var(--r-sm); border: 1px solid rgb(0 0 0 / 0.22);
+}
+.an-tb .tb-swatch.on { box-shadow: 0 0 0 2px var(--cloud), 0 0 0 3.5px var(--select); }
 .an-idle { font-size: 12px; letter-spacing: 0.15px; color: var(--mist); padding: 0 6px; align-self: center; }
 /* The per-tool style table in Settings: label, colour, thickness, dash. */
 .cs-toolhead, .cs-toolrow {
@@ -258,14 +266,79 @@
 }
 
 /* The annotation toolbar prints its shortcuts. A key you cannot see is not
-   a shortcut - the same rule the tag panel now follows. */
+   a shortcut - the same rule the tag panel now follows.
+   REDESIGNED 2026-08-29 (Tony's call): 9px instead of 11 (18% down) and
+   pinned to the very corner, with the glyph lifted 2px, so the letter sits
+   BESIDE the icon rather than on top of it. At 11px/700 in the old position
+   it crowded every glyph's lower right and read as part of the drawing. It
+   lightens to n-400 at rest so the icon leads, and goes near-white on the
+   accent pill, where it has to hold up against a saturated fill. */
 .an-tb .tb-key {
-  position: absolute; right: 3px; bottom: 1px;
-  font-size: 11px; font-weight: 700; color: var(--soft);
+  position: absolute; right: 2px; bottom: 0;
+  font-size: 9px; font-weight: 600; line-height: 1.2; letter-spacing: 0;
+  color: var(--n-400);
   pointer-events: none;
 }
-.an-tb .tb-btn.on .tb-key { color: rgba(255, 255, 255, 0.8); }
+.an-tb .tb-btn svg { transform: translateY(-2px); }
+.an-tb .tb-btn:hover .tb-key { color: var(--graphite); }
+.an-tb .tb-btn.on .tb-key { color: rgba(255, 255, 255, 0.92); }
 .an-tb .tb-word { padding-right: 16px; }
+.an-tb .tb-btn.tb-dragging { opacity: 0.4; }
+.an-tb .tb-btn.tb-over { box-shadow: inset 2px 0 0 0 var(--select); }
+
+/* RIGHT-CLICK A TOOL FOR ITS SETTINGS (2026-08-29). The BoardUI menu recipe -
+   radius 16, 10px padding, dropdown elevation - the same one the filter menus
+   and the colour popover already use, so a panel opened from the toolbar is
+   the same object as a panel opened from the tag panel. */
+.tmenu {
+  position: fixed; z-index: 70;
+  min-width: 190px; padding: 10px;
+  background: var(--cloud);
+  border: 1px solid var(--edge); border-radius: 16px;
+  box-shadow: var(--shadow-menu, 0 10px 30px rgb(0 0 0 / 0.14), 0 1px 2px rgb(0 0 0 / 0.06));
+}
+.tmenu-head {
+  font-size: 12px; letter-spacing: 0.15px; font-weight: 700; color: var(--ink);
+  padding: 2px 6px 7px;
+}
+.tmenu-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) 62px;
+  align-items: center; gap: 8px;
+  padding: 4px 6px; border-radius: 10px;
+  font-size: 13px; color: var(--graphite);
+}
+.tmenu-row:hover { background: var(--n-100); }
+.tmenu-row input[type="text"], .tmenu-row input:not([type]), .tmenu-row input[type="number"] {
+  height: 28px; width: 100%; padding: 0 8px; text-align: center;
+  font: inherit; font-size: 13px;
+  border: none; border-radius: 8px; background: var(--field);
+  box-shadow: inset 0 0 0 2px transparent;
+  transition: box-shadow var(--dur) ease;
+}
+.tmenu-row input:hover:not(:focus) { box-shadow: var(--field-ring-hover); }
+.tmenu-row input:focus { outline: none; box-shadow: var(--field-ring-focus); }
+.tmenu-row input[type="color"] { width: 100%; height: 26px; padding: 0; border: 1px solid var(--edge); border-radius: 8px; background: none; cursor: pointer; }
+.tmenu-row input[type="checkbox"] { justify-self: end; }
+.tmenu-key { text-transform: none; }
+
+/* The hold field moved into the player header (2026-08-29, Tony's call). It
+   is disabled until a freeze is open, because a hold with nothing to hold on
+   means nothing. */
+.vp-hold {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 13px; color: var(--graphite); white-space: nowrap;
+}
+.vp-hold input {
+  width: 42px; height: 28px; margin: 0 1px;
+  border: none; border-radius: 8px; background: var(--field);
+  text-align: center; font: inherit; font-size: 13px;
+  box-shadow: inset 0 0 0 2px transparent;
+  transition: box-shadow var(--dur) ease, opacity var(--dur) ease;
+}
+.vp-hold input:hover:not(:focus):not(:disabled) { box-shadow: var(--field-ring-hover); }
+.vp-hold input:focus { outline: none; box-shadow: var(--field-ring-focus); }
+.vp-hold:has(input:disabled) { opacity: 0.42; }
+
 .an-canvas { cursor: crosshair; }
 /* Fill or outline for boxes and circles, as a segmented pair - it is one
    choice with two states, not two buttons. */

@@ -158,8 +158,19 @@ const DEFAULT_SETTINGS = () => ({
   // What the toolbar's Export button writes: the held clip, or a PNG of the
   // annotated frame.
   exportKind: 'clip',
-  // The three annotation colour swatches. Any of them can be any colour.
-  colorPresets: ['#ff3b30', '#ffd60a', '#0a84ff'],
+  // The three annotation colour swatches. Any of them can be any colour,
+  // set in Settings or by right-clicking the swatch on the toolbar. They
+  // default to the three the player buttons wear, so the toolbar carries one
+  // palette rather than two (2026-08-29, Tony's call).
+  colorPresets: ['#1e1e1e', '#75d8ff', '#d9d9d9'],
+  // The annotation toolbar's tool order, dragged on the bar itself. Absent
+  // means the built-in order, and a tool added after this was saved is
+  // appended rather than dropped.
+  toolOrder: null,
+  // Boxes and circles: a light wash or a solid outline. This used to be a
+  // segmented control on the toolbar and is a setting now - it is how a
+  // coach draws, not a decision made between two marks.
+  shapeStyle: 'fill',
   // Telestration caption size, in 1280-wide video units.
   textSize: 34,
   // Per-tool telestration style (2026-08-27, Tony's spec). Every drawing
@@ -203,6 +214,19 @@ function withPlayers(panel) {
   return { ...panel, buttons: out };
 }
 
+// THE PRESETS MOVED TO THE RINK PALETTE (2026-08-29, Tony's call) and a
+// default change alone would never have reached anyone: `colorPresets` has
+// been written on every settings save since it was added, so a stored copy of
+// the OLD defaults was sitting in front of the new ones. This renames only
+// where the saved triple is still exactly the old default - a colour Tony
+// picked is his, and is left alone. Same rule as the Bots style migration.
+const OLD_PRESETS = ['#ff3b30', '#ffd60a', '#0a84ff'];
+function migratePresets(list) {
+  if (!list || list.length !== 3) return null;
+  const same = list.every((c, i) => String(c).toLowerCase() === OLD_PRESETS[i]);
+  return same ? null : list;
+}
+
 export async function getSettings() {
   const s = await tx(SETTINGS, 'readonly', (st) => st.get('main'));
   if (s) {
@@ -221,7 +245,7 @@ export async function getSettings() {
       // Per tool, so a record saved before a tool existed grows that tool's
       // defaults without losing the ones already customised.
       btnH: { ...d.btnH, ...(s.btnH || {}) },
-      colorPresets: (s.colorPresets && s.colorPresets.length === 3) ? s.colorPresets : d.colorPresets,
+      colorPresets: migratePresets(s.colorPresets) || d.colorPresets,
       toolStyle: Object.fromEntries(Object.entries(d.toolStyle)
         .map(([k, v]) => [k, { ...v, ...((s.toolStyle || {})[k] || {}) }])),
       positions: s.positions || d.positions,
