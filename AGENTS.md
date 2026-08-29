@@ -750,6 +750,44 @@ after a live inspection of it. The two live side by side.
     `composer`. Do not install chart cards into a hockey app for the sake of
     using the licence.
 
+- **WHAT WE BUILT OURSELVES NOW SITS ON A BOARDUI RECIPE** (2026-08-27, third
+  pass). Anything hand-rolled outside the component library was rebuilt so it
+  reads as a native addition to it. Rink CONTENT - players, pucks, the rink
+  itself, every `flat.js` element - is deliberately untouched; it is a
+  drawing, not chrome.
+  - THE SLIDER IS A REAL COMPONENT NOW, ported from base/slider onto a native
+    `<input type="range">`: 6px track, n-200 with an inset dark hairline, a
+    LEFT-TO-RIGHT accent-500 to accent-600 fill, and a 20px white thumb whose
+    8px accent-gradient dot is CARVED WITH AN INSET WHITE RING (`inset 0 0 0
+    6px var(--cloud)`) - a pseudo-element cannot hold a child, and a flat dot
+    would lose the gradient. Five sliders across Clips and Diagrams were raw
+    browser defaults with `flex: 1` and nothing else.
+  - `diagrams/js/controls.js` KEEPS `--p` (the filled width) IN STEP AND WIRES
+    ITSELF - a delegated listener plus one MutationObserver. Sheets here are
+    built as HTML strings long after load, so anything needing a per-slider
+    call would be forgotten by the next sheet somebody adds. Import it for the
+    side effect; a page that forgets still renders an empty track, not a
+    broken one.
+  - THE CHECKBOX RECIPE WAS ALREADY CORRECT BUT SCOPED TO TWO SELECTORS
+    (`.rink-row input, .anim-check input`), so eight later checkboxes fell
+    back to `accent-color`. It now applies to every checkbox and radio.
+  - `.bui-group` IS BUTTON GROUP, ported from base/buttons/button-group: a
+    fused row at radius 10 with shadow-xs, 1px hairlines between items and
+    only the outer corners rounded. The position chips were eight loose
+    buttons with 3px gaps. ONE DEVIATION: BoardUI marks a selected item with
+    the hover fill alone, which is far too quiet for a toolbar where selected
+    means ARMED, so selected here is the gradient pill its neighbouring tool
+    buttons already wear.
+  - PICK THE RIGHT ONE OF THE TWO ROW COMPONENTS. A single-select SWITCHER is
+    the segmented control (tinted track, white thumb) - the video editor's
+    Crop, Quality and Blur/Solid rows are all this. A toolbar or filter row is
+    the button group. Actions in a row are neither: they are `.mini` buttons.
+    Ad-hoc `.ve-chip` pills were doing all three jobs.
+  - A SHEET DECLARES `display` ONCE, AT ONE SPECIFICITY. `.ve-veil .ve-sheet`
+    set flex and a barer `.ve-sheet` set grid, so flex won and the editor
+    stacked into one column at every width. Two display declarations on one
+    element is a bug even when both look right in isolation.
+
 - **Component recipes are BoardUI's own** (2026-08-26, full-fidelity pass,
   taken from the cth-boardui-starter source, not eyeballed):
   - INPUTS ARE FILLED, never outlined: n-200 surface (`--field`), no

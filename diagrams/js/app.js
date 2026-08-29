@@ -19,6 +19,8 @@ import { renderStateFlat, sliceFrames } from './flat.js';
 import { pngReadDiagram, pngSetDiagram, dataUrlToBytes, bytesToBlob } from './png.js';
 import { toast, esc, confirmSheet, leaveSheet, fmtDate, ctxMenu } from './ui.js';
 
+// Self-installing BoardUI control behaviour (the slider's filled track).
+import './controls.js';
 const $ = (sel) => document.querySelector(sel);
 
 const safeName = (s) => (s || 'diagram').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase() || 'diagram';

@@ -145,16 +145,16 @@ export async function openVideoEditor({ game, video, src, onReplaced }) {
 
         <section class="ve-sec">
           <div class="ve-title">Crop</div>
-          <div class="ve-chips" id="veCrops">
-            ${CROPS.map(([n], i) => `<button class="ve-chip${i === 0 ? ' on' : ''}" data-crop="${i}">${n}</button>`).join('')}
+          <div class="an-seg ve-seg" id="veCrops" role="group" aria-label="Crop">
+            ${CROPS.map(([n], i) => `<button class="an-segbtn${i === 0 ? ' on' : ''}" data-crop="${i}">${n}</button>`).join('')}
           </div>
         </section>
 
         <section class="ve-sec">
           <div class="ve-title">Colour</div>
           <div class="ve-chips">
-            <button class="ve-chip" data-x="enhance" title="A Contrast And Saturation Lift - Not AI Upscaling">Enhance</button>
-            <button class="ve-chip" data-x="neutral">Reset</button>
+            <button class="mini" data-x="enhance" title="A Contrast And Saturation Lift - Not AI Upscaling">Enhance</button>
+            <button class="mini" data-x="neutral">Reset</button>
           </div>
           ${[['brightness', 'Brightness', 50, 150], ['contrast', 'Contrast', 50, 200],
              ['saturate', 'Saturation', 0, 200], ['temp', 'Warmth', -60, 60]].map(([k, label, lo, hi]) => `
@@ -168,17 +168,19 @@ export async function openVideoEditor({ game, video, src, onReplaced }) {
           <div class="ve-title">Patch Out A Watermark</div>
           <p class="ve-note">Drag a box over the logo. It is covered with a blur or a solid block - the pixels underneath cannot be recovered, so this hides a mark rather than removing it.</p>
           <div class="ve-chips">
-            <button class="ve-chip" data-x="addPatch">+ Box</button>
-            <button class="ve-chip" data-x="patchBlur">Blur</button>
-            <button class="ve-chip on" data-x="patchSolid">Solid</button>
+            <button class="mini" data-x="addPatch">+ Box</button>
+            <span class="an-seg" role="group" aria-label="Patch Style">
+              <button class="an-segbtn" data-x="patchBlur">Blur</button>
+              <button class="an-segbtn on" data-x="patchSolid">Solid</button>
+            </span>
           </div>
           <div class="ve-patchlist" id="vePatchList"></div>
         </section>
 
         <section class="ve-sec">
           <div class="ve-title">Quality And Size</div>
-          <div class="ve-chips" id="veQual">
-            ${QUALITY.map(([n], i) => `<button class="ve-chip${i === 0 ? ' on' : ''}" data-q="${i}">${n}</button>`).join('')}
+          <div class="an-seg ve-seg" id="veQual" role="group" aria-label="Quality">
+            ${QUALITY.map(([n], i) => `<button class="an-segbtn${i === 0 ? ' on' : ''}" data-q="${i}">${n}</button>`).join('')}
           </div>
           <p class="ve-note" id="veEstimate"></p>
         </section>

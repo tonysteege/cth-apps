@@ -685,8 +685,8 @@ function paintBar() {
     <span class="tb-sep"></span>
     <!-- Position chips. One click arms the tool AND picks the label, so
          dropping a D1 on the frame is a single decision, not two. -->
-    <span class="an-pos" role="group" aria-label="Position Indicators">
-      ${(an.positions || []).map((lab) => `<button class="an-posbtn${an.tool === 'pos' && an.posLabel === lab ? ' on' : ''}" data-pos="${esc(lab)}" title="Drop A ${esc(lab)} Marker">${esc(lab)}</button>`).join('')}
+    <span class="bui-group bui-group--dense" role="group" aria-label="Position Indicators">
+      ${(an.positions || []).map((lab) => `<button class="${an.tool === 'pos' && an.posLabel === lab ? 'on' : ''}" data-pos="${esc(lab)}" title="Drop A ${esc(lab)} Marker">${esc(lab)}</button>`).join('')}
     </span>
     <span class="tb-sep"></span>
     <label class="an-hold" title="How Long The Exported Clip Holds On This Frame">Hold <input id="anHold" type="number" min="0" max="30" value="${an.freeze.hold ?? 3}">s</label>

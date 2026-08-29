@@ -42,6 +42,8 @@ import { drawEl } from '/diagrams/js/flat.js';
 import { toast, esc, confirmSheet, fmtDate } from './ui.js';
 import { putDrill, uid as drillUid } from '/diagrams/js/store.js';
 
+// Self-installing BoardUI control behaviour (the slider's filled track).
+import '/diagrams/js/controls.js';
 const $ = (sel) => document.querySelector(sel);
 const BACK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12H4"/><path d="m10 18-6-6 6-6"/></svg>';
 const stem = (s) => (s || 'clip').replace(/\.[^.]+$/, '').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase() || 'clip';

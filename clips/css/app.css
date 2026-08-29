@@ -173,22 +173,6 @@
    statically placed and simply wraps when the window is narrow. */
 .an-tb { position: static; transform: none; flex-wrap: wrap; justify-content: center; }
 .an-idle { font-size: 12px; letter-spacing: 0.15px; color: var(--mist); padding: 0 6px; align-self: center; }
-/* Position chips: D1, C, W2. Small, monospaced-by-number, and they carry the
-   same on-state gradient as every other selected control in the suite. */
-.an-pos { display: inline-flex; align-items: center; gap: 3px; }
-.an-posbtn {
-  height: 26px; min-width: 30px; padding: 0 7px;
-  border: 1px solid var(--edge); border-radius: 6px;
-  background: var(--cloud); color: var(--n-700);
-  font: inherit; font-size: 12px; letter-spacing: 0.15px; font-weight: 700;
-  cursor: pointer;
-  transition: background var(--dur) ease, border-color var(--dur) ease, color var(--dur) ease;
-}
-.an-posbtn:hover { background: var(--n-100); border-color: var(--n-300); color: var(--ink); }
-.an-posbtn.on {
-  background-image: var(--grad-primary); border-color: transparent;
-  color: #fff; box-shadow: var(--shadow-nav);
-}
 /* The per-tool style table in Settings: label, colour, thickness, dash. */
 .cs-toolhead, .cs-toolrow {
   display: grid; grid-template-columns: minmax(0, 1fr) 44px 66px 26px;
@@ -1206,9 +1190,16 @@ button.crumb:hover { color: var(--mist); background: var(--n-100); }
    A wide two-column sheet: the live preview on the left, the controls on the
    right. Every control previews through CSS, so nothing here is a canvas and
    nothing costs anything until Apply. */
+/* ONE display declaration, at one specificity. This was `display: flex` here
+   and `display: grid` on the barer `.ve-sheet` below, so flex won on
+   specificity and the two-column layout never applied - the panel stacked
+   under the video at every width. */
 .ve-veil .ve-sheet {
   width: min(1100px, 94vw); max-height: 92vh;
-  display: flex; flex-direction: column; gap: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.9fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 0;
   border-radius: 24px; padding: 0; overflow: hidden;
 }
 .ve-top {
@@ -1218,11 +1209,6 @@ button.crumb:hover { color: var(--mist); background: var(--n-100); }
 .ve-top h3 { margin: 0; flex: 1; font-size: 14px; font-weight: 700; color: var(--ink); }
 .ve-sheet > .ve-stage,
 .ve-sheet > .ve-panel { min-height: 0; }
-.ve-sheet {
-  display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.9fr);
-  grid-template-rows: auto minmax(0, 1fr) auto;
-}
 .ve-top, .ve-foot { grid-column: 1 / -1; }
 .ve-stage { padding: 14px 12px 14px 18px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 /* The frame is the viewport onto the crop: the video inside is scaled and
@@ -1256,7 +1242,9 @@ button.crumb:hover { color: var(--mist); background: var(--n-100); }
 .ve-row { display: grid; grid-template-columns: 74px minmax(0, 1fr) 46px auto; align-items: center; gap: 8px; }
 .ve-row > span { font-size: 12px; letter-spacing: 0.15px; color: var(--graphite); }
 .ve-row em { font-style: normal; font-size: 11px; letter-spacing: 0.2px; color: var(--mist); text-align: right; font-variant-numeric: tabular-nums; }
-.ve-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.ve-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+/* Six crop options do not fit one line in a 300px panel. */
+.ve-seg { flex-wrap: wrap; }
 .ve-chip {
   height: 26px; padding: 0 9px;
   border: 1px solid var(--edge); border-radius: 6px;
@@ -1276,7 +1264,7 @@ button.crumb:hover { color: var(--mist); background: var(--n-100); }
 .ve-progress { font-size: 12px; letter-spacing: 0.15px; color: var(--select); font-variant-numeric: tabular-nums; }
 
 @media (max-width: 860px) {
-  .ve-sheet { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto; }
+  .ve-veil .ve-sheet { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto; }
   .ve-stage { padding: 12px; }
   .ve-panel { padding: 0 12px 12px; }
 }

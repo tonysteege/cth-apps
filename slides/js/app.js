@@ -18,6 +18,8 @@ import { toast, esc, fmtClock } from './ui.js';
 import { listDecks, getDeck, putDeck, deleteDeck, newDeck, normalizeDeck } from './decks.js';
 import { openEditor, closeEditor, editing, flush, slideHtml, mountSlideVideos, rehydrate } from './editor.js';
 
+// Self-installing BoardUI control behaviour (the slider's filled track).
+import '/diagrams/js/controls.js';
 const API = 'https://apps-api.coachtonyhockey.com';
 const $ = (s) => document.querySelector(s);
 const BACK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12H4"/><path d="m10 18-6-6 6-6"/></svg>';

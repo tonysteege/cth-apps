@@ -12,6 +12,8 @@ import { aiText, aiVision, aiImage, notionText, parseJson, AiError } from './ai.
 import { sortable } from './sortable.js';
 import { toast, esc } from '../../diagrams/js/ui.js';
 
+// Self-installing BoardUI control behaviour (the slider's filled track).
+import '/diagrams/js/controls.js';
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const EXAMPLE_MAX_BYTES = 60 * 1024 * 1024;
