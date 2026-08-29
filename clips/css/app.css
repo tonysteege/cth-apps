@@ -635,7 +635,7 @@
 .prail-head b { color: var(--select); font-variant-numeric: tabular-nums; }
 .prail-btn {
   display: flex; align-items: center; gap: 6px;
-  height: var(--h-player, 28px); padding: 0 7px;
+  height: var(--h-player, 28px); flex: 0 0 auto; padding: 0 7px;
   border: 1px solid var(--edge);
   border-radius: var(--r-sm);
   background: var(--cloud);
@@ -680,7 +680,7 @@
    as a container edge; a short centred one reads as a break between groups,
    which is what it is. The roster column uses this same element under its
    Players button, so both columns space identically. */
-.side-div { padding: 6px 2px; cursor: grab; }
+.side-div { padding: 6px 2px; cursor: grab; flex: 0 0 auto; }
 .side-div span {
   display: block; width: 50%; margin: 0 auto;
   height: 2px; border-radius: 1px; background: var(--n-300);
@@ -699,8 +699,13 @@
   display: flex; align-items: center; gap: 6px; width: 100%;
   /* Height is a SETTING per column (settings.btnH), published on .vp. The
      fallback is the 28 these were built at, so a record without the field
-     looks exactly as it did. */
-  height: var(--h-clip, 28px); padding: 0 7px;
+     looks exactly as it did.
+     FLEX-SHRINK: 0 IS LOAD-BEARING. These sit in a scrolling column flex
+     container, where `height` is only a starting size - with fifteen tag
+     buttons and a fixed-height column, flex compressed them to about 23px
+     while the roster's five stayed near 28, which is exactly the "tags are
+     smaller than players" report. Never drop it. */
+  height: var(--h-clip, 28px); flex: 0 0 auto; padding: 0 7px;
   border: 1px solid var(--edge);
   border-radius: var(--r-sm);
   background: var(--cloud);
@@ -716,7 +721,7 @@
 .tag-btn:active { transform: scale(0.98); border-color: var(--n-400); background: var(--n-200); cursor: grabbing; transition-duration: var(--dur), var(--dur), var(--dur), 220ms; }
 .tag-btn.drag-over { border-color: var(--select); box-shadow: inset 0 2.5px 0 0 var(--select), var(--shadow-card); }
 .tag-btn-word { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.tag-btn-tag { font-weight: 500; height: var(--h-tag, 28px); }
+.tag-btn-tag { font-weight: 500; height: var(--h-tag, 28px); flex: 0 0 auto; }
 
 /* The BoardUI status dot: a 12px tinted halo with a 6px solid centre. The
    halo is a ramp step in BoardUI, but a tag's colour is an arbitrary hex Tony
@@ -1395,20 +1400,29 @@ button.crumb:hover { color: var(--mist); background: var(--n-100); }
   transition: color var(--dur) ease;
 }
 .cs-info:hover, .cs-info:focus-visible { color: var(--select); outline: none; }
-.cs-info::after {
-  content: attr(data-tip);
-  position: absolute; bottom: calc(100% + 8px); left: 50%;
-  transform: translateX(-50%) translateY(3px);
-  width: max-content; max-width: 240px;
-  padding: 8px 10px; border-radius: var(--r-md);
-  background: var(--cloud); color: var(--graphite);
+/* THE TOOLTIP IS A REAL ELEMENT IN THE VIEWPORT, not a ::after on the glyph.
+   As a pseudo-element it was clipped by `.pe-body`'s own `overflow-y: auto` -
+   the sheet scrolls, so anything absolutely positioned inside it is cropped
+   at the edges, and a tip near the left rail lost its first characters. A
+   fixed-position node placed by JS cannot be cropped by anything, and it is
+   clamped to the viewport so it is ALWAYS fully readable. */
+.cs-tip {
+  position: fixed;
+  max-width: 260px;
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  background: var(--cloud);
+  color: var(--graphite);
   font-size: 12px; letter-spacing: 0.15px; font-weight: 400; line-height: 1.45;
-  text-align: left; white-space: normal;
+  text-align: left;
   box-shadow: var(--shadow-dropdown);
-  opacity: 0; pointer-events: none; z-index: 60;
+  pointer-events: none;
+  z-index: 200;
+  opacity: 0;
+  transform: translateY(3px);
   transition: opacity var(--dur) ease, transform var(--dur) ease;
 }
-.cs-info:hover::after, .cs-info:focus-visible::after { opacity: 1; transform: translateX(-50%) translateY(0); }
+.cs-tip.on { opacity: 1; transform: translateY(0); }
 /* A row's label may now carry the glyph, so it needs to be a flex line. */
 .bs-row > span:first-child { display: inline-flex; align-items: center; }
 .pe-title { display: flex; align-items: center; }
