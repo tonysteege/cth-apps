@@ -147,6 +147,11 @@ const DEFAULT_SETTINGS = () => ({
   playerWindow: 3000,
   railOpen: true,
   hideTime: false,   // the Clip Log's timecode column
+  // Exact button heights for the three side columns, in px (2026-08-29,
+  // Tony's call). One number each rather than one shared: a coach with
+  // twenty tags and six players wants the tag column dense and the roster
+  // comfortable, and that is a per-column decision.
+  btnH: { clip: 28, tag: 28, player: 28 },
   // Per-tool telestration style (2026-08-27, Tony's spec). Every drawing
   // tool carries its own colour, thickness and dash, so an arrow can be a
   // fat red solid while a line is a thin white dash without touching a
@@ -205,6 +210,7 @@ export async function getSettings() {
       toolKeys: { ...d.toolKeys, ...(s.toolKeys || {}) },
       // Per tool, so a record saved before a tool existed grows that tool's
       // defaults without losing the ones already customised.
+      btnH: { ...d.btnH, ...(s.btnH || {}) },
       toolStyle: Object.fromEntries(Object.entries(d.toolStyle)
         .map(([k, v]) => [k, { ...v, ...((s.toolStyle || {})[k] || {}) }])),
       positions: s.positions || d.positions,

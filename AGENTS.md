@@ -387,7 +387,10 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
     `object-view-box` crops a replaced element's own source box, so it touches
     no transform and applies identically to a `<video>` and a `<canvas>`.
     A NEW LAYER THAT SHOWS LIVE PICTURE MUST JOIN THE `#vpVideo, .scrub-paint`
-    rule, the same way it must join the `--vz` list. The ANNOTATION layers are
+    rule, the same way it must join the `--vz` list. `startPaint` ALSO sets
+    the two properties on the overlay inline, once per gesture: it is the one
+    layer a coach sees only while a gesture runs, so a cascade failure there
+    shows up as "the effects revert on scrub" and nothing else looks wrong. The ANNOTATION layers are
     deliberately excluded: `grabFrame` already baked the grade into the frame
     they hold, and grading them again would double it.
   - EXPORTS COMPOSE, THEY DO NOT OVERWRITE. Record passes its own region crop
@@ -411,12 +414,26 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
     resized from eight handles, with optional aspect locks. While the crop
     overlay is open THE PREVIEW IS UNCROPPED - cropping the picture under a
     crop tool would move the thing being aimed at.
-- **THE CLIP LOG SHOWS A RATING AS THE ROW'S OWN COLOUR** (2026-08-29,
-  Tony's call). Three `.rate-dot`s used to sit in a column of their own on
-  every row; the row now wears the rating as a bar down its leading edge and
-  a wash behind it (`rateOf`, `--rate`), which says the same thing in no width
-  at all. First match wins - a clip tagged both good and bad shows as one of
-  them rather than as a stripe.
+- **ONLY A STAR COLOURS A CLIP LOG ROW, AND IT IS YELLOW** (2026-08-29,
+  Tony's call, twice). Three `.rate-dot`s used to sit in a column of their own
+  on every row; the row now wears the rating as a bar down its leading edge
+  and a wash behind it (`rateOf`, `--rate`). Good and bad were dropped from it
+  because they are the two most common tags in a log - highlighting them lit
+  up most of the list and the colour stopped meaning anything. A star is rare
+  by definition, which is what makes it worth finding at a glance.
+- **THE HEADER ROW CARRIES NO COUNT** (2026-08-29): the log is the narrowest
+  column in the app and the number is implied by the list under it.
+- **THE SORT INDICATOR IS BOARDUI'S `ChevronSortDown`** - the filled rounded
+  triangle its own sortable table headers use, turned 180 degrees for
+  ascending. It inherits `currentColor`, so an active header tints it with no
+  second rule. The text arrows it replaced were font glyphs, which sat on a
+  different baseline in every weight.
+- **BUTTON HEIGHT IS A SETTING PER COLUMN** (`settings.btnH`, 2026-08-29):
+  `{ clip, tag, player }`, published on `.vp` as `--h-clip` / `--h-tag` /
+  `--h-player` so a change is one style write rather than three repaints. One
+  number each, not one shared: a dense tag column and a comfortable roster are
+  different decisions. Every fallback is 28px, so a record without the field
+  looks exactly as it did.
 - **THE TIMECODE RIDES ON THE CLIP NAME, NOT A COLUMN** (2026-08-29, Tony's
   call). `.log-when` sits inside `.log-name`, before the tags. In a narrow log
   the name is what a coach reads and the timecode is a reference, so the name

@@ -364,6 +364,11 @@
 .c-sort.on { color: var(--ink); font-weight: 600; }
 .c-grow { flex: 1; min-width: 0; }
 .log-count { flex: none; color: var(--soft); font-size: 11px; letter-spacing: 0.2px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* BoardUI's ChevronSortDown, the filled rounded triangle its own sortable
+   table headers use. Turned for ascending; it inherits currentColor, so an
+   active header tints it without a second rule. */
+.c-arrow { width: 14px; height: 14px; margin-left: 1px; flex: none; vertical-align: -2px; }
+.c-arrow.up { transform: rotate(180deg); }
 
 .log-bulk {
   display: flex; align-items: center; gap: 6px;
@@ -630,7 +635,7 @@
 .prail-head b { color: var(--select); font-variant-numeric: tabular-nums; }
 .prail-btn {
   display: flex; align-items: center; gap: 6px;
-  height: 28px; padding: 0 7px;
+  height: var(--h-player, 28px); padding: 0 7px;
   border: 1px solid var(--edge);
   border-radius: var(--r-sm);
   background: var(--cloud);
@@ -692,7 +697,10 @@
    text, so nothing has to compute a contrast colour any more. */
 .tag-btn {
   display: flex; align-items: center; gap: 6px; width: 100%;
-  height: 28px; padding: 0 7px;
+  /* Height is a SETTING per column (settings.btnH), published on .vp. The
+     fallback is the 28 these were built at, so a record without the field
+     looks exactly as it did. */
+  height: var(--h-clip, 28px); padding: 0 7px;
   border: 1px solid var(--edge);
   border-radius: var(--r-sm);
   background: var(--cloud);
@@ -708,7 +716,7 @@
 .tag-btn:active { transform: scale(0.98); border-color: var(--n-400); background: var(--n-200); cursor: grabbing; transition-duration: var(--dur), var(--dur), var(--dur), 220ms; }
 .tag-btn.drag-over { border-color: var(--select); box-shadow: inset 0 2.5px 0 0 var(--select), var(--shadow-card); }
 .tag-btn-word { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.tag-btn-tag { font-weight: 500; }
+.tag-btn-tag { font-weight: 500; height: var(--h-tag, 28px); }
 
 /* The BoardUI status dot: a 12px tinted halo with a 6px solid centre. The
    halo is a ramp step in BoardUI, but a tag's colour is an arbitrary hex Tony

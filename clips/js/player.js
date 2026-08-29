@@ -263,6 +263,18 @@ function startPaint(source) {
   const vw = v.videoWidth || source.width;
   const vh = v.videoHeight || source.height;
   if (c.width !== vw || c.height !== vh) { c.width = vw; c.height = vh; }
+  // THE OVERLAY CARRIES THE GRADE ITSELF, not only by inheriting --vgf and
+  // --vgb from the stage. The CSS rule is correct and this is belt and
+  // braces: the overlay is the ONE layer a coach sees only while a gesture
+  // runs, so if it ever fell out of the cascade the symptom is the effects
+  // "reverting on scrub" and nothing else in the app would look wrong. Set
+  // once per gesture, never per frame - the scrub engine's per-step cost is
+  // tuned and must not grow.
+  {
+    const css = gradeCss(cur?.game?.grade);
+    c.style.filter = css.filter;
+    c.style.objectViewBox = css.viewBox;
+  }
   paint = c;
   pctx = c.getContext('2d', { alpha: false });
   pctx.imageSmoothingQuality = 'high';
@@ -1369,12 +1381,14 @@ const RATINGS = [
   { tag: 'star', color: '#2b7fff' },
 ];
 
-// A clip's rating as a colour. This replaced the three dots that used to sit
-// in a column of their own on every row (2026-08-29, Tony's call): the row
-// itself now carries the colour, which says the same thing in no space at
-// all. First match wins - a clip tagged both good and bad is a mistake worth
-// showing as one of them rather than as a stripe.
-const rateOf = (c) => RATINGS.find((r) => (c.tags || []).includes(r.tag))?.color || '';
+// ONLY A STAR COLOURS A ROW, and it colours it yellow (2026-08-29, Tony's
+// call, narrowing this from all three ratings). Good and bad are the two most
+// common tags in a log, so highlighting them lit up most of the list and the
+// colour stopped meaning anything. A star is rare by definition, which is
+// what makes it worth finding at a glance. The yellow matches the star
+// button's own dot in DEFAULT_PANEL.
+const STAR_COLOR = '#eab308';
+const rateOf = (c) => ((c.tags || []).includes('star') ? STAR_COLOR : '');
 
 // A clip's tags as ONE editable line rather than a row of pills: pills ate
 // the width the log has least of. Typing commits on Enter or blur, and the
@@ -1405,7 +1419,12 @@ export function paintLog() {
   const keepTagSel = keepTagRow ? ae.selectionStart : null;
   for (const id of [...selection]) if (!all.some((c) => c.id === id)) selection.delete(id);
   const ticked = list.filter((c) => selection.has(c.id)).length;
-  const arrow = (col) => (view.sortBy !== col ? '' : view.sortDir === 'asc' ? ' ▲' : ' ▼');
+  // BoardUI's ChevronSortDown (foundations/icons/chevrons), the filled rounded
+  // triangle its own table headers use, turned 180 degrees for ascending. The
+  // text arrows this replaced were a font glyph, so they sat on a different
+  // baseline in every weight and could not take the accent colour cleanly.
+  const arrow = (col) => (view.sortBy !== col ? ''
+    : `<svg class="c-arrow${view.sortDir === 'asc' ? ' up' : ''}" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.7071 15.2929C12.3166 15.6834 11.6834 15.6834 11.2929 15.2929L7.70711 11.7071C7.07714 11.0771 7.52331 10 8.41421 10H15.5858C16.4767 10 16.9229 11.0771 16.2929 11.7071L12.7071 15.2929Z" fill="currentColor"/></svg>`);
 
   log.innerHTML = `
     <div class="log-head">
@@ -1422,7 +1441,6 @@ export function paintLog() {
       <button class="c-sort${view.sortBy === 'time' ? ' on' : ''}" data-sort="time">Time${arrow('time')}</button>
       <button class="c-sort c-grow${view.sortBy === 'name' ? ' on' : ''}" data-sort="name">Clip${arrow('name')}</button>
       <button class="log-colbtn${view.hideTime ? '' : ' on'}" id="vpLogTime" title="${view.hideTime ? 'Show' : 'Hide'} The Timecode" aria-label="${view.hideTime ? 'Show' : 'Hide'} The Timecode">${CLOCK_ICON}</button>
-      <span class="log-count">${list.length} Of ${all.length}</span>
     </div>
     ${ticked ? `<div class="log-bulk">
       <span class="log-bulkn">${ticked} Selected</span>
@@ -1973,6 +1991,17 @@ export function grabFrame() {
 
 // The grade is a view transform, so it rides on the video element exactly the
 // way zoom does. Called on open and whenever the editor writes a new one.
+// The three column button heights, published as custom properties so a
+// change is one style write rather than a repaint of three panels.
+export function applyBtnHeights(h) {
+  const vp = document.querySelector('.vp');
+  if (!vp) return;
+  const d = { clip: 28, tag: 28, player: 28, ...(h || {}) };
+  vp.style.setProperty('--h-clip', `${d.clip}px`);
+  vp.style.setProperty('--h-tag', `${d.tag}px`);
+  vp.style.setProperty('--h-player', `${d.player}px`);
+}
+
 export function applyGrade(grade) {
   const stage = el('vpStage');
   if (!stage) return;
@@ -1984,6 +2013,10 @@ export function applyGrade(grade) {
   // ungraded, which is why the picture changed as it played.
   stage.style.setProperty('--vgf', css.filter);
   stage.style.setProperty('--vgb', css.viewBox);
+  // An overlay built by an earlier gesture is still in the DOM; give it the
+  // new grade too rather than waiting for the next gesture to rebuild it.
+  const sp = stage.querySelector(':scope > canvas.scrub-paint');
+  if (sp) { sp.style.filter = css.filter; sp.style.objectViewBox = css.viewBox; }
 }
 
 // ------------------------------------------------------------- open/close
@@ -2040,6 +2073,7 @@ export async function openPlayer(game, videoUrl, h = {}) {
   }, { once: true });
   wireOnce();
   applyGrade(cur.game.grade);
+  applyBtnHeights(cur.settings.btnH);
   view.hideTime = !!cur.settings.hideTime;
   // The rail's open state is a preference, so restore it before the first
   // paint rather than letting it flash open and then close.

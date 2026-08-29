@@ -34,6 +34,7 @@ import {
   playerSel,
   addFreezeHere,
   applyGrade,
+  applyBtnHeights,
 } from './player.js';
 import { openAnnotate, annotationElements, paintIdleBar, onAnnotateIdle, applyToolStyle } from './annotate.js';
 import { recordRange, deliver, fileStem, CROP_PRESETS, openMic } from './export.js';
@@ -1207,6 +1208,13 @@ export async function openClipSettings(focus = null) {
           ${num('pullBuf.after', 'Pull Out', s.pullBuf.after, 1, 120, 'seconds after')}
         </section>
         <section class="pe-section">
+          <div class="pe-title">Panels</div>
+          ${num('btnH.clip', 'Clip Buttons', (s.btnH || {}).clip ?? 28, 20, 48, 'pixels tall')}
+          ${num('btnH.tag', 'Tag Buttons', (s.btnH || {}).tag ?? 28, 20, 48, 'pixels tall')}
+          ${num('btnH.player', 'Player Buttons', (s.btnH || {}).player ?? 28, 20, 48, 'pixels tall')}
+          <p class="bs-note">One height each, because a dense tag column and a comfortable roster are different decisions.</p>
+        </section>
+        <section class="pe-section">
           <div class="pe-title">Telestration Tools</div>
           <div class="cs-toolhead"><span></span><span>Colour</span><span>Thickness</span><span>Dashed</span></div>
           ${TOOL_STYLE_ROWS.map(([k, label]) => {
@@ -1308,6 +1316,7 @@ export async function openClipSettings(focus = null) {
     paintBar();
     // A freeze open behind the sheet takes the new styles immediately.
     applyToolStyle(next.toolStyle, next.positions);
+    applyBtnHeights(next.btnH);
   };
 }
 
