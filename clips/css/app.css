@@ -274,12 +274,18 @@
    lightens to n-400 at rest so the icon leads, and goes near-white on the
    accent pill, where it has to hold up against a saturated fill. */
 .an-tb .tb-key {
-  position: absolute; right: 2px; bottom: 0;
+  /* THE ICON IS PERFECTLY CENTRED AND THE BADGE MOVES OUT OF ITS WAY
+     (2026-08-29, Tony's call). Lifting the glyph 2px to clear the letter left
+     every icon sitting high in its button, which shows most on the accent
+     pill where the square has a hard edge to be centred in. The glyph is
+     centred now and the badge is inset from the corner instead: an 18px icon
+     in a 36px button occupies 9-27 on both axes, so a badge tucked at 3/2
+     sits entirely outside it. */
+  position: absolute; right: 3px; bottom: 2px;
   font-size: 9px; font-weight: 600; line-height: 1.2; letter-spacing: 0;
   color: var(--n-400);
   pointer-events: none;
 }
-.an-tb .tb-btn svg { transform: translateY(-2px); }
 .an-tb .tb-btn:hover .tb-key { color: var(--graphite); }
 .an-tb .tb-btn.on .tb-key { color: rgba(255, 255, 255, 0.92); }
 .an-tb .tb-word { padding-right: 16px; }
@@ -381,11 +387,19 @@
   width: 300px; flex-shrink: 0; display: flex; flex-direction: column;
   background: var(--cloud); min-height: 0; overflow: hidden;
 }
+/* ONE ROW, NO HEADER BAND (2026-08-29, Tony's call). The grey `.log-cols`
+   strip is gone and its four controls live here. Padding-left matches a row's
+   own 10px inset so the select-all box sits exactly over the column of ticks
+   beneath it. `nowrap` plus a sideways scroll rather than a wrap: the point of
+   the change was to give the log a row of vertical space back, and a bar that
+   wraps at a narrow width takes it straight off again. */
 .log-head {
   display: flex; align-items: center; gap: 5px;
-  padding: 7px 8px; border-bottom: 1px solid var(--edge);
+  padding: 7px 10px; border-bottom: 1px solid var(--edge);
   background: var(--cloud);
+  flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
 }
+.log-head::-webkit-scrollbar { display: none; }
 /* The search field collapses to its icon (2026-08-27, Tony's call) - the
    log is a narrow column and a permanent search box was the widest thing
    in it. The icon lights while a query is active, so a filtered list can
@@ -460,42 +474,22 @@
 .fm-empty { margin: 0; padding: 10px 8px; color: var(--soft); font-size: 12px; letter-spacing: 0.15px; }
 .fm-foot { display: flex; gap: 6px; padding: 6px 4px 2px; border-top: 1px solid var(--edge); margin-top: 4px; }
 .fm-foot .mini { flex: 1; }
+/* The sort menu is the same panel, narrower, and its rows are buttons rather
+   than checkbox labels - a sort is one choice, not a set. */
+.filter-menu--sort { width: 190px; }
+.filter-menu--sort .fm-row {
+  width: 100%; border: none; background: none; font: inherit; text-align: left;
+  color: var(--graphite);
+}
+.filter-menu--sort .fm-row.on { color: var(--ink); font-weight: 600; }
+.fm-dir { font-size: 11px; letter-spacing: 0.2px; color: var(--soft); white-space: nowrap; }
+.filter-menu--sort .fm-row.on .fm-dir { color: var(--mist); }
 
 .log-list { flex: 1; overflow-y: auto; }
-/* The BoardUI table header, and now the sort control too: clicking Time or
-   Clip sorts, a second click reverses. The standalone sort button is gone
-   (2026-08-27) - a table header is where sorting belongs, and it gave the
-   top bar its width back. */
-.log-cols {
-  display: flex; align-items: center; gap: 8px; padding: 5px 10px;
-  position: sticky; top: 0; z-index: 1;
-  background: var(--sunken);
-  border-top: 1px solid var(--edge); border-bottom: 1px solid var(--edge);
-  font-size: 12px; letter-spacing: 0.15px; font-weight: 500;
-  color: var(--soft);
-}
+/* The select-all box lives in the head row now; a clip row's own box uses the
+   same 16px column, so the two line up down the whole log. */
 .c-check { flex: none; width: 16px; display: inline-flex; align-items: center; }
-/* The timecode toggle lives in the column header, beside the column it hides,
-   rather than in the head row where it squeezed Clips/Tags/Playlist into
-   "Cli..." and "Pla...". */
-.log-colbtn {
-  flex: none; margin-left: auto; width: 22px; height: 22px;
-  display: inline-flex; align-items: center; justify-content: center;
-  border: none; border-radius: 6px; background: none;
-  color: var(--soft); cursor: pointer;
-  transition: background var(--dur) ease, color var(--dur) ease;
-}
-.log-colbtn:hover { background: var(--n-200); color: var(--ink); }
-.log-colbtn.on { color: var(--select); }
 .c-check input { width: 13px; height: 13px; margin: 0; cursor: pointer; accent-color: var(--select); }
-.log-cols .c-time { width: 58px; flex-shrink: 0; }
-.c-sort {
-  border: none; background: none; padding: 0; font: inherit; cursor: pointer;
-  color: inherit; text-align: left;
-}
-.c-sort:hover { color: var(--ink); }
-.c-sort.on { color: var(--ink); font-weight: 600; }
-.c-grow { flex: 1; min-width: 0; }
 .log-count { flex: none; color: var(--soft); font-size: 11px; letter-spacing: 0.2px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 /* BoardUI's ChevronSortDown, the filled rounded triangle its own sortable
    table headers use. Turned for ascending; it inherits currentColor, so an
@@ -526,11 +520,12 @@
 /* A RATED CLIP WEARS ITS COLOUR (2026-08-29, Tony's call), replacing the
    three dots that had a column to themselves. A bar down the leading edge
    plus a wash: readable at a glance down a long list, and it costs no width. */
-.log-row.rated { box-shadow: inset 3px 0 0 0 var(--rate); }
-.log-row.rated:not(.on) { background: color-mix(in oklab, var(--rate) 14%, var(--cloud)); }
-.log-row.rated:nth-child(even):not(.on) { background: color-mix(in oklab, var(--rate) 18%, var(--cloud)); }
-.log-row.rated:hover:not(.on) { background: color-mix(in oklab, var(--rate) 26%, var(--cloud)); }
-.log-row.on.rated { box-shadow: inset 3px 0 0 0 var(--rate), inset 0 1px 0 0 rgba(255, 255, 255, 0.18); }
+/* THE BAR ALONE, NO WASH (2026-08-29, Tony's call). A tinted row plus a bar
+   said the same thing twice, and the wash was the half that fought the
+   striping the log already reads by. 5px instead of 3: the bar is now the
+   only signal, so it has to carry it on its own. */
+.log-row.rated { box-shadow: inset 5px 0 0 0 var(--rate); }
+.log-row.on.rated { box-shadow: inset 5px 0 0 0 var(--rate), inset 0 1px 0 0 rgba(255, 255, 255, 0.18); }
 .log-row.on { background-image: var(--grad-primary); color: #fff; box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.18); }
 
 .log-row.on .log-tagline { color: rgba(255,255,255,.72); }
@@ -909,18 +904,21 @@
    call). It was 8.5px at 60% opacity, which is decoration, not a label.
    Bigger, near-opaque, and on its own slightly darker chip so it holds up
    over every button colour. */
+/* THE KEY IS A LETTER, NOT A PILL (2026-08-29, Tony's call, reversing the
+   BoardUI Kbd chip of 2026-08-27). A Kbd is right where a key is being TAUGHT
+   - in a menu, in help text, once. Down a column of thirty buttons it is
+   thirty grey boxes, and the boxes read louder than the words beside them.
+   The letter alone still says everything, and the column finally has one
+   background instead of two. Weight and size are unchanged. */
 .tag-key {
   margin-left: auto; flex-shrink: 0;
-  /* BoardUI Kbd is caption-1-SEMIBOLD; .tb-key was already 600 and this
-     was 700, so the suite had two key pills at two weights. */
   font-size: 11px; font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--n-500);
-  background: var(--n-300);
-  border-radius: 4px; padding: 0 4px; line-height: 1.45;
+  line-height: 1.45;
 }
-.tag-btn-mode .tag-key, .tag-edit .tag-key { background: var(--n-200); color: var(--mist); }
-.tag-btn.on .tag-key { background: rgb(255 255 255 / 0.26); color: #fff; }
+.tag-btn-mode .tag-key, .tag-edit .tag-key { color: var(--mist); }
+.tag-btn.on .tag-key { color: rgb(255 255 255 / 0.82); }
 
 /* ---------------------------------------------------------- stage */
 .vp-stagecol { flex: 1; min-width: 0; display: flex; flex-direction: column; }

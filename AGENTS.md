@@ -453,6 +453,10 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   roster gained `#vpGripRail` and `settings.railW` (default 116, floor 76,
   ceiling 260) on the same `wireResize` the log and the tag panel use, and the
   grip hides with the column.
+- **A STAR IS A BAR, NOT A WASH** (2026-08-29, Tony's call, refining the rule
+  below). The tinted row and the leading bar said the same thing twice, and
+  the wash was the half that fought the striping the log already reads by.
+  5px of `--rate` down the leading edge, and nothing else.
 - **ONLY A STAR COLOURS A CLIP LOG ROW, AND IT IS YELLOW** (2026-08-29,
   Tony's call, twice). Three `.rate-dot`s used to sit in a column of their own
   on every row; the row now wears the rating as a bar down its leading edge
@@ -471,6 +475,21 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   column, pointing at a menu nobody opens that way. It is hidden with
   `::-webkit-calendar-picker-indicator { display: none !important }`; typing
   still autocompletes.
+- **ONE HEAD ROW, NO GREY HEADER BAND** (`clips/js/player.js`, 2026-08-29,
+  Tony's call). `.log-cols` carried a select-all box, two word-buttons that
+  sorted, and the timecode toggle - a whole band of chrome across the
+  narrowest column in the app, for four controls. All four moved into the row
+  above and the band is deleted:
+  - THE SELECT-ALL BOX LEADS THE ROW, at the same 10px inset every clip row
+    uses, so the column of ticks runs unbroken from the top. `.log-head`
+    padding-left and `.log-row` padding-left must stay equal.
+  - CLIP AND TIME COLLAPSED INTO ONE ICON-ONLY SORT BUTTON opening a menu that
+    names both fields and says which way each runs. Clicking the field already
+    sorted reverses it, exactly as clicking the header did.
+  - The row is `nowrap` with a sideways scroll, not a wrap. The whole point
+    was to give the log a row of vertical space back, and a bar that wraps at
+    a narrow width takes it straight off again. Verified: seven controls fit
+    at 298px and scroll at the 150px floor.
 - **THE HEADER ROW CARRIES NO COUNT** (2026-08-29): the log is the narrowest
   column in the app and the number is implied by the list under it.
 - **THE SORT INDICATOR IS BOARDUI'S `ChevronSortDown`** - the filled rounded
@@ -538,6 +557,20 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   Tony's call, reversing the tool-stays-armed rule of 2026-08-27), so the
   thing just drawn can be moved without re-arming - which is what anyone does
   next. Off keeps the tool armed for repeated marks.
+- **ICON-ONLY CHROME GETS A NEAR-INSTANT BOARDUI TOOLTIP** (`clips/js/tip.js`,
+  2026-08-29, Tony's call). Half the chrome here is icon-only now - the log's
+  five filters, the search glyph, the sort button, the timecode toggle, every
+  tool, swatch and action on the annotation bar. A native `title` takes about
+  a second, which is long enough that a coach has already clicked and found
+  out the hard way, and it is drawn by the OS, so it is the one thing on
+  screen that is not BoardUI. The module is the `.cs-tip` recipe promoted out
+  of app.js, on an 80ms delay.
+  - IT WIRES ITSELF: delegated listeners on the document cover every
+    `[data-tip]` that will ever exist, including bars built as HTML strings
+    long after load. Importing it for the side effect is the whole API.
+  - `data-tip`, NEVER `title`, on the same element - a `title` alongside would
+    still raise the OS tooltip a second later, underneath this one. Keep
+    `aria-label` for the accessible name.
 - **EVERY SETTINGS DESCRIPTION IS A HOVER TOOLTIP** (`.cs-info`, 2026-08-29,
   Tony's call). A sheet that prints its own explanations is twice as tall and
   reads as documentation. The glyph is a BoardUI Tooltip - light surface,
@@ -673,6 +706,30 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   in the app that had to be read rather than seen. The colour swatches still
   recolour every other kind of mark. Default size is 34, down 20% from 42, and
   `settings.textSize` moves it.
+- **THE SWATCH IS THE COLOUR FOR EVERY COLOURABLE TOOL** (2026-08-29, Tony's
+  call, reversing the per-tool live override of 2026-08-27). It used to apply
+  to the ACTIVE tool only and clear the moment another was picked, so drawing
+  a red arrow and then a box gave a yellow box - it looked like a global
+  choice and behaved like a per-tool one. It is global and sticky now, and a
+  preset is selected from the moment the bar opens, so "the current colour" is
+  never nothing. TWO EXCEPTIONS, both because their colour carries meaning:
+  `pos` takes its home/away/neutral slot, and `text` is forced to ink because
+  the chip is a white pill. A tool's own colour, set in Settings or by
+  right-clicking it, becomes the global colour when that tool is armed, so the
+  two controls can never disagree about what the next stroke will be.
+- **THE KEY ON A TOOL IS CENTRED AROUND, NOT AROUND-CENTRED** (2026-08-29,
+  Tony's call): the glyph sits dead centre of its button and the badge is
+  inset from the corner instead. Lifting the glyph 2px to clear the letter
+  left every icon riding high, which shows most on the accent pill where the
+  square has a hard edge to be centred in. An 18px icon in a 36px button
+  occupies 9-27 on both axes, so a badge at right 3 / bottom 2 sits clear of
+  it with the glyph untouched.
+- **A PANEL KEY IS A LETTER, NOT A PILL** (`.tag-key`, 2026-08-29, Tony's
+  call, reversing the BoardUI Kbd chip of 2026-08-27). A Kbd is right where a
+  key is being TAUGHT - in a menu, in help text, once. Down a column of thirty
+  buttons it is thirty grey boxes, and the boxes read louder than the words
+  beside them. Weight and size are unchanged; only the chip is gone. The
+  annotation toolbar's `.tb-key` was never a chip and is unaffected.
 - **THREE COLOUR PRESETS, EACH CUSTOMISABLE** (`settings.colorPresets`,
   2026-08-29): five swatches were four more decisions than a coach makes
   mid-period. Any of the three can be any colour, edited in Settings. Saving

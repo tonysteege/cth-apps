@@ -37,6 +37,9 @@ import {
   applyBtnHeights,
 } from './player.js';
 import { openAnnotate, annotationElements, paintIdleBar, onAnnotateIdle, applyToolStyle, setToolPrefs, onToolPrefs } from './annotate.js';
+// Imported for its side effect as well as its two functions: it installs the
+// delegated hover listeners that give every [data-tip] element its tooltip.
+import { hideTip } from './tip.js';
 import { recordRange, deliver, fileStem, CROP_PRESETS, openMic } from './export.js';
 import { openCompare, closeCompare, comparing } from './compare.js';
 import { openVideoEditor } from './videoedit.js';
@@ -1194,35 +1197,6 @@ const NAME_TOKENS = [
   ['{date}', "today's date"],
 ];
 
-// ONE tooltip node for the whole app, positioned in the viewport and clamped
-// so it is always fully on screen. A pseudo-element could not be: the
-// settings body scrolls, so anything inside it is cropped at the edges.
-let csTip = null;
-function showTip(anchor) {
-  if (!csTip) {
-    csTip = document.createElement('div');
-    csTip.className = 'cs-tip';
-    document.body.appendChild(csTip);
-  }
-  csTip.textContent = anchor.dataset.tip || '';
-  csTip.classList.add('on');
-  // Park it at the origin first so the measurement is of THIS text at THIS
-  // width - reading the rect while the node still sits at its last position
-  // gives the previous tip's height, which is what put one of these 12px off
-  // the top of the screen.
-  csTip.style.left = '0px';
-  csTip.style.top = '0px';
-  const a = anchor.getBoundingClientRect();
-  const t = csTip.getBoundingClientRect();
-  const pad = 8;
-  const clamp = (v, max) => Math.max(pad, Math.min(v, max - pad));
-  // Above by default, below when there is no room - then CLAMPED either way,
-  // so no arithmetic mistake can put it off screen.
-  const above = a.top - t.height - 10;
-  csTip.style.top = `${clamp(above > pad ? above : a.bottom + 10, window.innerHeight - t.height)}px`;
-  csTip.style.left = `${clamp(a.left + a.width / 2 - t.width / 2, window.innerWidth - t.width)}px`;
-}
-function hideTip() { csTip?.classList.remove('on'); }
 
 const INFO_ICON = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 11.2v5"/><path d="M12 7.9h.01"/></svg>';
 
@@ -1353,12 +1327,6 @@ export async function openClipSettings(focus = null) {
   const close = () => { hideTip(); veil.remove(); };
   veil.addEventListener('mousedown', (e) => { if (e.target === veil) close(); });
   veil.querySelector('[data-x="cancel"]').onclick = close;
-  for (const i of veil.querySelectorAll('.cs-info')) {
-    i.onpointerenter = () => showTip(i);
-    i.onfocus = () => showTip(i);
-    i.onpointerleave = hideTip;
-    i.onblur = hideTip;
-  }
   // Segmented rows carry their value on the pressed button.
   const segVals = {};
   for (const b of veil.querySelectorAll('[data-seg]')) {

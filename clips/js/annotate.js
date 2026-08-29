@@ -23,6 +23,8 @@
 import { drawEl, measureText, TEXT_CHIP, labelInkOn } from '/diagrams/js/flat.js';
 import { toast, esc } from './ui.js';
 import { uid } from './store.js';
+// Side effect: every [data-tip] on the toolbar gets its near-instant tooltip.
+import './tip.js';
 
 let an = null;
 const el = (id) => document.getElementById(id);
@@ -153,9 +155,19 @@ const keyFor = (t) => (prefs.keys[t] ?? DEFAULT_KEYS[t] ?? '');
 function styleFor(t) {
   const d = DEFAULT_STYLE[t] || DEFAULT_STYLE.pen;
   const st = { ...d, ...(prefs.style[t] || {}) };
-  // The colour swatch on the bar is a live override for the active tool, so
-  // picking red then drawing does what it looks like it will do.
-  const color = (an && an.tool === t && an.colorSet) ? an.color : st.color;
+  // THE SWATCH IS THE COLOUR FOR EVERY COLOURABLE TOOL (2026-08-29, Tony's
+  // call). It used to be a live override for the ACTIVE tool only, cleared
+  // the moment another tool was picked, so drawing a red arrow and then a
+  // box gave a yellow box - the swatch looked like a global choice and
+  // behaved like a per-tool one. It is global and sticky now: pick a colour,
+  // everything you draw is that colour until you pick another.
+  //   TWO EXCEPTIONS, both because their colour means something. `pos` is a
+  //   player and takes its home/away/neutral slot. `text` is forced to ink at
+  //   creation, because the chip is a white pill.
+  //   A tool's OWN colour, set in Settings or by right-clicking it, is the
+  //   fallback until a swatch is picked - and picking one in either place
+  //   sets the global colour too, so the two never disagree.
+  const color = (an && an.colorSet && t !== 'pos') ? an.color : st.color;
   return { color, width: (st.width ?? d.width) * vs(), dash: !!st.dash };
 }
 
@@ -864,9 +876,10 @@ function setTool(t) {
   an.tool = t;
   // Switching tools drops the swatch override and shows the new tool's own
   // colour, so the bar always tells the truth about what will be drawn.
-  an.colorSet = false;
+  // The swatch survives a tool change now - that is what makes it global.
+  // Until one is picked, the bar still shows the armed tool's own colour.
   const st = { ...DEFAULT_STYLE[t], ...(prefs.style[t] || {}) };
-  if (st.color) an.color = st.color;
+  if (!an.colorSet && st.color) an.color = st.color;
   if (t !== 'select') an.sel.clear();
   paintBar();
   redraw();
@@ -912,16 +925,16 @@ function barHtml(live) {
       const tip = live
         ? `${label} (${k.toUpperCase()}) - Right-Click For Its Settings, Drag To Reorder`
         : `${label} - Freezes This Frame And Starts Drawing. Right-Click For Its Settings, Drag To Reorder`;
-      return `<button class="tb-btn${on ? ' on' : ''}" ${attr} data-toolid="${t}" draggable="true" title="${tip}" aria-label="${label}">${icon}${key(k)}</button>`;
+      return `<button class="tb-btn${on ? ' on' : ''}" ${attr} data-toolid="${t}" draggable="true" data-tip="${tip}" aria-label="${label}">${icon}${key(k)}</button>`;
     }).join('')}
     <span class="tb-sep"></span>
-    ${colorsOf().map((hex, i) => `<button class="tb-swatch${live && an.color === hex ? ' on' : ''}" data-color="${hex}" data-preset="${i}" style="--c:${hex}" title="Colour ${i + 1}${live ? '' : ' (Pick A Tool First)'} - Right-Click To Change It" aria-label="Colour ${i + 1}"></button>`).join('')}
+    ${colorsOf().map((hex, i) => `<button class="tb-swatch${live && an.color === hex ? ' on' : ''}" data-color="${hex}" data-preset="${i}" style="--c:${hex}" data-tip="Colour ${i + 1}${live ? '' : ' (Pick A Tool First)'} - Right-Click To Change It" aria-label="Colour ${i + 1}"></button>`).join('')}
     <span class="tb-sep"></span>
-    ${PLAYER_SLOTS.map((c, i) => `<button class="tb-player${live && an.tool === 'pos' && an.posColor === c ? ' on' : ''}" ${live ? `data-slot="${i}"` : `data-idleslot="${i}"`} style="--c:${c}" title="${live ? 'Place A Player - Type Two Letters On It' : 'Place A Player - Freezes This Frame And Starts Drawing'}" aria-label="Player ${i + 1}"></button>`).join('')}
+    ${PLAYER_SLOTS.map((c, i) => `<button class="tb-player${live && an.tool === 'pos' && an.posColor === c ? ' on' : ''}" ${live ? `data-slot="${i}"` : `data-idleslot="${i}"`} style="--c:${c}" data-tip="${live ? 'Place A Player - Type Two Letters On It' : 'Place A Player - Freezes This Frame And Starts Drawing'}" aria-label="Player ${i + 1}"></button>`).join('')}
     <span class="tb-sep"></span>
-    <button class="tb-btn" data-act="clear" title="Clear Every Drawing (${prefs.actKeys.clear.toUpperCase()})" aria-label="Clear"${dis}>${ICON_CLEAR}${key(prefs.actKeys.clear)}</button>
-    <button class="tb-btn" data-act="export" title="Export This Freeze - Nothing Leaves This App Until You Press It (${prefs.actKeys.export.toUpperCase()})" aria-label="Export"${dis}>${ICON_EXPORT}${key(prefs.actKeys.export)}</button>
-    <button class="tb-btn tb-done${live ? ' on' : ''}" data-act="done" title="Finish Without Exporting (Return Or Escape)" aria-label="Done"${dis}>${ICON_DONE}</button>`;
+    <button class="tb-btn" data-act="clear" data-tip="Clear Every Drawing (${prefs.actKeys.clear.toUpperCase()})" aria-label="Clear"${dis}>${ICON_CLEAR}${key(prefs.actKeys.clear)}</button>
+    <button class="tb-btn" data-act="export" data-tip="Export This Freeze - Nothing Leaves This App Until You Press It (${prefs.actKeys.export.toUpperCase()})" aria-label="Export"${dis}>${ICON_EXPORT}${key(prefs.actKeys.export)}</button>
+    <button class="tb-btn tb-done${live ? ' on' : ''}" data-act="done" data-tip="Finish Without Exporting (Return Or Escape)" aria-label="Done"${dis}>${ICON_DONE}</button>`;
 }
 
 // ---------------------------------------------------------- the tool menu
@@ -996,7 +1009,7 @@ function openToolMenu(tool, btn) {
     Object.assign(st, patch);
     // A tool already armed takes the change immediately, or it reads as
     // ignored until the next time it is picked.
-    if (an && an.tool === tool && patch.color) { an.color = patch.color; an.colorSet = false; }
+    if (an && an.tool === tool && patch.color) { an.color = patch.color; an.colorSet = true; }
     repaintBar();
   };
   q('.tmenu-key').onkeydown = (e) => e.stopPropagation();
@@ -1197,9 +1210,10 @@ export function applyToolStyle(settings = {}) {
   setToolPrefs(settings);
   if (!an) { idleHook?.(); return; }
   if (settings.positions) an.positions = settings.positions;
-  an.colorSet = false;
+  // The armed tool's colour becomes the global one, so a colour changed in
+  // Settings is visible immediately rather than looking ignored.
   const st = { ...DEFAULT_STYLE[an.tool], ...(prefs.style[an.tool] || {}) };
-  if (st.color) an.color = st.color;
+  if (st.color) { an.color = st.color; an.colorSet = true; }
   paintBar();
   redraw();
 }
@@ -1217,19 +1231,19 @@ export function openAnnotate(freeze, frameCanvas, { onDone, onExport, onFreeze, 
     freeze,
     els: structuredClone(freeze.elements || []),
     tool: freeze.elements?.length ? 'select' : 'pen',
-    color: prefs.style.pen.color,
+    color: prefs.colors[0],
     sel: new Set(),
     drag: null,
     band: null,
     positions: positions || ['D1', 'D2', 'C', 'W1', 'W2', 'F1', 'F2', 'F3'],
     posLabel: pendingPos?.label ?? '',
-    colorSet: false,
+    // Selected from the start: the first swatch IS the current colour, and
+    // every colourable tool takes it.
+    colorSet: true,
     autoSelect,
     onDraw,
-    colorPresets: (colorPresets && colorPresets.length === 3) ? colorPresets : DEFAULT_COLORS,
     textSize: textSize || TEXT_SIZE,
     posColor: pendingPos?.color || PLAYER_SLOTS[0],
-    keys: { ...DEFAULT_KEYS, ...(keys || {}) },
     actKeys: { ...ACT_KEYS, ...(actKeys || {}) },
     vw: frameCanvas.width,
     vh: frameCanvas.height,

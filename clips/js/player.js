@@ -1048,6 +1048,10 @@ const view = {
 
 const SEARCH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>';
 const CLOCK_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.25"/><path d="M12 7.4V12l3 1.8"/></svg>';
+// Lines of falling length with an arrow beside them - the standard sort
+// glyph, drawn on the same 24 grid at the same weight as the filter icons.
+const SORT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 6.5h10M3.5 12h6.5M3.5 17.5h4"/><path d="M17.5 5.5v13"/><path d="m14.6 15.6 2.9 2.9 2.9-2.9"/></svg>';
+const SORT_LABEL = { time: 'Time', name: 'Clip' };
 
 // ---- undo -----------------------------------------------------------
 // Cmd+Z takes back the last tag or clip. One shallow stack, capped: this
@@ -1195,6 +1199,47 @@ export function openPlayers() {
 // ---- filter menus ---------------------------------------------------
 // Multi-select with a count beside every option, so the menu doubles as a
 // summary of what the game holds.
+// THE SORT IS ONE ICON-ONLY BUTTON (2026-08-29, Tony's call). Clip and Time
+// were two word-buttons in a grey header band of their own; the band is gone
+// and they are one glyph opening a menu that NAMES both fields and shows
+// which way each runs. Clicking the field already sorted reverses it, which
+// is exactly what clicking the header used to do.
+function openSortMenu(btn, arrow) {
+  document.getElementById('vpFilterMenu')?.remove();
+  const box = document.createElement('div');
+  box.id = 'vpFilterMenu';
+  box.className = 'filter-menu filter-menu--sort';
+  const row = (col, label, asc, desc) => `
+    <button class="fm-row${view.sortBy === col ? ' on' : ''}" data-sortcol="${col}">
+      <span class="fm-name">${label}</span>
+      <span class="fm-dir">${view.sortBy === col ? (view.sortDir === 'asc' ? asc : desc) : ''}</span>
+      ${arrow(col)}
+    </button>`;
+  box.innerHTML = `<div class="fm-list">
+    ${row('time', 'Time', 'Oldest First', 'Newest First')}
+    ${row('name', 'Clip', 'A To Z', 'Z To A')}
+  </div>`;
+  document.body.appendChild(box);
+  const r = btn.getBoundingClientRect();
+  box.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - box.offsetWidth - 10))}px`;
+  box.style.top = `${Math.min(r.bottom + 6, window.innerHeight - box.offsetHeight - 10)}px`;
+  box.querySelectorAll('[data-sortcol]').forEach((b) => {
+    b.onclick = () => {
+      const col = b.dataset.sortcol;
+      if (view.sortBy === col) view.sortDir = view.sortDir === 'asc' ? 'desc' : 'asc';
+      else { view.sortBy = col; view.sortDir = 'asc'; }
+      box.remove();
+      paintLog();
+    };
+  });
+  const away = (e) => {
+    if (box.contains(e.target) || e.target === btn) return;
+    box.remove();
+    document.removeEventListener('pointerdown', away, true);
+  };
+  setTimeout(() => document.addEventListener('pointerdown', away, true), 0);
+}
+
 function openFilterMenu(btn, countMap, kind) {
   document.getElementById('vpFilterMenu')?.remove();
   const chosen = kind === 'label' ? view.labels : view.tags;
@@ -1448,21 +1493,25 @@ export function paintLog() {
   const arrow = (col) => (view.sortBy !== col ? ''
     : `<svg class="c-arrow${view.sortDir === 'asc' ? ' up' : ''}" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.7071 15.2929C12.3166 15.6834 11.6834 15.6834 11.2929 15.2929L7.70711 11.7071C7.07714 11.0771 7.52331 10 8.41421 10H15.5858C16.4767 10 16.9229 11.0771 16.2929 11.7071L12.7071 15.2929Z" fill="currentColor"/></svg>`);
 
+  // ONE ROW, NO HEADER BAR (2026-08-29, Tony's call). The grey `.log-cols`
+  // strip carried a select-all box, two word-buttons that sorted, and the
+  // timecode toggle - a whole band of chrome across the narrowest column in
+  // the app, for four controls. All four moved into the row above: the
+  // checkbox leads it, at the same 10px inset as every row checkbox below so
+  // the column of ticks runs unbroken from the top, and Clip/Time collapsed
+  // into ONE icon-only sort button that opens a menu naming both.
   log.innerHTML = `
     <div class="log-head">
-      <button class="log-iconbtn${view.search ? ' on' : ''}" id="vpLogSearchBtn" title="Search Clips" aria-label="Search Clips">${SEARCH_ICON}</button>
+      <span class="c-check"><input type="checkbox" id="vpAllCheck" data-tip="Select Every Clip Below" aria-label="Select Every Clip Below"${ticked && ticked === list.length ? ' checked' : ''}></span>
+      <button class="log-iconbtn${view.search ? ' on' : ''}" id="vpLogSearchBtn" data-tip="Search Clips" aria-label="Search Clips">${SEARCH_ICON}</button>
       <input id="vpLogSearch" type="search" placeholder="Search Clips…" value="${esc(view.search)}" autocomplete="off"${view.searchOpen || view.search ? '' : ' hidden'}>
       <div class="log-filters"${view.searchOpen ? ' hidden' : ''}>
-        <button class="log-filter${view.labels.length ? ' on' : ''}" data-menu="label" title="Filter By Clip Button" aria-label="Filter By Clip Button">${FILTER_ICONS.label}${fCount(view.labels.length)}</button>
-        <button class="log-filter${view.tags.length ? ' on' : ''}" data-menu="tag" title="Filter By Tag" aria-label="Filter By Tag">${FILTER_ICONS.tag}${fCount(view.tags.length)}</button>
-        <button class="log-filter${view.playlist ? ' on' : ''}" id="vpPlaylist" title="Playlist - Play Every Clip Below, Back To Back" aria-label="Playlist">${FILTER_ICONS.playlist}</button>
+        <button class="log-filter" id="vpLogSort" data-tip="Sort By ${SORT_LABEL[view.sortBy]}, ${view.sortDir === 'asc' ? 'Ascending' : 'Descending'}" aria-label="Sort">${SORT_ICON}</button>
+        <button class="log-filter${view.labels.length ? ' on' : ''}" data-menu="label" data-tip="Filter By Clip Button" aria-label="Filter By Clip Button">${FILTER_ICONS.label}${fCount(view.labels.length)}</button>
+        <button class="log-filter${view.tags.length ? ' on' : ''}" data-menu="tag" data-tip="Filter By Tag" aria-label="Filter By Tag">${FILTER_ICONS.tag}${fCount(view.tags.length)}</button>
+        <button class="log-filter${view.playlist ? ' on' : ''}" id="vpPlaylist" data-tip="Playlist - Play Every Clip Below, Back To Back" aria-label="Playlist">${FILTER_ICONS.playlist}</button>
+        <button class="log-filter${view.hideTime ? '' : ' on'}" id="vpLogTime" data-tip="${view.hideTime ? 'Show' : 'Hide'} The Timecode" aria-label="${view.hideTime ? 'Show' : 'Hide'} The Timecode">${CLOCK_ICON}</button>
       </div>
-    </div>
-    <div class="log-cols">
-      <span class="c-check"><input type="checkbox" id="vpAllCheck" title="Select Every Clip Below"${ticked && ticked === list.length ? ' checked' : ''}></span>
-      <button class="c-sort c-grow${view.sortBy === 'name' ? ' on' : ''}" data-sort="name">Clip${arrow('name')}</button>
-      <button class="c-sort${view.sortBy === 'time' ? ' on' : ''}" data-sort="time">Time${arrow('time')}</button>
-      <button class="log-colbtn${view.hideTime ? '' : ' on'}" id="vpLogTime" title="${view.hideTime ? 'Show' : 'Hide'} The Timecode" aria-label="${view.hideTime ? 'Show' : 'Hide'} The Timecode">${CLOCK_ICON}</button>
     </div>
     ${ticked ? `<div class="log-bulk">
       <span class="log-bulkn">${ticked} Selected</span>
@@ -1502,17 +1551,8 @@ export function paintLog() {
   log.querySelectorAll('[data-menu]').forEach((b) => {
     b.onclick = () => openFilterMenu(b, b.dataset.menu === 'label' ? labelCounts : tagCounts, b.dataset.menu);
   });
+  el('vpLogSort').onclick = (e) => openSortMenu(e.currentTarget, arrow);
   el('vpPlaylist').onclick = () => togglePlaylist();
-
-  // ---- column sort
-  log.querySelectorAll('[data-sort]').forEach((b) => {
-    b.onclick = () => {
-      const col = b.dataset.sort;
-      if (view.sortBy === col) view.sortDir = view.sortDir === 'asc' ? 'desc' : 'asc';
-      else { view.sortBy = col; view.sortDir = col === 'time' ? 'asc' : 'asc'; }
-      paintLog();
-    };
-  });
 
   // ---- selection
   el('vpAllCheck').onchange = (e) => {
