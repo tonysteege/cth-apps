@@ -638,45 +638,65 @@
 .side-div { padding: 4px 2px; cursor: grab; }
 .side-div span { display: block; height: 1px; background: var(--edge); }
 .side-div.drag-over span { background: var(--select); }
+/* THE TAG PANEL IS THE PLAYER RAIL'S BUTTON (2026-08-29, Tony's call),
+   reversing the solid-colour buttons of 2026-08-26. Same white BoardUI
+   surface, same hairline, same n-700 text, same gradient pill when it is on -
+   the two columns beside each other now read as one control surface instead
+   of a field of colour next to a field of white. The assigned colour became
+   the DOT.
+
+   `btnFg` and `--fg` are gone from the body with it: a white button takes ink
+   text, so nothing has to compute a contrast colour any more. */
 .tag-btn {
-  --btn: var(--c, #737373);
-  display: flex; align-items: center; gap: 5px; width: 100%;
-  min-height: 24px;
-  text-align: left; cursor: grab;
-  border: 1px solid color-mix(in oklab, var(--btn) 76%, #000);
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  height: 28px; padding: 0 7px;
+  border: 1px solid var(--edge);
   border-radius: var(--r-sm);
-  padding: 4px 5px;
-  background-image: linear-gradient(180deg,
-    color-mix(in oklab, var(--btn) 93%, #fff) 0%,
-    color-mix(in oklab, var(--btn) 87%, #000) 100%);
-  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.18), var(--shadow-card);
-  color: var(--fg, #fff);
-  font-size: 12px; letter-spacing: 0.15px; font-weight: 600; white-space: nowrap;
-  transition: box-shadow var(--dur) ease, filter var(--dur) ease,
+  background: var(--cloud);
+  color: var(--n-700);
+  box-shadow: var(--shadow-card);
+  font: inherit; font-size: 12px; letter-spacing: 0.15px; font-weight: 500;
+  text-align: left; white-space: nowrap; cursor: grab;
+  transition: border-color var(--dur) ease, color var(--dur) ease,
+              background var(--dur) ease,
               transform 420ms cubic-bezier(0.4, 0, 0.2, 1);
 }
-.tag-btn:hover { filter: brightness(1.07); box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.22), var(--shadow-2); }
-.tag-btn:active { transform: scale(0.98); filter: brightness(0.94); cursor: grabbing; transition-duration: var(--dur), var(--dur), 220ms; }
-.tag-btn.drag-over { box-shadow: inset 0 2.5px 0 0 var(--select), var(--shadow-2); }
+.tag-btn:hover { border-color: var(--n-300); color: var(--ink); background: var(--n-100); }
+.tag-btn:active { transform: scale(0.98); border-color: var(--n-400); background: var(--n-200); cursor: grabbing; transition-duration: var(--dur), var(--dur), var(--dur), 220ms; }
+.tag-btn.drag-over { border-color: var(--select); box-shadow: inset 0 2.5px 0 0 var(--select), var(--shadow-card); }
 .tag-btn-word { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.tag-btn-tag { font-weight: 600; }
-.tag-btn-tag.on {
-  box-shadow: inset 0 0 0 2px var(--fg, #fff), inset 0 0 0 3px rgb(0 0 0 / 0.22), var(--shadow-2);
+.tag-btn-tag { font-weight: 500; }
+
+/* The BoardUI status dot: a 12px tinted halo with a 6px solid centre. The
+   halo is a ramp step in BoardUI, but a tag's colour is an arbitrary hex Tony
+   picked, so it is mixed toward white to the same effect. */
+.tag-dot {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 12px; height: 12px; flex: none; border-radius: 50%;
+  background: color-mix(in oklab, var(--c, #737373) 18%, #fff);
+}
+.tag-dot::after {
+  content: ''; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--c, #737373);
+}
+/* On the accent pill the halo turns white, so the dot still reads AND still
+   says which tag it is - dropping the hue here would lose the identity the
+   dot exists for. */
+.tag-btn.on .tag-dot { background: #fff; }
+
+.tag-btn.on, .tag-btn-tag.on {
+  background-image: var(--grad-primary); border-color: transparent;
+  color: #fff; box-shadow: var(--shadow-nav);
 }
 .tag-btn-mode {
-  background-image: none; background: var(--cloud);
-  border: 1px dashed var(--n-300); color: var(--graphite);
-  box-shadow: none; white-space: normal;
+  border-style: dashed; border-color: var(--n-300); color: var(--graphite);
+  box-shadow: none; white-space: normal; height: auto; padding: 5px 7px;
 }
-.tag-btn-mode:hover { filter: none; background: var(--sunken); box-shadow: none; }
+.tag-btn-mode:hover { background: var(--sunken); box-shadow: none; }
 .tag-edit {
   justify-content: center; margin-top: 7px; cursor: pointer;
-  background-image: none; background: var(--cloud);
-  border: 1px solid var(--edge); color: var(--mist);
-  font-size: 11px; font-weight: 600; letter-spacing: 0.2px;
-  box-shadow: var(--shadow-card);
+  color: var(--mist); font-size: 11px; font-weight: 600; letter-spacing: 0.2px;
 }
-.tag-edit:hover { filter: none; background: var(--n-50); border-color: var(--n-300); color: var(--ink); box-shadow: var(--shadow-card); }
 /* THE SHORTCUT HAS TO BE READABLE FROM THE BENCH (2026-08-27, Tony's
    call). It was 8.5px at 60% opacity, which is decoration, not a label.
    Bigger, near-opaque, and on its own slightly darker chip so it holds up
@@ -687,11 +707,12 @@
      was 700, so the suite had two key pills at two weights. */
   font-size: 11px; font-weight: 600;
   font-variant-numeric: tabular-nums;
-  color: color-mix(in srgb, var(--fg, #fff) 94%, transparent);
-  background: rgb(0 0 0 / 0.17);
+  color: var(--n-500);
+  background: var(--n-300);
   border-radius: 4px; padding: 0 4px; line-height: 1.45;
 }
 .tag-btn-mode .tag-key, .tag-edit .tag-key { background: var(--n-200); color: var(--mist); }
+.tag-btn.on .tag-key { background: rgb(255 255 255 / 0.26); color: #fff; }
 
 /* ---------------------------------------------------------- stage */
 .vp-stagecol { flex: 1; min-width: 0; display: flex; flex-direction: column; }

@@ -928,21 +928,32 @@ export function paintBar() {
   const bar = el('vpSide');
   if (!bar || !cur) return;
   const c = selClip();
+  // THE BUTTON IS WHITE AND THE COLOUR IS A DOT (2026-08-29, Tony's call,
+  // reversing the solid-colour buttons of 2026-08-26). The panel now reads
+  // like the player rail beside it - one white BoardUI button per row - and
+  // the assigned colour became a BoardUI status dot: a 12px tinted halo with
+  // a 6px solid centre. A column of twenty saturated buttons was a wall of
+  // colour competing with the video; a column of white rows with a coloured
+  // dot scans, and the colour still identifies the tag at a glance.
+  //
+  // `btnFg` is no longer needed on the body - a white button takes ink text -
+  // but the colour still rides in as `--c` for the dot.
+  const dot = '<span class="tag-dot"></span>';
   const item = (b) => {
     if (b.divider) return `<div class="side-div" data-drag="${b.id}" draggable="true" title="Divider - Drag To Move"><span></span></div>`;
     // An `act` button runs something instead of toggling a tag. It drags,
     // re-keys and re-colours exactly like its neighbours, which is the whole
     // point of it being a real button rather than an injected one.
     if (b.act === 'players') return `
-    <button class="tag-btn tag-btn-players" draggable="true" data-drag="${b.id}" data-act="players" style="--c:${b.color};--fg:${btnFg(b.color)}" title="Tag The Players In This Clip${b.key ? ` (${keyLabel(b.key)})` : ''}. Drag To Reorder">
-      <span class="tag-btn-word">${esc(btnLabel(b.label))}</span>${keyBadge(b.key)}
+    <button class="tag-btn tag-btn-players" draggable="true" data-drag="${b.id}" data-act="players" style="--c:${b.color}" title="Tag The Players In This Clip${b.key ? ` (${keyLabel(b.key)})` : ''}. Drag To Reorder">
+      ${dot}<span class="tag-btn-word">${esc(btnLabel(b.label))}</span>${keyBadge(b.key)}
     </button>`;
     return b.tier === 1 ? `
-    <button class="tag-btn" draggable="true" data-drag="${b.id}" data-clipbtn="${b.id}" style="--c:${b.color};--fg:${btnFg(b.color)}" title="${esc(b.label)}: Clip ${b.lead}s Before To ${b.lag}s After The Playhead. Drag To Reorder">
-      <span class="tag-btn-word">${esc(btnLabel(b.label))}</span>${keyBadge(b.key)}
+    <button class="tag-btn" draggable="true" data-drag="${b.id}" data-clipbtn="${b.id}" style="--c:${b.color}" title="${esc(b.label)}: Clip ${b.lead}s Before To ${b.lag}s After The Playhead. Drag To Reorder">
+      ${dot}<span class="tag-btn-word">${esc(btnLabel(b.label))}</span>${keyBadge(b.key)}
     </button>` : `
-    <button class="tag-btn tag-btn-tag${c?.tags.includes(b.label) ? ' on' : ''}" draggable="true" data-drag="${b.id}" data-tagbtn="${b.id}" style="--c:${b.color};--fg:${btnFg(b.color)}" title="Toggle #${esc(b.label)} On The Selected Clip. Drag To Reorder">
-      <span class="tag-btn-word">${esc(btnLabel(b.label))}</span>${keyBadge(b.key)}
+    <button class="tag-btn tag-btn-tag${c?.tags.includes(b.label) ? ' on' : ''}" draggable="true" data-drag="${b.id}" data-tagbtn="${b.id}" style="--c:${b.color}" title="Toggle #${esc(b.label)} On The Selected Clip. Drag To Reorder">
+      ${dot}<span class="tag-btn-word">${esc(btnLabel(b.label))}</span>${keyBadge(b.key)}
     </button>`;
   };
   bar.innerHTML = `
@@ -1539,7 +1550,7 @@ function openPanelEditor() {
     </div>` : `
     <div class="pe-row" data-id="${b.id}"${b.act ? ` data-act="${b.act}"` : ''} draggable="true">
       <span class="pe-grip" title="Drag To Reorder">${GRIP}</span>
-      <button type="button" class="pe-well" data-colorbtn style="--c:${b.color}" title="Button Colour" aria-label="Button Colour"></button>
+      <button type="button" class="pe-well" data-colorbtn style="--c:${b.color}" title="Dot Colour" aria-label="Dot Colour"></button>
       <input class="pe-color" type="color" value="${b.color}" hidden>
       <input class="pe-label" value="${esc(b.label)}" placeholder="${b.tier === 1 ? 'Label' : 'tag-name'}" aria-label="Label"${b.act ? ' readonly title="Players Opens The Roster - Its Name Is Fixed. Drag It To Move It, And Change Its Key Or Colour Here."' : ''}>
       <input class="pe-key" value="${esc(b.key || '')}" maxlength="1" placeholder="-" aria-label="Hotkey">
@@ -1554,7 +1565,7 @@ function openPanelEditor() {
     </div>`);
   const head = (tier) => `
     <div class="pe-head pe-head--${tier === 1 ? 'clip' : 'tag'}">
-      <span></span><span></span><span>Label</span><span>Key</span>
+      <span></span><span>Dot</span><span>Label</span><span>Key</span>
       ${tier === 1 ? '<span>Lead</span><span>Lag</span>' : ''}<span></span>
     </div>`;
   wrap.innerHTML = `

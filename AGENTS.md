@@ -291,17 +291,29 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   `settings.logW` / `settings.sideW`. The timeline is a 26px lane on ink
   with the two timecodes in the transport row beneath it, and there is no
   permanent hint text on screen.
-- **Tag and clip buttons are SOLID COLOURED buttons** (2026-08-26, Tony's
-  call, replacing the white chip with a colour dot). Each one is the
-  BoardUI primary-button recipe at small size, tinted with the button's
-  own assigned colour: a 180deg gradient from the colour to a darker stop,
-  a 1px darker edge, an inset white top highlight, `--r-sm`, 4px/8px
-  padding, 11.5px semibold. The colour IS the button, so the dot is gone.
-  Because the colour is user-picked, the LABEL COLOUR IS COMPUTED, not
-  fixed: `btnFg()` in `player.js` takes WCAG relative luminance and returns
-  ink or white, handed to CSS as `--fg` beside `--c`. Without it the
-  Light Grey preset (which is the default for a new button) would be white
-  on near-white. An applied tag shows an inset ring in `--fg`.
+- **TAG AND CLIP BUTTONS ARE THE PLAYER RAIL'S BUTTON, WITH A COLOURED DOT**
+  (2026-08-29, Tony's call, reversing the solid-colour buttons of
+  2026-08-26). The panel sits directly beside the player rail, and a column of
+  twenty saturated buttons next to a column of white ones read as two
+  different products - and the colour competed with the video it was meant to
+  describe. Both columns are now the same white BoardUI button: 28px,
+  `--edge` hairline, `--r-sm`, `--shadow-card`, 12px/500 in n-700, hover to
+  n-100/n-300, and THE ACCENT GRADIENT PILL when it is on, which is the
+  suite's one selected state.
+  - THE COLOUR BECAME A BOARDUI STATUS DOT: a 12px halo with a 6px solid
+    centre. BoardUI's halo is a ramp step; a tag's colour is an arbitrary hex
+    Tony picked, so it is `color-mix`ed 18% toward white to the same effect.
+    ON THE ACCENT PILL THE HALO TURNS WHITE and the centre keeps its hue -
+    dropping the colour there would lose the identity the dot exists for.
+  - `btnFg()` AND `--fg` ARE GONE from the button. They existed to compute a
+    WCAG-contrast label colour against a saturated body; a white button takes
+    ink text and needs no computation. `btnFg` remains exported for anything
+    that still needs a contrast decision.
+  - THE KEY PILL IS FINALLY THE REAL BOARDUI KBD - n-300 on n-500. It could
+    not be while it sat on a saturated body, which is why it used to be a
+    black wash tinted by `--fg`.
+  - The colour well in the panel editor is unchanged and now sets the DOT; its
+    column header reads Dot.
 - **The tag buttons do not resize with the column** (2026-08-26, Tony's
   call). A container query used to shrink their type and padding under
   96px, so they moved about while the grip was dragged. That query is
