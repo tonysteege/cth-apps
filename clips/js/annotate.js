@@ -20,7 +20,7 @@
 //    committed chip share one drawing, so committing looks like nothing
 //    happened except the loss of selection.
 
-import { drawEl, measureText, TEXT_CHIP } from '/diagrams/js/flat.js';
+import { drawEl, measureText, TEXT_CHIP, labelInkOn } from '/diagrams/js/flat.js';
 import { toast, esc } from './ui.js';
 import { uid } from './store.js';
 
@@ -33,13 +33,12 @@ const CYAN = '#75d8ff';
 
 // Telestration colours: high chroma so they hold up over both white ice and
 // dark boards. Red leads because it is the default (Tony's call).
-const COLORS = [
-  ['red', '#ff3b30'],
-  ['yellow', '#ffd60a'],
-  ['blue', '#0a84ff'],
-  ['green', '#34c759'],
-  ['ink', '#1e1e1e'],
-];
+// THREE PRESETS, EACH CUSTOMISABLE (2026-08-29, Tony's call). Five swatches
+// were four more decisions than a coach makes mid-period; three covers home,
+// away and a highlight. The values live in `settings.colorPresets` and are
+// edited in Settings, so any of them can be any colour.
+const DEFAULT_COLORS = ['#ff3b30', '#ffd60a', '#0a84ff'];
+const colorsOf = () => (an?.colorPresets || DEFAULT_COLORS);
 
 const TOOLS = [
   ['select', 'Select & Move', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M4.04 4.69a.5.5 0 0 1 .65-.65l16 6.5a.5.5 0 0 1-.06.94l-6.13 1.58a2 2 0 0 0-1.43 1.44l-1.58 6.12a.5.5 0 0 1-.95.07z"/></svg>'],
@@ -52,11 +51,24 @@ const TOOLS = [
   // Added 2026-08-27 on Tony's spec. Icons are drawn on the same 24 grid at
   // the same 1.9 stroke as the set above, so the row reads as one family.
   ['line', 'Line', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M4.5 19.5 19.5 4.5"/></svg>'],
-  ['freearrow', 'Freeform Arrow', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c3.5 0 5-9 9-9 2.6 0 3.6 4 6.4 4.6"/><path d="m15.9 9.9 3.6 2.7-2.4 3.2"/></svg>'],
   ['spotlight', 'Spotlight A Player', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="12" cy="12" r="4.25"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2"/></svg>'],
 ];
 
-const DEFAULT_KEYS = { select: 'v', pen: 'd', arrow: 'a', box: 'b', circle: 'c', angle: 'g', text: 't', line: 'n', freearrow: 'w', spotlight: 'r' };
+// `freearrow` keeps its entry so an older saved key does not dangle.
+// The three player slots: home, away and neutral. A marker's colour is still
+// changeable after the fact with the colour swatches, like every other mark.
+const PLAYER_SLOTS = ['#ff3b30', '#0a84ff', '#1e1e1e'];
+// The same list the rink editor offers, so a coach learns one vocabulary.
+const PLAYER_LABELS = ['1', '2', '3', '4', '5', 'C', 'D1', 'D2', 'F1', 'F2', 'F3', 'G', 'LD', 'LW', 'O', 'RD', 'RW', 'X'];
+
+// The three actions are ICON-ONLY (2026-08-29, Tony's call): three words plus
+// their key badges were the widest thing in the row, and these are the three
+// actions a coach already knows by position.
+const ICON_CLEAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15"/><path d="M9.5 7V5.4A1.4 1.4 0 0 1 10.9 4h2.2a1.4 1.4 0 0 1 1.4 1.4V7"/><path d="M6.4 7l.8 11.2A1.8 1.8 0 0 0 9 19.9h6a1.8 1.8 0 0 0 1.8-1.7L17.6 7"/></svg>';
+const ICON_EXPORT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.6v11"/><path d="m7.9 10.6 4.1 4.1 4.1-4.1"/><path d="M4.6 16.4v2.2a1.8 1.8 0 0 0 1.8 1.8h11.2a1.8 1.8 0 0 0 1.8-1.8v-2.2"/></svg>';
+const ICON_DONE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.6 4.6 4.6L19 7.2"/></svg>';
+
+const DEFAULT_KEYS = { select: 'v', pen: 'd', arrow: 'a', box: 'b', circle: 'c', angle: 'g', text: 't', line: 'n', spotlight: 'r' };
 const ACT_KEYS = { clear: 'x', export: 'e' };
 
 // Every tool's default look, overridden by settings.toolStyle. Widths are in
@@ -372,10 +384,9 @@ function onDown(e) {
   // as a labelled disc, so it needs no new renderer and it lands in a saved
   // freeze looking exactly like a rink diagram's player.
   if (an.tool === 'pos') {
-    const st = styleFor('pos');
     const x = {
       id: uid(), type: 'player', x: p.x, y: p.y,
-      r: 26 * s, color: st.color, label: an.posLabel || 'D1',
+      r: 26 * s, color: an.posColor || PLAYER_SLOTS[0], label: an.posLabel ?? 'C',
     };
     an.els.push(x);
     an.sel = new Set([x.id]);
@@ -564,14 +575,22 @@ function onUp() {
 // The field and the committed chip share ONE drawing, so committing looks
 // like nothing happened except the loss of selection (Tony's call). The
 // numbers below are the same ones flat.js uses to render the chip.
-const TEXT_SIZE = 42; // was 56 - 25% smaller, per spec
+// 34, down 20% from 42 (2026-08-29, Tony's call); `settings.textSize` moves
+// it. A caption on game film competes with the play behind it, and the size
+// that reads on a laptop is bigger than the one that reads on a projector.
+const TEXT_SIZE = 34;
+// TEXT IS ALWAYS INK, never the tool colour (2026-08-29, Tony's call). The
+// text chip is a WHITE PILL with a dark border - flat.js draws it that way -
+// so orange-on-white was the one mark in the app that had to be read rather
+// than seen. The colour swatches still recolour every other kind of mark.
+const TEXT_INK = '#1e1e1e';
 
 function openTextInput(p, existing = null) {
   const root = el('anRoot');
   const v = viewBox();
   const rootR = root.getBoundingClientRect();
   const scale = v.scale;
-  const size = existing ? existing.size : TEXT_SIZE * vs();
+  const size = existing ? existing.size : (an.textSize || TEXT_SIZE) * vs();
   const T = TEXT_CHIP;
   const input = document.createElement('input');
   input.className = 'an-textinput';
@@ -591,7 +610,7 @@ function openTextInput(p, existing = null) {
     const v = input.value.trim();
     input.remove();
     if (keep && v) {
-      const x = { id: existing?.id || uid(), type: 'text', x: p.x, y: p.y, text: v, size, color: existing ? existing.color : an.color };
+      const x = { id: existing?.id || uid(), type: 'text', x: p.x, y: p.y, text: v, size, color: TEXT_INK };
       an.els.push(x);
       an.sel.clear();
       an.sel.add(x.id);
@@ -677,6 +696,18 @@ function clearAll() {
 // under the pointer. One builder draws both states now: idle differs only in
 // that the tools carry `data-idle` (picking one freezes the frame and arms it)
 // and the actions are disabled, because there is nothing yet to act on.
+// THE PLAYER BUTTONS ARE THE DIAGRAMS PLAYER BUTTONS (2026-08-29, Tony's
+// call): three coloured circles, each opening the same hover menu of position
+// labels the rink editor uses. Eight fixed chips (D1..F3) were a row of text
+// buttons that looked nothing like the thing they placed; a circle that looks
+// like the marker is its own label. The .tb-player and .pmenu recipes come
+// from diagrams/css/app.css, which Clips already imports - one recipe, two
+// apps, no copy.
+//
+// NOTE FOR ANYONE EDITING THE TEMPLATE BELOW: it is one long template
+// literal, so an HTML comment inside it is still STRING CONTENT and a
+// backtick in that comment ENDS THE STRING. That is exactly how this line
+// first shipped broken. Keep prose in JS comments, out here.
 function barHtml(live) {
   const key = (k) => (k ? `<span class="tb-key">${k.toUpperCase()}</span>` : '');
   const dis = live ? '' : ' disabled';
@@ -689,28 +720,64 @@ function barHtml(live) {
       return `<button class="tb-btn${on ? ' on' : ''}" ${attr} title="${tip}" aria-label="${label}">${icon}${key(k)}</button>`;
     }).join('')}
     <span class="tb-sep"></span>
-    ${COLORS.map(([name, hex]) => `<button class="tb-swatch${live && an.color === hex ? ' on' : ''}" data-color="${hex}" style="--c:${hex}" title="${name}" aria-label="${name}"${dis}></button>`).join('')}
+    ${(live ? colorsOf() : DEFAULT_COLORS).map((hex, i) => `<button class="tb-swatch${live && an.color === hex ? ' on' : ''}" data-color="${hex}" style="--c:${hex}" title="Colour ${i + 1} - Change It In Settings" aria-label="Colour ${i + 1}"${dis}></button>`).join('')}
     <span class="tb-sep"></span>
     <span class="an-seg" role="group" aria-label="Shape Style">
       <button class="an-segbtn${live && an.shapeStyle !== 'outline' ? ' on' : ''}" data-shape="fill" title="Boxes And Circles As A Light Wash"${dis}>Fill</button>
       <button class="an-segbtn${live && an.shapeStyle === 'outline' ? ' on' : ''}" data-shape="outline" title="Boxes And Circles As A Solid Outline"${dis}>Outline</button>
     </span>
     <span class="tb-sep"></span>
-    <!-- Position chips. One click arms the tool AND picks the label, so
-         dropping a D1 on the frame is a single decision, not two. -->
-    <span class="bui-group bui-group--dense" role="group" aria-label="Position Indicators">
-      ${(POSITIONS(live)).map((lab) => `<button class="${live && an.tool === 'pos' && an.posLabel === lab ? 'on' : ''}" data-pos="${esc(lab)}" title="Drop A ${esc(lab)} Marker"${dis}>${esc(lab)}</button>`).join('')}
-    </span>
+    ${PLAYER_SLOTS.map((c, i) => `<button class="tb-player${live && an.tool === 'pos' && an.posColor === c ? ' on' : ''}" data-slot="${i}" style="--c:${c}" title="Place A Player - Hover For Positions" aria-label="Player ${i + 1}"${dis}></button>`).join('')}
     <span class="tb-sep"></span>
-    <label class="an-hold" title="How Long The Exported Clip Holds On This Frame">Hold <input id="anHold" type="number" min="0" max="30" value="${live ? (an.freeze.hold ?? 3) : 3}"${dis}>s</label>
+    <label class="an-hold" title="How Long The Exported Clip Holds On This Frame - Seconds"><input id="anHold" type="number" min="0" max="30" value="${live ? (an.freeze.hold ?? 3) : 3}"${dis}>s</label>
     <span class="tb-sep"></span>
-    <button class="tb-btn tb-word" data-act="clear" title="Remove Every Drawing (${(live ? an.actKeys.clear : ACT_KEYS.clear).toUpperCase()})"${dis}>Clear${key(live ? an.actKeys.clear : ACT_KEYS.clear)}</button>
-    <button class="tb-btn tb-word" data-act="export" title="Export This Freeze - Nothing Leaves This App Until You Press It (${(live ? an.actKeys.export : ACT_KEYS.export).toUpperCase()})"${dis}>Export${key(live ? an.actKeys.export : ACT_KEYS.export)}</button>
-    <button class="tb-btn tb-word${live ? ' on' : ''}" data-act="done" title="Finish Without Exporting (Return Or Escape)"${dis}>Done<span class="tb-key">&crarr;</span></button>`;
+    <button class="tb-btn" data-act="clear" title="Clear Every Drawing (${(live ? an.actKeys.clear : ACT_KEYS.clear).toUpperCase()})" aria-label="Clear"${dis}>${ICON_CLEAR}${key(live ? an.actKeys.clear : ACT_KEYS.clear)}</button>
+    <button class="tb-btn" data-act="export" title="Export This Freeze - Nothing Leaves This App Until You Press It (${(live ? an.actKeys.export : ACT_KEYS.export).toUpperCase()})" aria-label="Export"${dis}>${ICON_EXPORT}${key(live ? an.actKeys.export : ACT_KEYS.export)}</button>
+    <button class="tb-btn tb-done${live ? ' on' : ''}" data-act="done" title="Finish Without Exporting (Return Or Escape)" aria-label="Done"${dis}>${ICON_DONE}</button>`;
 }
 
-// The idle bar cannot read `an.positions`, so it falls back to the defaults.
-const POSITIONS = (live) => (live ? (an.positions || []) : ['D1', 'D2', 'C', 'W1', 'W2', 'F1', 'F2', 'F3']);
+
+// THE PLAYER LETTER MENU, ported from the rink editor's `showPlayerMenu` so
+// the gesture is identical in both apps: hover a player button, pick a label,
+// the tool arms with that label AND that colour. A 250ms close delay is what
+// lets the pointer travel from the button to the menu without it vanishing.
+let pmenuEl = null;
+let pmenuTimer = null;
+function hidePlayerMenu(soon = false) {
+  clearTimeout(pmenuTimer);
+  if (soon) { pmenuTimer = setTimeout(() => hidePlayerMenu(), 250); return; }
+  pmenuEl?.remove();
+  pmenuEl = null;
+}
+function showPlayerMenu(slot, btn) {
+  clearTimeout(pmenuTimer);
+  if (pmenuEl?.dataset.slot === String(slot)) return;
+  hidePlayerMenu();
+  const c = PLAYER_SLOTS[slot];
+  const ink = labelInkOn(c);
+  pmenuEl = document.createElement('div');
+  pmenuEl.className = 'pmenu';
+  pmenuEl.dataset.slot = String(slot);
+  pmenuEl.innerHTML = `
+    <button class="pmenu-chip pmenu-blank" data-label="">Blank</button>
+    ${PLAYER_LABELS.map((l) => `<button class="pmenu-chip" data-label="${l}" style="--c:${c};--i:${ink}">${l}</button>`).join('')}`;
+  document.body.appendChild(pmenuEl);
+  const r = btn.getBoundingClientRect();
+  const mw = pmenuEl.offsetWidth;
+  pmenuEl.style.left = `${Math.max(8, Math.min(window.innerWidth - mw - 8, r.left + r.width / 2 - mw / 2))}px`;
+  pmenuEl.style.top = `${Math.max(8, r.top - pmenuEl.offsetHeight - 10)}px`;
+  pmenuEl.addEventListener('pointerenter', () => clearTimeout(pmenuTimer));
+  pmenuEl.addEventListener('pointerleave', () => hidePlayerMenu(true));
+  for (const b of pmenuEl.querySelectorAll('[data-label]')) {
+    b.onclick = () => {
+      an.posLabel = b.dataset.label;
+      an.posColor = c;
+      setTool('pos');
+      hidePlayerMenu();
+      toast(b.dataset.label ? `Placing A "${b.dataset.label}" Player - Click The Picture` : 'Placing A Blank Player - Click The Picture');
+    };
+  }
+}
 
 function paintBar() {
   const bar = el('anBar');
@@ -730,6 +797,12 @@ function paintBar() {
       paintBar();
     };
   });
+  for (const b of bar.querySelectorAll('[data-slot]')) {
+    const slot = Number(b.dataset.slot);
+    b.onpointerenter = () => showPlayerMenu(slot, b);
+    b.onpointerleave = () => hidePlayerMenu(true);
+    b.onclick = () => { an.posColor = PLAYER_SLOTS[slot]; setTool('pos'); hidePlayerMenu(); };
+  }
   bar.querySelectorAll('[data-pos]').forEach((b) => {
     b.onclick = () => { an.posLabel = b.dataset.pos; setTool('pos'); };
   });
@@ -803,6 +876,7 @@ function done() {
 }
 
 function teardown() {
+  hidePlayerMenu();
   el('anRoot').hidden = true;
   an = null;
   dirty = false;
@@ -833,14 +907,14 @@ export function applyToolStyle(style, positions) {
 // ------------------------------------------------------------- open
 
 let wired = false;
-export function openAnnotate(freeze, frameCanvas, { onDone, onExport, keys, actKeys, onKeys, style, positions, armTool, autoSelect = true, onDraw } = {}) {
+export function openAnnotate(freeze, frameCanvas, { onDone, onExport, keys, actKeys, onKeys, style, positions, armTool, autoSelect = true, onDraw, colorPresets, textSize } = {}) {
   const root = el('anRoot');
   root.hidden = false;
   an = {
     freeze,
     els: structuredClone(freeze.elements || []),
     tool: freeze.elements?.length ? 'select' : 'pen',
-    color: COLORS[0][1],
+    color: (style?.pen?.color) || DEFAULT_COLORS[0],
     sel: new Set(),
     drag: null,
     band: null,
@@ -851,6 +925,9 @@ export function openAnnotate(freeze, frameCanvas, { onDone, onExport, keys, actK
     colorSet: false,
     autoSelect,
     onDraw,
+    colorPresets: (colorPresets && colorPresets.length === 3) ? colorPresets : DEFAULT_COLORS,
+    textSize: textSize || TEXT_SIZE,
+    posColor: PLAYER_SLOTS[0],
     keys: { ...DEFAULT_KEYS, ...(keys || {}) },
     actKeys: { ...ACT_KEYS, ...(actKeys || {}) },
     onKeys,

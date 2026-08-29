@@ -181,7 +181,33 @@
 .an-canvas { touch-action: none; cursor: crosshair; }
 /* No longer floating over the frame: it sits in its own strip, so it is
    statically placed and simply wraps when the window is narrow. */
-.an-tb { position: static; transform: none; flex-wrap: wrap; justify-content: center; }
+/* ONE ROW (2026-08-29, Tony's call). The actions became icons and the Hold
+   label went, which is what makes it fit; the strip around it is
+   `overflow-x: auto`, so a very narrow window scrolls sideways rather than
+   stacking. `left` and `bottom` are neutralised because the shared `.tb` rule
+   is `position: fixed; left: 50%` and both keep applying to any non-static
+   box - that is what once pushed the whole bar half the strip right. */
+.an-tb {
+  position: static; left: auto; bottom: auto; transform: none;
+  flex-wrap: nowrap; justify-content: center;
+}
+/* Done keeps its accent fill, now as an icon button. */
+.an-tb .tb-done.on {
+  background-image: var(--grad-primary); border-color: transparent;
+  color: #fff; box-shadow: var(--shadow-nav);
+}
+.an-tb .an-hold { gap: 2px; }
+/* The Clips bar sits in a FIXED STRIP beside a video, where the Diagrams bar
+   floats over a canvas with room to spare, so it runs one step tighter than
+   the shared 40px toolbar button. Scoped on purpose: do not shrink .tb-btn
+   globally, Diagrams needs the larger target. With this it fits one row at
+   1440 and still scrolls sideways on a narrow window. */
+.an-tb { gap: 4px; }
+.an-tb .tb-btn { width: 36px; height: 36px; border-radius: var(--r-md); }
+.an-tb .tb-btn svg { width: 18px; height: 18px; }
+.an-tb .tb-player { width: 30px; height: 30px; margin: 2px; }
+.an-tb .tb-swatch { width: 30px; height: 30px; }
+.an-tb .an-hold input { width: 38px; }
 .an-idle { font-size: 12px; letter-spacing: 0.15px; color: var(--mist); padding: 0 6px; align-self: center; }
 /* The per-tool style table in Settings: label, colour, thickness, dash. */
 .cs-toolhead, .cs-toolrow {
@@ -1428,3 +1454,6 @@ button.crumb:hover { color: var(--mist); background: var(--n-100); }
 .pe-title { display: flex; align-items: center; }
 /* A segmented control inside a settings row sits where the input would. */
 .bs-row .an-seg { justify-self: end; }
+/* The three colour preset wells sit in one settings row. */
+.cs-swatches { display: inline-flex; gap: 6px; justify-self: end; }
+.cs-swatches input[type="color"] { width: 34px; height: 28px; padding: 2px; }

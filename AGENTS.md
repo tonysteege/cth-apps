@@ -502,6 +502,43 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
     rect in place returns the PREVIOUS tip's height, which put one of them 12px
     off the top - and then clamped on both axes, so no arithmetic mistake can
     put it off screen. Verified across every glyph at six scroll positions.
+- **THE PLAYER BUTTONS ARE THE DIAGRAMS PLAYER BUTTONS** (2026-08-29, Tony's
+  call). Three coloured circles - home `#ff3b30`, away `#0a84ff`, neutral
+  `#1e1e1e` - each opening the rink editor's own hover menu of position labels
+  (`showPlayerMenu`, ported to the letter). Eight fixed D1..F3 chips were a
+  row of text buttons that looked nothing like the thing they placed; a circle
+  that looks like the marker is its own label. `.tb-player` and `.pmenu` come
+  from `diagrams/css/app.css`, which Clips already imports - ONE recipe, two
+  apps, no copy. The 250ms close delay is what lets the pointer travel from
+  the button to the menu.
+- **TELESTRATION TEXT IS ALWAYS INK** (2026-08-29, Tony's call). The text chip
+  is a WHITE PILL with a dark border, so a coloured caption was the one mark
+  in the app that had to be read rather than seen. The colour swatches still
+  recolour every other kind of mark. Default size is 34, down 20% from 42, and
+  `settings.textSize` moves it.
+- **THREE COLOUR PRESETS, EACH CUSTOMISABLE** (`settings.colorPresets`,
+  2026-08-29): five swatches were four more decisions than a coach makes
+  mid-period. Any of the three can be any colour, edited in Settings. Saving
+  an ARRAY index needs its own branch in the settings writer - the generic
+  dotted-key spread would turn the array into an object.
+- **THE FREEFORM ARROW IS OFF THE TOOLBAR** (2026-08-29, Tony's call) but its
+  RENDERER STAYS in `drawEl`/`svgEl` and its key stays in `DEFAULT_KEYS`: a
+  saved freeze may already hold one, and removing the drawing code would make
+  those render as nothing.
+- **THE ACTIONS ARE ICON-ONLY AND THE BAR IS ONE ROW** (2026-08-29, Tony's
+  call): Clear, Export and Done as glyphs, Done keeping its accent fill, and
+  the Hold field is a bare number plus "s". `.an-tb` is `flex-wrap: nowrap`
+  and runs one step tighter than the shared toolbar (36px buttons, 4px gaps,
+  30px circles) - scoped to `.an-tb`, because Diagrams floats over a canvas
+  with room and needs the larger target. The strip is `overflow-x: auto`, so a
+  narrow window SCROLLS SIDEWAYS rather than stacking.
+- **TWO TRAPS THIS BATCH WALKED INTO, BOTH SILENT.** A `.replace()` whose
+  anchor does not exist changes NOTHING and reports nothing - three edits here
+  were no-ops against text an earlier revert had removed, and only a runtime
+  ReferenceError found them. Assert the anchor. And AN HTML COMMENT INSIDE A
+  TEMPLATE LITERAL IS STILL STRING CONTENT: a backtick in that comment ENDS
+  THE STRING, which is how `.tb-player` in a comment became a bare `player`
+  reference. Keep prose in JS comments, outside the template.
 - **PER-TOOL TELESTRATION STYLE** (`settings.toolStyle`, 2026-08-27): colour,
   thickness and dash for pen, arrow, line, freearrow, box, circle, spotlight
   and the position chip, edited in Settings under Telestration Tools.

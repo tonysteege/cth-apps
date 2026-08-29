@@ -548,6 +548,8 @@ async function showPlayer(id) {
           await putSettings({ ...(live || st), toolKeys: keys });
         },
         autoSelect: st.autoSelect !== false,
+        colorPresets: st.colorPresets,
+        textSize: st.textSize,
         // THE VIDEO STAYS PAUSED through all of it (2026-08-29, Tony's
         // call): after a draw, and after Done, Export or Clear. Coming
         // back to a moving picture loses the play that was being marked.
@@ -1271,6 +1273,11 @@ export async function openClipSettings(focus = null) {
           ${seg('exportKind', 'Export Button Writes', [['clip', 'Clip'], ['png', 'PNG']], s.exportKind || 'clip',
             'What the toolbar Export button produces: the held video clip, or a PNG of the annotated frame. Nothing is ever written until you press Export.')}
           ${num('holdSec', 'Default Hold', s.holdSec, 1, 15, 'How long an exported freeze holds on the frame, in seconds.')}
+          ${num('textSize', 'Caption Size', s.textSize ?? 34, 14, 90, 'Telestration text size, measured on a 1280-wide frame so it looks the same on any clip.')}
+          <label class="bs-row"><span>Colour Presets${info('The three swatches on the annotation toolbar. Any of them can be any colour.')}</span>
+            <span class="cs-swatches">${(s.colorPresets || ['#ff3b30', '#ffd60a', '#0a84ff']).map((hex, i) =>
+              `<input type="color" data-k="colorPresets.${i}" value="${esc(hex)}" aria-label="Colour ${i + 1}">`).join('')}</span>
+          </label>
         </section>
         <section class="pe-section">
           <div class="pe-title">Panels${info('One height each, because a dense tag column and a comfortable roster are different decisions.')}</div>
@@ -1374,6 +1381,13 @@ export async function openClipSettings(focus = null) {
         : i.value;
       // Dotted keys write into their nested object.
       const path = i.dataset.k.split('.');
+      // An array index must not turn its array into an object, which the
+      // generic `{ ...node[k] }` spread below would do.
+      if (path[0] === 'colorPresets') {
+        next.colorPresets = [...(next.colorPresets || ['#ff3b30', '#ffd60a', '#0a84ff'])];
+        next.colorPresets[Number(path[1])] = raw;
+        return;
+      }
       let node = next;
       while (path.length > 1) { const k = path.shift(); node[k] = { ...(node[k] || {}) }; node = node[k]; }
       node[path[0]] = raw;

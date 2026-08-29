@@ -158,6 +158,10 @@ const DEFAULT_SETTINGS = () => ({
   // What the toolbar's Export button writes: the held clip, or a PNG of the
   // annotated frame.
   exportKind: 'clip',
+  // The three annotation colour swatches. Any of them can be any colour.
+  colorPresets: ['#ff3b30', '#ffd60a', '#0a84ff'],
+  // Telestration caption size, in 1280-wide video units.
+  textSize: 34,
   // Per-tool telestration style (2026-08-27, Tony's spec). Every drawing
   // tool carries its own colour, thickness and dash, so an arrow can be a
   // fat red solid while a line is a thin white dash without touching a
@@ -217,6 +221,7 @@ export async function getSettings() {
       // Per tool, so a record saved before a tool existed grows that tool's
       // defaults without losing the ones already customised.
       btnH: { ...d.btnH, ...(s.btnH || {}) },
+      colorPresets: (s.colorPresets && s.colorPresets.length === 3) ? s.colorPresets : d.colorPresets,
       toolStyle: Object.fromEntries(Object.entries(d.toolStyle)
         .map(([k, v]) => [k, { ...v, ...((s.toolStyle || {})[k] || {}) }])),
       positions: s.positions || d.positions,
