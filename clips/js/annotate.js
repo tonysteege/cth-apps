@@ -56,8 +56,6 @@ const TOOLS = [
   ['spotlight', 'Spotlight A Player', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="12" cy="12" r="4.25"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2"/></svg>'],
 ];
 
-const POS_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10.5" r="3.1"/><path d="M12 2.6a7.9 7.9 0 0 0-7.9 7.9c0 5.5 7.9 10.9 7.9 10.9s7.9-5.4 7.9-10.9A7.9 7.9 0 0 0 12 2.6Z"/></svg>';
-
 const DEFAULT_KEYS = { select: 'v', pen: 'd', arrow: 'a', box: 'b', circle: 'c', angle: 'g', text: 't', line: 'n', freearrow: 'w', spotlight: 'r' };
 const ACT_KEYS = { clear: 'x', export: 'e' };
 
@@ -100,17 +98,14 @@ export function annotating() { return !!an; }
 export function paintIdleBar(onPick) {
   const bar = el('anBar');
   if (!bar || an) return;
-  bar.innerHTML = toolbarHtml({ live: false });
-  for (const b of bar.querySelectorAll('[data-idle]')) {
+  bar.innerHTML = `
+    ${TOOLS.map(([t, label, icon]) => `<button class="tb-btn" data-idle="${t}" title="${label} - Freezes This Frame And Starts Drawing" aria-label="${label}">${icon}</button>`).join('')}
+    <span class="tb-sep"></span>
+    <span class="an-idle">Pick a tool to freeze this frame and draw on it</span>`;
+  bar.querySelectorAll('[data-idle]').forEach((b) => {
     b.onclick = () => onPick?.(b.dataset.idle);
-  }
-  // The two popover buttons freeze first as well: picking a colour or a
-  // marker is picking a tool, and the row must behave the same in both states.
-  for (const b of bar.querySelectorAll('[data-pop]')) {
-    b.onclick = () => onPick?.(b.dataset.pop === 'pos' ? 'pos' : 'pen');
-  }
+  });
 }
-
 
 // Diagnostic tap, the Film Room idiom: only meaningful to someone who went
 // looking for it, and free at runtime.
@@ -651,7 +646,6 @@ let dirty = false;
 const markDirty = () => { dirty = true; };
 
 function setTool(t) {
-  closePop();
   an.tool = t;
   // Switching tools drops the swatch override and shows the new tool's own
   // colour, so the bar always tells the truth about what will be drawn.
@@ -673,127 +667,33 @@ function clearAll() {
 
 // ------------------------------------------------------------- toolbar
 
-// ONE ROW, ALWAYS (2026-08-29, Tony's call). The bar carried ten tools, five
-// swatches, a Fill/Outline pair, eight position chips, a Hold field and three
-// actions - twenty-seven controls, which wrapped onto two rows and pushed the
-// video up. Two groups moved into POPOVERS, which is the rule the Diagrams
-// toolbar already follows: the toolbar's width is fixed by design, and a
-// contextual control belongs in a popup rather than in the row.
-//
-//   colour   one swatch showing the current colour, opening the five presets
-//            AND the Fill/Outline pair - both are "how the next mark looks"
-//   position one tool button opening D1..F3, which also ARMS the tool, so
-//            dropping a marker is still a single decision
-//
-// The idle bar draws the SAME row so the toolbar never changes shape; the
-// actions are simply disabled until there is a frozen frame to act on.
-function toolbarHtml({ live }) {
-  const key = (k) => (k ? `<span class="tb-key">${k.toUpperCase()}</span>` : '');
-  const tool = (t, label, icon) => {
-    const on = live && an.tool === t;
-    const k = live ? keyFor(t) : '';
-    return `<button class="tb-btn${on ? ' on' : ''}" data-${live ? 'tool' : 'idle'}="${t}" title="${label}${k ? ` (${k.toUpperCase()})` : ''}${live ? ' - Right-Click To Change The Key' : ' - Freezes This Frame'}" aria-label="${label}">${icon}${key(k)}</button>`;
-  };
-  const colour = live ? an.color : '#ff3b30';
-  const posOn = live && an.tool === 'pos';
-  const acts = live
-    ? `<button class="tb-btn tb-word" data-act="clear" title="Remove Every Drawing (${(an.actKeys.clear || ACT_KEYS.clear).toUpperCase()})">Clear${key(an.actKeys.clear || ACT_KEYS.clear)}</button>
-       <button class="tb-btn tb-word" data-act="export" title="Save The Annotated Frame As A PNG (${(an.actKeys.export || ACT_KEYS.export).toUpperCase()})">Export${key(an.actKeys.export || ACT_KEYS.export)}</button>
-       <button class="tb-btn tb-word on" data-act="done" title="Finish (Return)">Done<span class="tb-key">&crarr;</span></button>`
-    : `<button class="tb-btn tb-word" disabled title="Pick A Tool First">Clear</button>
-       <button class="tb-btn tb-word" disabled title="Pick A Tool First">Export</button>
-       <button class="tb-btn tb-word" disabled title="Pick A Tool First">Done</button>`;
-  return `
-    ${TOOLS.map(([t, label, icon]) => tool(t, label, icon)).join('')}
-    <button class="tb-btn${posOn ? ' on' : ''}" data-pop="pos" title="Position Markers - D1, C, W2 And The Rest" aria-label="Position Markers">${POS_ICON}<span class="tb-caret"></span></button>
-    <span class="tb-sep"></span>
-    <button class="tb-btn tb-colour" data-pop="colour" title="Colour And Shape Style" aria-label="Colour And Shape Style"><span class="tb-swatchdot" style="--c:${colour}"></span><span class="tb-caret"></span></button>
-    <span class="tb-sep"></span>
-    <label class="an-hold" title="How Long The Exported Clip Holds On This Frame">Hold <input id="anHold" type="number" min="0" max="30" value="${live ? (an.freeze.hold ?? 3) : 3}"${live ? '' : ' disabled'}>s</label>
-    <span class="tb-sep"></span>
-    ${acts}`;
-}
-
-// Picking a colour is a live override for the ACTIVE tool only, so choosing
-// red for an arrow does not silently repaint the box tool too; it also
-// recolours the current selection, so a colour can be changed after the fact.
-function pickColour(hex) {
-  an.color = hex;
-  an.colorSet = true;
-  for (const id of an.sel) {
-    const x = an.els.find((z) => z.id === id);
-    if (x) { x.color = hex; markDirty(); }
-  }
-  redraw();
-}
-
-// Fill or outline, applied to the selection as well as to the next shape.
-function restyleSelection() {
-  const solid = an.shapeStyle === 'outline';
-  for (const id of an.sel) {
-    const x = an.els.find((z) => z.id === id);
-    if (!x || (x.type !== 'box' && x.type !== 'circle')) continue;
-    if (solid) { x.outline = true; x.alpha = 1; x.width = x.width || 9 * vs(); }
-    else { delete x.outline; x.alpha = 0.3; }
-    markDirty();
-  }
-  redraw();
-}
-
-// The two popovers. Built on demand and dismissed on Escape, an outside
-// press, or a scroll - the same shape the Diagrams line menu uses.
-function closePop() { el('anBar')?.querySelector('.tb-pop')?.remove(); }
-
-function openPop(kind, anchor) {
-  const bar = el('anBar');
-  const existing = bar.querySelector('.tb-pop');
-  const same = existing?.dataset.kind === kind;
-  closePop();
-  if (same) return;
-  const pop = document.createElement('div');
-  pop.className = 'tb-pop';
-  pop.dataset.kind = kind;
-  if (kind === 'colour') {
-    pop.innerHTML = `
-      <div class="tb-poprow">
-        ${COLORS.map(([name, hex]) => `<button class="tb-swatch${an.color === hex ? ' on' : ''}" data-color="${hex}" style="--c:${hex}" title="${name}" aria-label="${name}"></button>`).join('')}
-      </div>
-      <div class="tb-poplabel">Boxes And Circles</div>
-      <span class="an-seg" role="group" aria-label="Shape Style">
-        <button class="an-segbtn${an.shapeStyle !== 'outline' ? ' on' : ''}" data-shape="fill">Fill</button>
-        <button class="an-segbtn${an.shapeStyle === 'outline' ? ' on' : ''}" data-shape="outline">Outline</button>
-      </span>`;
-  } else {
-    pop.innerHTML = `
-      <div class="tb-poplabel">Drop A Marker</div>
-      <div class="tb-posgrid">
-        ${(an.positions || []).map((lab) => `<button class="tb-posbtn${an.tool === 'pos' && an.posLabel === lab ? ' on' : ''}" data-pos="${esc(lab)}">${esc(lab)}</button>`).join('')}
-      </div>`;
-  }
-  bar.appendChild(pop);
-  // Anchored to its own button, and nudged back inside the bar when the
-  // button sits near an edge.
-  const b = anchor.getBoundingClientRect();
-  const r = bar.getBoundingClientRect();
-  pop.style.left = `${Math.max(4, Math.min(b.left - r.left + b.width / 2 - pop.offsetWidth / 2, r.width - pop.offsetWidth - 4))}px`;
-  wirePop(pop);
-}
-
-function wirePop(pop) {
-  for (const b of pop.querySelectorAll('[data-color]')) {
-    b.onclick = () => { pickColour(b.dataset.color); closePop(); paintBar(); };
-  }
-  for (const b of pop.querySelectorAll('[data-shape]')) {
-    b.onclick = () => { an.shapeStyle = b.dataset.shape; restyleSelection(); closePop(); paintBar(); };
-  }
-  for (const b of pop.querySelectorAll('[data-pos]')) {
-    b.onclick = () => { an.posLabel = b.dataset.pos; setTool('pos'); closePop(); };
-  }
-}
-
 function paintBar() {
   const bar = el('anBar');
-  bar.innerHTML = toolbarHtml({ live: true });
+  const key = (k) => (k ? `<span class="tb-key">${k.toUpperCase()}</span>` : '');
+  bar.innerHTML = `
+    ${TOOLS.map(([t, label]) => {
+      const icon = TOOLS.find((x) => x[0] === t)[2];
+      return `<button class="tb-btn${an.tool === t ? ' on' : ''}" data-tool="${t}" title="${label} (${keyFor(t).toUpperCase()}) - Right-Click To Change The Key" aria-label="${label}">${icon}${key(keyFor(t))}</button>`;
+    }).join('')}
+    <span class="tb-sep"></span>
+    ${COLORS.map(([, hex]) => `<button class="tb-swatch${an.color === hex ? ' on' : ''}" data-color="${hex}" style="--c:${hex}"></button>`).join('')}
+    <span class="tb-sep"></span>
+    <span class="an-seg" role="group" aria-label="Shape Style">
+      <button class="an-segbtn${an.shapeStyle !== 'outline' ? ' on' : ''}" data-shape="fill" title="Boxes And Circles As A Light Wash">Fill</button>
+      <button class="an-segbtn${an.shapeStyle === 'outline' ? ' on' : ''}" data-shape="outline" title="Boxes And Circles As A Solid Outline">Outline</button>
+    </span>
+    <span class="tb-sep"></span>
+    <!-- Position chips. One click arms the tool AND picks the label, so
+         dropping a D1 on the frame is a single decision, not two. -->
+    <span class="bui-group bui-group--dense" role="group" aria-label="Position Indicators">
+      ${(an.positions || []).map((lab) => `<button class="${an.tool === 'pos' && an.posLabel === lab ? 'on' : ''}" data-pos="${esc(lab)}" title="Drop A ${esc(lab)} Marker">${esc(lab)}</button>`).join('')}
+    </span>
+    <span class="tb-sep"></span>
+    <label class="an-hold" title="How Long The Exported Clip Holds On This Frame">Hold <input id="anHold" type="number" min="0" max="30" value="${an.freeze.hold ?? 3}">s</label>
+    <span class="tb-sep"></span>
+    <button class="tb-btn tb-word" data-act="clear" title="Remove Every Drawing (${(an.actKeys.clear || ACT_KEYS.clear).toUpperCase()})">Clear${key(an.actKeys.clear || ACT_KEYS.clear)}</button>
+    <button class="tb-btn tb-word" data-act="export" title="Save The Annotated Frame As A PNG (${(an.actKeys.export || ACT_KEYS.export).toUpperCase()})">Export${key(an.actKeys.export || ACT_KEYS.export)}</button>
+    <button class="tb-btn tb-word on" data-act="done" title="Finish (Return)">Done<span class="tb-key">&crarr;</span></button>`;
   bar.querySelectorAll('[data-tool]').forEach((b) => {
     b.onclick = () => setTool(b.dataset.tool);
     // Right-click a tool to rebind its key - the same idea the Diagrams
@@ -809,12 +709,45 @@ function paintBar() {
       paintBar();
     };
   });
-  bar.querySelectorAll('[data-pop]').forEach((b) => {
-    b.onclick = (ev) => { ev.stopPropagation(); openPop(b.dataset.pop, b); };
+  bar.querySelectorAll('[data-pos]').forEach((b) => {
+    b.onclick = () => { an.posLabel = b.dataset.pos; setTool('pos'); };
+  });
+  bar.querySelectorAll('[data-color]').forEach((b) => {
+    b.onclick = () => {
+      an.color = b.dataset.color;
+      // The swatch is a live override for the ACTIVE tool only, so picking
+      // red and drawing an arrow does not silently repaint the box tool too.
+      an.colorSet = true;
+      // Recolour whatever is selected, so a colour can be changed after the
+      // fact instead of only before.
+      for (const id of an.sel) {
+        const x = an.els.find((z) => z.id === id);
+        if (x) { x.color = an.color; markDirty(); }
+      }
+      paintBar();
+      redraw();
+    };
+  });
+  bar.querySelectorAll('[data-shape]').forEach((b) => {
+    b.onclick = () => {
+      an.shapeStyle = b.dataset.shape;
+      // Also restyle whatever is selected, so the choice can be made after
+      // the shape is drawn rather than only before.
+      const solid = an.shapeStyle === 'outline';
+      for (const id of an.sel) {
+        const x = an.els.find((z) => z.id === id);
+        if (!x || (x.type !== 'box' && x.type !== 'circle')) continue;
+        if (solid) { x.outline = true; x.alpha = 1; x.width = x.width || 9 * vs(); }
+        else { delete x.outline; x.alpha = 0.3; }
+        markDirty();
+      }
+      paintBar();
+      redraw();
+    };
   });
   el('anHold').onchange = (e) => { an.freeze.hold = Math.max(0, Number(e.target.value) || 0); markDirty(); };
   el('anHold').onkeydown = (e) => e.stopPropagation();
-  const act = (n, f) => { const b = bar.querySelector(`[data-act="${n}"]`); if (b) b.onclick = f; };
+  const act = (n, f) => { bar.querySelector(`[data-act="${n}"]`).onclick = f; };
   act('clear', clearAll);
   act('export', () => an.onExport?.(composite(), an.freeze));
   act('done', done);
@@ -845,7 +778,6 @@ function done() {
 }
 
 function teardown() {
-  closePop();
   el('anRoot').hidden = true;
   an = null;
   dirty = false;
@@ -918,9 +850,6 @@ export function openAnnotate(freeze, frameCanvas, { onDone, onExport, keys, actK
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
     window.addEventListener('keydown', onKey, true);
-    // An outside press closes a popover; the bar's own clicks stop
-    // propagation, so this only ever fires for a genuine outside press.
-    window.addEventListener('pointerdown', () => closePop(), true);
   }
   setTool(armTool || an.tool);
   redraw();

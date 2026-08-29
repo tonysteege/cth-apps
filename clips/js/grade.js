@@ -116,17 +116,29 @@ export function paintPatches(ctx, cv, patches) {
 // --------------------------------------------------------------- the three
 //                                                                  consumers
 
-/** Live playback: what to put on the video element. The crop is shown by
- *  scaling the picture up and shifting it, with the stage clipping it. */
+/** Live playback. The crop is an `object-view-box` inset, NOT a transform.
+ *
+ *  THE FIRST VERSION USED A TRANSFORM AND IT WAS WRONG TWICE. The player
+ *  already has exactly one transform - `--vz`, the stage zoom - and every
+ *  picture layer shares it; setting `transform` inline on the video beat that
+ *  rule and broke zoom. And a transform on the video does nothing for the
+ *  SCRUB OVERLAY, the canvas the decoder paints onto during a gesture, so the
+ *  picture flipped between graded and ungraded as it played.
+ *
+ *  `object-view-box` crops a replaced element's own source box, so it touches
+ *  no transform, needs no origin, and applies identically to a <video> and to
+ *  a <canvas>. Both layers now inherit the same two custom properties. */
 export function gradeCss(g) {
   const gr = normalizeGrade(g);
-  if (!gr) return { filter: 'none', transform: 'none' };
+  if (!gr) return { filter: 'none', viewBox: 'none' };
   const c = gr.crop;
   const cropped = c.x !== 0 || c.y !== 0 || c.w !== 1 || c.h !== 1;
+  const pc = (n) => `${(n * 100).toFixed(4)}%`;
   return {
     filter: filterString(gr.color),
-    transform: cropped
-      ? `scale(${1 / c.w}) translate(${-c.x * 100}%, ${-c.y * 100}%)`
+    // inset(top right bottom left), measured in from each edge.
+    viewBox: cropped
+      ? `inset(${pc(c.y)} ${pc(1 - (c.x + c.w))} ${pc(1 - (c.y + c.h))} ${pc(c.x)})`
       : 'none',
   };
 }

@@ -151,6 +151,16 @@
   transform: var(--vz, none);
   transform-origin: 50% 50%;
 }
+/* THE GRADE RIDES THE SAME WAY (2026-08-29): published on the stage as --vgf
+   and --vgb and inherited by the two layers that show LIVE picture - the
+   video and the scrub overlay. It is a filter and an object-view-box, never a
+   transform, so it cannot fight --vz.
+   The annotation layers are deliberately NOT in this list: `grabFrame` bakes
+   the grade into the frame they hold, so grading them again would double it. */
+#vpVideo, .scrub-paint {
+  filter: var(--vgf, none);
+  object-view-box: var(--vgb, none);
+}
 .vp-stage.zoomed #vpVideo, .vp-stage.zoomed .scrub-paint { will-change: transform; }
 .vp-stage.zoomed #vpVideo { cursor: grab; }
 .vp-stage.panning, .vp-stage.panning #vpVideo { cursor: grabbing; }
@@ -263,7 +273,9 @@
    in it. The icon lights while a query is active, so a filtered list can
    never look like an empty one. */
 .log-iconbtn {
-  flex: none; width: 26px; height: 26px;
+  /* 28, to stand level with a player button and a tag button - every control
+     in these three columns is one height (2026-08-29, Tony's call). */
+  flex: none; width: 28px; height: 28px;
   display: inline-flex; align-items: center; justify-content: center;
   border: none; border-radius: 999px; background: var(--field);
   color: var(--mist); cursor: pointer;
@@ -285,7 +297,7 @@
 .log-filters { flex: 1; min-width: 0; display: flex; gap: 4px; }
 .log-filters[hidden] { display: none; }
 .log-filter {
-  flex: 1; min-width: 0; height: 26px; padding: 0 6px;
+  flex: 1; min-width: 0; height: 28px; padding: 0 6px;
   font: inherit; font-size: 12px; letter-spacing: 0.15px; font-weight: 500;
   border: 1px solid var(--edge); border-radius: 6px;
   background: var(--cloud); color: var(--graphite); cursor: pointer;
@@ -330,6 +342,18 @@
   color: var(--soft);
 }
 .c-check { flex: none; width: 16px; display: inline-flex; align-items: center; }
+/* The timecode toggle lives in the column header, beside the column it hides,
+   rather than in the head row where it squeezed Clips/Tags/Playlist into
+   "Cli..." and "Pla...". */
+.log-colbtn {
+  flex: none; margin-left: auto; width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: 6px; background: none;
+  color: var(--soft); cursor: pointer;
+  transition: background var(--dur) ease, color var(--dur) ease;
+}
+.log-colbtn:hover { background: var(--n-200); color: var(--ink); }
+.log-colbtn.on { color: var(--select); }
 .c-check input { width: 13px; height: 13px; margin: 0; cursor: pointer; accent-color: var(--select); }
 .log-cols .c-time { width: 58px; flex-shrink: 0; }
 .c-sort {
@@ -370,13 +394,20 @@
 .log-row.rated:hover:not(.on) { background: color-mix(in oklab, var(--rate) 20%, var(--cloud)); }
 .log-row.on.rated { box-shadow: inset 3px 0 0 0 var(--rate), inset 0 1px 0 0 rgba(255, 255, 255, 0.18); }
 .log-row.on { background-image: var(--grad-primary); color: #fff; box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.18); }
-.log-row.on .log-time { color: rgba(255,255,255,.78); }
+
 .log-row.on .log-tagline { color: rgba(255,255,255,.72); }
 .log-row.on .log-tagline::placeholder { color: rgba(255,255,255,.5); }
-.log-time {
-  width: 58px; flex-shrink: 0; font-size: 11px; letter-spacing: 0.2px; color: var(--mist);
-  font-variant-numeric: tabular-nums;
+/* The timecode rides on the end of the NAME rather than holding a column of
+   its own (2026-08-29, Tony's call). In a narrow log the name is what a coach
+   reads and the timecode is a reference, so the name gets the width and the
+   timecode takes whatever is left - and is the first thing dropped when the
+   row runs out of room. */
+.log-when {
+  font-style: normal; font-weight: 400;
+  margin-left: 6px; font-size: 11px; letter-spacing: 0.2px;
+  color: var(--soft); font-variant-numeric: tabular-nums;
 }
+.log-row.on .log-when { color: rgba(255, 255, 255, 0.7); }
 /* THREE DOTS, ONE MEANING EACH: good, bad, star. Grey until the tag is on
    (2026-08-27, Tony's call). The old single dot wore the clip button's own
    colour, which restated the name and told you nothing else. */
@@ -640,8 +671,15 @@
 /* Darker and taller than a hairline (2026-08-29, Tony's call): at --edge on
    a white column a divider was invisible, which defeats the one thing it is
    for - saying where one group of buttons ends. */
+/* HALF WIDTH AND CENTRED (2026-08-29, Tony's call): a full-bleed rule read
+   as a container edge; a short centred one reads as a break between groups,
+   which is what it is. The roster column uses this same element under its
+   Players button, so both columns space identically. */
 .side-div { padding: 6px 2px; cursor: grab; }
-.side-div span { display: block; height: 2px; border-radius: 1px; background: var(--n-300); }
+.side-div span {
+  display: block; width: 50%; margin: 0 auto;
+  height: 2px; border-radius: 1px; background: var(--n-300);
+}
 .side-div.drag-over span { background: var(--select); }
 /* THE TAG PANEL IS THE PLAYER RAIL'S BUTTON (2026-08-29, Tony's call),
    reversing the solid-colour buttons of 2026-08-26. Same white BoardUI
@@ -1336,67 +1374,3 @@ button.crumb:hover { color: var(--mist); background: var(--n-100); }
 .ve-state { font-size: 12px; letter-spacing: 0.15px; color: var(--soft); }
 .ve-state.on { color: var(--select); font-weight: 500; }
 
-/* ---------------------------------------------- the toolbar's popovers
-   The bar is ONE ROW and stays one row (2026-08-29). Colour and the position
-   markers moved into popovers rather than being twenty-seven controls wide -
-   the same rule the Diagrams toolbar follows. */
-/* `position: relative` is needed to anchor the popover - but the shared `.tb`
-   rule is `position: fixed; left: 50%; transform: translateX(-50%)`, and
-   `left` and `bottom` KEEP APPLYING to a relatively-positioned box. Leaving
-   them set pushed the whole bar half the strip to the right. Neutralise all
-   three whenever this changes position. */
-.an-tb { position: relative; left: auto; bottom: auto; transform: none; flex-wrap: nowrap; }
-.tb-colour { gap: 3px; }
-.tb-swatchdot {
-  width: 14px; height: 14px; border-radius: 50%;
-  background: var(--c, #ff3b30);
-  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.16);
-}
-.tb-caret {
-  width: 0; height: 0; margin-left: 1px;
-  border-left: 3px solid transparent; border-right: 3px solid transparent;
-  border-top: 3.5px solid currentColor; opacity: 0.5;
-}
-.tb-pop {
-  position: absolute; bottom: calc(100% + 8px);
-  display: flex; flex-direction: column; gap: 7px;
-  padding: 10px;
-  background: var(--cloud);
-  border-radius: 16px;
-  box-shadow: var(--shadow-dropdown);
-  z-index: 40;
-}
-.tb-poprow { display: flex; gap: 5px; }
-.tb-poplabel { font-size: 11px; letter-spacing: 0.2px; color: var(--soft); }
-.tb-posgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
-.tb-posbtn {
-  height: 26px; min-width: 34px; padding: 0 7px;
-  border: 1px solid var(--edge); border-radius: 6px;
-  background: var(--cloud); color: var(--n-700);
-  font: inherit; font-size: 12px; letter-spacing: 0.15px; font-weight: 600;
-  cursor: pointer;
-  transition: background var(--dur) ease, border-color var(--dur) ease, color var(--dur) ease;
-}
-.tb-posbtn:hover { background: var(--n-100); border-color: var(--n-300); color: var(--ink); }
-.tb-posbtn.on { background-image: var(--grad-primary); border-color: transparent; color: #fff; box-shadow: var(--shadow-nav); }
-.tb-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.an-hold input:disabled { opacity: 0.5; }
-/* The Players button opens the roster sheet and now sits at the top of the
-   roster column rather than in the tag panel (2026-08-29). Same white button
-   as the names beneath it, separated by a rule so it reads as an action
-   rather than as a player called "Players". */
-.prail-open { margin-bottom: 6px; position: relative; }
-.prail-open::after {
-  content: ''; position: absolute; left: 0; right: 0; bottom: -4px;
-  height: 2px; border-radius: 1px; background: var(--n-300);
-}
-/* The Clips bar sits in a FIXED STRIP beside a video, where Diagrams' bar
-   floats over a canvas with room to spare - so it runs one step tighter than
-   the shared 40px toolbar button. This is scoped to .an-tb on purpose: do not
-   shrink .tb-btn globally, Diagrams needs the larger target. */
-.an-tb { gap: 4px; }
-.an-tb .tb-btn { width: 36px; height: 36px; border-radius: var(--r-md); }
-.an-tb .tb-btn svg { width: 18px; height: 18px; }
-.an-tb .tb-btn.tb-word { width: auto; }
-.an-tb .an-hold { gap: 3px; }
-.an-tb .an-hold input { width: 34px; height: 26px; }

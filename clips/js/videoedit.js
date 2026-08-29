@@ -156,11 +156,11 @@ export async function openVideoEditor({ game, video, src, onApplied }) {
   const paint = () => {
     const css = gradeCss(ed.g);
     v.style.filter = css.filter;
-    // While the crop overlay is open the picture stays UNCROPPED, because the
-    // box is drawn on the full frame - cropping the preview under a crop tool
-    // would move the thing being aimed at.
-    v.style.transform = cropLay.hidden ? css.transform : 'none';
-    v.style.transformOrigin = 'top left';
+    // The same object-view-box the player uses, so the preview and the player
+    // cannot drift. While the crop overlay is open the picture stays
+    // UNCROPPED - the box is drawn on the full frame, and cropping the
+    // preview under a crop tool would move the thing being aimed at.
+    v.style.objectViewBox = cropLay.hidden ? css.viewBox : 'none';
     paintPatches();
     paintCropBox();
     paintState();

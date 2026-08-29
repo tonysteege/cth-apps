@@ -371,11 +371,25 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
     absent means no edit, which is what every older record says. A grade that
     would change nothing is stored as NULL (`isNeutral`), so opening the
     editor and leaving it alone writes nothing.
-  - IT IS APPLIED IN EXACTLY THREE PLACES, all from the same module: the
-    video element at playback (`gradeCss`, the same trick zoom uses), the
-    canvas `grabFrame` returns (`gradeFrame`, so an annotation is drawn on the
-    picture the coach can SEE), and every export (`mergeRecordOpts`).
-    Measured: 0.1ms for the maths, 0.4-0.8ms to bake a 1080p frame.
+  - IT IS APPLIED IN EXACTLY THREE PLACES, all from the same module: LIVE
+    PLAYBACK, the canvas `grabFrame` returns (`gradeFrame`, so an annotation is
+    drawn on the picture the coach can SEE), and every export
+    (`mergeRecordOpts`). Measured: 0.1ms for the maths, 0.4-0.8ms to bake a
+    1080p frame.
+  - **THE LIVE GRADE IS A FILTER AND AN `object-view-box`, PUBLISHED ON THE
+    STAGE AS `--vgf` AND `--vgb` - NEVER A TRANSFORM, NEVER ON THE VIDEO
+    ALONE.** The first version set `style.transform` on the video and was
+    wrong twice. The player already has exactly one transform, `--vz`, shared
+    by every picture layer, and an inline one beat it and broke zoom. And a
+    property set on the video does nothing for `.scrub-paint`, the canvas the
+    decoder paints onto during a gesture - so the picture flipped between
+    graded and ungraded AS IT PLAYED, which is what Tony reported.
+    `object-view-box` crops a replaced element's own source box, so it touches
+    no transform and applies identically to a `<video>` and a `<canvas>`.
+    A NEW LAYER THAT SHOWS LIVE PICTURE MUST JOIN THE `#vpVideo, .scrub-paint`
+    rule, the same way it must join the `--vz` list. The ANNOTATION layers are
+    deliberately excluded: `grabFrame` already baked the grade into the frame
+    they hold, and grading them again would double it.
   - EXPORTS COMPOSE, THEY DO NOT OVERWRITE. Record passes its own region crop
     and Freeze passes the annotation paint, so `mergeRecordOpts` composes the
     crops (`composeCrop`, region-inside-grade, because the region was chosen
@@ -403,32 +417,26 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   a wash behind it (`rateOf`, `--rate`), which says the same thing in no width
   at all. First match wins - a clip tagged both good and bad shows as one of
   them rather than as a stripe.
-- **THE TIMECODE COLUMN HIDES** (`settings.hideTime`, 2026-08-29): a clock
-  toggle beside the search icon, remembered like the panel widths. It drops
-  the header cell AND the per-row value, not just the value.
+- **THE TIMECODE RIDES ON THE CLIP NAME, NOT A COLUMN** (2026-08-29, Tony's
+  call). `.log-when` sits inside `.log-name`, before the tags. In a narrow log
+  the name is what a coach reads and the timecode is a reference, so the name
+  takes the width and the timecode is the first thing to ellipsise. The Time
+  header stays because it is the SORT control, not a column heading, and
+  `settings.hideTime` still drops the timecode - its toggle lives in the
+  column header beside what it hides, NOT in the head row, where it squeezed
+  Clips/Tags/Playlist into "Cli..." and "Pla...".
+- **ONE CONTROL HEIGHT ACROSS THE THREE COLUMNS** (2026-08-29): 28px for a
+  tag button, a player button, a log filter and a log icon button alike.
+- **DIVIDERS ARE HALF WIDTH AND CENTRED** (2026-08-29, Tony's call), 2px of
+  n-300. A full-bleed rule read as a container edge; a short centred one reads
+  as a break between groups, which is what it is. The roster column uses the
+  SAME `.side-div` element under its Players button rather than faking one
+  with `::after`, so both columns space identically.
 - **THE PLAYERS BUTTON DRAWS IN THE ROSTER COLUMN** (2026-08-29, Tony's
   call), at the top, above the names, with a rule under it. It is STILL a
   record in `panel.buttons` carrying `act: 'players'`, so its key and colour
   are still edited in Edit Buttons - only where it renders changed. `item()`
   in paintBar returns '' for it and `paintPRail` draws it.
-- **THE ANNOTATION TOOLBAR IS ONE ROW, ALWAYS** (2026-08-29, Tony's call).
-  It carried twenty-seven controls - ten tools, five swatches, a Fill/Outline
-  pair, eight position chips, Hold and three actions - and wrapped onto two
-  rows, pushing the video up. Two groups moved into POPOVERS, which is the
-  rule the Diagrams toolbar already follows: COLOUR (the five presets plus
-  Fill/Outline, since both are "how the next mark looks") and POSITION (D1 to
-  F3, which also arms the tool, so dropping a marker is still one decision).
-  - THE IDLE BAR DRAWS THE SAME ROW (`toolbarHtml({ live })`), so the toolbar
-    never changes shape; the actions are simply disabled until there is a
-    frozen frame. Picking anything, popovers included, freezes first.
-  - `.an-tb` RUNS ONE STEP TIGHTER THAN THE SHARED TOOLBAR - 36px buttons,
-    4px gaps - because it sits in a fixed strip beside a video where Diagrams'
-    bar floats over a canvas with room. Do not shrink `.tb-btn` globally.
-  - WHEN `.an-tb` TAKES `position: relative` FOR THE POPOVER ANCHOR IT MUST
-    ALSO NEUTRALISE `left` AND `bottom`. The shared `.tb` is
-    `position: fixed; left: 50%; transform: translateX(-50%)`, and left/bottom
-    keep applying to a relatively-positioned box - leaving them set pushed the
-    whole bar half the strip to the right.
 - **THE ANNOTATION TOOLBAR IS ALWAYS ON SCREEN** (2026-08-27, Tony's call).
   It used to live inside `#anRoot`, so it existed only once a freeze was
   already open - the tools were invisible exactly when you were deciding

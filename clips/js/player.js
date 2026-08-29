@@ -882,9 +882,10 @@ export function paintPRail() {
   const pb = (cur.settings.panel.buttons || []).find((b) => b.act === 'players');
   rail.innerHTML = `
     <div class="prail-head">${cap ? `Number… <b>${esc(cap.typed || '_')}</b>` : 'Players'}</div>
-    ${pb ? `<button class="prail-btn prail-open" data-act="players" title="Open The Roster Sheet${pb.key ? ` (${keyLabel(pb.key)})` : ''}">
+    ${pb ? `<button class="prail-btn" data-act="players" title="Open The Roster Sheet${pb.key ? ` (${keyLabel(pb.key)})` : ''}">
       <span class="tag-dot" style="--c:${pb.color}"></span><span class="prail-name">${esc(pb.label)}</span>${keyBadge(pb.key)}
-    </button>` : ''}
+    </button>
+    <div class="side-div"><span></span></div>` : ''}
     ${roster.map((p) => `
       <button class="prail-btn${(c?.tags || []).includes(normTag(p.first)) ? ' on' : ''}${live(p) ? '' : ' dim'}" data-pid="${esc(p.id)}" title="Tag ${esc(p.first)}${p.num ? ` (#${esc(String(p.num))})` : ''}">
         <span class="prail-num">${esc(String(p.num ?? ''))}</span>
@@ -1409,7 +1410,6 @@ export function paintLog() {
   log.innerHTML = `
     <div class="log-head">
       <button class="log-iconbtn${view.search ? ' on' : ''}" id="vpLogSearchBtn" title="Search Clips" aria-label="Search Clips">${SEARCH_ICON}</button>
-      <button class="log-iconbtn${view.hideTime ? '' : ' on'}" id="vpLogTime" title="${view.hideTime ? 'Show' : 'Hide'} The Timecode" aria-label="${view.hideTime ? 'Show' : 'Hide'} The Timecode">${CLOCK_ICON}</button>
       <input id="vpLogSearch" type="search" placeholder="Search Clips…" value="${esc(view.search)}" autocomplete="off"${view.searchOpen || view.search ? '' : ' hidden'}>
       <div class="log-filters"${view.searchOpen ? ' hidden' : ''}>
         <button class="log-filter${view.labels.length ? ' on' : ''}" data-menu="label">Clips${view.labels.length ? ` (${view.labels.length})` : ''}</button>
@@ -1419,8 +1419,9 @@ export function paintLog() {
     </div>
     <div class="log-cols">
       <span class="c-check"><input type="checkbox" id="vpAllCheck" title="Select Every Clip Below"${ticked && ticked === list.length ? ' checked' : ''}></span>
-      ${view.hideTime ? '' : `<button class="c-time c-sort${view.sortBy === 'time' ? ' on' : ''}" data-sort="time">Time${arrow('time')}</button>`}
+      <button class="c-sort${view.sortBy === 'time' ? ' on' : ''}" data-sort="time">Time${arrow('time')}</button>
       <button class="c-sort c-grow${view.sortBy === 'name' ? ' on' : ''}" data-sort="name">Clip${arrow('name')}</button>
+      <button class="log-colbtn${view.hideTime ? '' : ' on'}" id="vpLogTime" title="${view.hideTime ? 'Show' : 'Hide'} The Timecode" aria-label="${view.hideTime ? 'Show' : 'Hide'} The Timecode">${CLOCK_ICON}</button>
       <span class="log-count">${list.length} Of ${all.length}</span>
     </div>
     ${ticked ? `<div class="log-bulk">
@@ -1437,8 +1438,7 @@ export function paintLog() {
       ${list.map((c) => `
         <div class="log-row${c.id === cur.sel ? ' on' : ''}${selection.has(c.id) ? ' picked' : ''}${rateOf(c) ? ' rated' : ''}" data-id="${c.id}"${rateOf(c) ? ` style="--rate:${rateOf(c)}"` : ''}>
           <span class="c-check"><input type="checkbox" data-pick="${c.id}"${selection.has(c.id) ? ' checked' : ''} aria-label="Select ${esc(c.name || c.label)}"></span>
-          ${view.hideTime ? '' : `<span class="log-time">${fmtHMS(c.in)}</span>`}
-          <span class="log-name">${esc(c.name || c.label)}</span>
+          <span class="log-name">${esc(c.name || c.label)}${view.hideTime ? '' : `<i class="log-when">${fmtHMS(c.in)}</i>`}</span>
           <input class="log-tagline" data-tagrow="${c.id}" list="vpTagOpts" value="${esc(tagLine(c))}" autocomplete="off" spellcheck="false" aria-label="Tags">
         </div>`).join('') || '<div class="log-empty">No Clips Yet - Press A Tag Button (Or Its Key) While The Video Plays.</div>'}
     </div>`;
@@ -1974,13 +1974,16 @@ export function grabFrame() {
 // The grade is a view transform, so it rides on the video element exactly the
 // way zoom does. Called on open and whenever the editor writes a new one.
 export function applyGrade(grade) {
-  const v = video();
-  if (!v) return;
+  const stage = el('vpStage');
+  if (!stage) return;
   if (cur?.game) cur.game.grade = grade || null;
   const css = gradeCss(grade);
-  v.style.filter = css.filter;
-  v.style.transform = css.transform;
-  v.style.transformOrigin = 'top left';
+  // Published on the STAGE, exactly as --vz is, so every layer that shows the
+  // picture inherits it - the video AND the scrub overlay the decoder paints
+  // onto during a gesture. Setting it on the video alone left the overlay
+  // ungraded, which is why the picture changed as it played.
+  stage.style.setProperty('--vgf', css.filter);
+  stage.style.setProperty('--vgb', css.viewBox);
 }
 
 // ------------------------------------------------------------- open/close
