@@ -47,7 +47,16 @@ const colorsOf = () => prefs.colors;
 const TOOLS = [
   ['select', 'Select & Move', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M4.04 4.69a.5.5 0 0 1 .65-.65l16 6.5a.5.5 0 0 1-.06.94l-6.13 1.58a2 2 0 0 0-1.43 1.44l-1.58 6.12a.5.5 0 0 1-.95.07z"/></svg>'],
   ['pen', 'Pen', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M21.17 6.81a2.82 2.82 0 0 0-3.98-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.63l4.36-1.32a2 2 0 0 0 .83-.5z"/></svg>'],
-  ['arrow', 'Arrow', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M3 12h13.6"/><path d="m16.6 8.4 3.7 3.6-3.7 3.6"/></svg>'],
+  // THE FIVE MOTION ARROWS, IN THE RINK EDITOR'S OWN ORDER AND ON ITS OWN
+  // KEYS (2026-08-29, Tony's call): Skate A, Skate With Puck S, Skate
+  // Backwards Z, Shoot X, Pass P. Icons and names are copied from
+  // diagrams/js/editor.js to the letter - a coach who has learned this row on
+  // a rink must not have to learn it again over film.
+  ['arrow', 'Skate', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M3 12h13.6"/><path d="m16.6 8.4 3.7 3.6-3.7 3.6"/></svg>'],
+  ['skatepuck', 'Skate With Puck', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M3 12q2.3-3.6 4.6 0t4.6 0 4.6 0"/><path d="m16.6 8.4 3.7 3.6-3.7 3.6"/></svg>'],
+  ['skateback', 'Skate Backwards', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M3 13.7a2.3 2.3 0 0 1 4.6 0 2.3 2.3 0 0 1 4.6 0 2.3 2.3 0 0 1 4.6 0"/><path d="m16.6 8.4 3.7 3.6-3.7 3.6"/></svg>'],
+  ['shoot', 'Shoot', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M3 9.8h13.4M3 14.2h13.4"/><path d="m16.6 8.4 3.7 3.6-3.7 3.6"/></svg>'],
+  ['dasharrow', 'Pass', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M3 12h13.6" stroke-dasharray="3.1 2.9"/><path d="m16.6 8.4 3.7 3.6-3.7 3.6"/></svg>'],
   ['box', 'Box', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4.25" y="5.25" width="15.5" height="13.5" rx="2.75"/></svg>'],
   ['circle', 'Circle', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="7.75"/></svg>'],
   ['angle', 'Joint Angle', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M5 19h15"/><path d="M5 19 16 6"/><path d="M11.5 19a7 7 0 0 0-1.3-4"/></svg>'],
@@ -79,7 +88,22 @@ const ICON_CLEAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" s
 const ICON_EXPORT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.6v11"/><path d="m7.9 10.6 4.1 4.1 4.1-4.1"/><path d="M4.6 16.4v2.2a1.8 1.8 0 0 0 1.8 1.8h11.2a1.8 1.8 0 0 0 1.8-1.8v-2.2"/></svg>';
 const ICON_DONE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.6 4.6 4.6L19 7.2"/></svg>';
 
-const DEFAULT_KEYS = { select: 'v', pen: 'd', arrow: 'a', box: 'b', circle: 'c', angle: 'g', text: 't', line: 'n', spotlight: 'r' };
+// The five arrows take the rink editor's keys exactly; the pen keeps `d`
+// here because Clips never moved it to `e`.
+const DEFAULT_KEYS = {
+  select: 'v', pen: 'd', arrow: 'a', skatepuck: 's', skateback: 'z', shoot: 'x', dasharrow: 'p',
+  box: 'b', circle: 'c', angle: 'g', text: 't', line: 'n', spotlight: 'r',
+};
+// What each arrow tool stamps. A pass IS the dashed line; the rest are solid
+// lines wearing a `motion`. Same table as LINE_SPEC in diagrams/js/editor.js -
+// change one, change both.
+const LINE_SPEC = {
+  arrow: { dash: false, motion: null },
+  skatepuck: { dash: false, motion: 'puck' },
+  skateback: { dash: false, motion: 'backward' },
+  shoot: { dash: false, motion: 'shoot' },
+  dasharrow: { dash: true, motion: null },
+};
 const ACT_KEYS = { clear: 'x', export: 'e' };
 
 // Every tool's default look, overridden by settings.toolStyle. Widths are in
@@ -94,6 +118,10 @@ const DEFAULT_STYLE = {
   spotlight: { color: '#ffd60a', width: 6, dash: false },
   pos: { color: '#0a84ff', width: 8, dash: false },
 };
+// The four extra arrows share the plain arrow's style: they are the same
+// stroke wearing a different motion, and giving each its own width would mean
+// a pass and a shot drawn back to back came out different weights.
+for (const t of ['skatepuck', 'skateback', 'shoot', 'dasharrow']) DEFAULT_STYLE[t] = { ...DEFAULT_STYLE.arrow };
 
 // EVERY TOOL PREFERENCE LIVES IN ONE PLACE (2026-08-29). The toolbar is on
 // screen before a freeze exists, so anything edited from the idle bar has no
@@ -110,18 +138,35 @@ let prefs = {
   colors: DEFAULT_COLORS,
   order: DEFAULT_ORDER,
   shapeStyle: 'fill',
+  shapeAlpha: 0.3,
+  arrowHead: 'triangle',
   actKeys: { ...ACT_KEYS },
 };
 let prefsHook = null;
 
-// A tool added after an order was saved is APPENDED rather than dropped, so
-// an old record can never hide a new tool.
+// A tool added after an order was saved is never dropped - and it lands
+// BESIDE THE TOOL IT BELONGS WITH rather than at the end of the row. The four
+// motion arrows are the case that proved it matters: appended, Pass and Shoot
+// would sit past the spotlight instead of next to Skate, which is the one
+// place a coach would look for them.
 function orderList(list) {
   const known = new Set(DEFAULT_ORDER);
   const seen = new Set();
   const out = [];
   for (const t of list || []) if (known.has(t) && !seen.has(t)) { seen.add(t); out.push(t); }
-  for (const t of DEFAULT_ORDER) if (!seen.has(t)) out.push(t);
+  for (let i = 0; i < DEFAULT_ORDER.length; i++) {
+    const t = DEFAULT_ORDER[i];
+    if (seen.has(t)) continue;
+    // Insert after the nearest earlier tool the saved order already has;
+    // failing that, at the front, which is where it sits by default.
+    let at = 0;
+    for (let j = i - 1; j >= 0; j--) {
+      const prev = out.indexOf(DEFAULT_ORDER[j]);
+      if (prev >= 0) { at = prev + 1; break; }
+    }
+    out.splice(at, 0, t);
+    seen.add(t);
+  }
   return out;
 }
 
@@ -133,6 +178,8 @@ export function setToolPrefs(p = {}) {
   if (p.colorPresets && p.colorPresets.length === 3) prefs.colors = p.colorPresets;
   if (p.toolOrder) prefs.order = orderList(p.toolOrder);
   if (p.shapeStyle) prefs.shapeStyle = p.shapeStyle;
+  if (p.shapeAlpha != null) prefs.shapeAlpha = Math.max(0.05, Math.min(1, Number(p.shapeAlpha) || 0.3));
+  if (p.arrowHead) prefs.arrowHead = p.arrowHead;
   if (p.actKeys) prefs.actKeys = { ...ACT_KEYS, ...p.actKeys };
 }
 export function onToolPrefs(fn) { prefsHook = fn; }
@@ -511,12 +558,18 @@ function onDown(e) {
   // Line is an arrow with no head. Same record, same curve, same drag, same
   // hit test - only the head style differs, and both renderers already treat
   // an unknown head as "draw nothing", so this needed no drawing code.
-  if (an.tool === 'arrow' || an.tool === 'line') {
+  if (LINE_SPEC[an.tool] || an.tool === 'line') {
     const st = styleFor(an.tool);
+    const spec = LINE_SPEC[an.tool] || { dash: false, motion: null };
     const x = {
       id: uid(), type: 'arrow', x1: p.x, y1: p.y, x2: p.x, y2: p.y, mx: p.x, my: p.y,
-      color: st.color, width: st.width, head: an.tool === 'line' ? 'none' : 'triangle',
-      ...(st.dash ? { dash: true } : {}),
+      color: st.color, width: st.width,
+      // A line has no head; every arrow takes the head shape from Settings.
+      head: an.tool === 'line' ? 'none' : (prefs.arrowHead || 'triangle'),
+      // `motion` is ADDITIVE and only written when there is one, so a plain
+      // skate arrow is byte-identical to every one saved before today.
+      ...(spec.motion ? { motion: spec.motion } : {}),
+      ...(spec.dash || st.dash ? { dash: true } : {}),
     };
     an.els.push(x);
     an.drag = { id: x.id, kind: 'arrow' };
@@ -539,7 +592,12 @@ function onDown(e) {
     const st = styleFor(an.tool);
     const x = {
       id: uid(), type: an.tool, x: p.x, y: p.y, w: 0, h: 0, color: st.color,
-      alpha: solid ? 1 : 0.3, ...(solid ? { outline: true, width: st.width } : {}),
+      // THE WASH'S STRENGTH IS A SETTING (2026-08-29, Tony's call). 0.3 was
+      // hardcoded, which is right over plain ice and far too heavy over a
+      // crowded frame. It is resolved onto the element as it is drawn, like
+      // every other style here, so changing it tomorrow leaves today's
+      // freezes exactly as they were drawn.
+      alpha: solid ? 1 : prefs.shapeAlpha, ...(solid ? { outline: true, width: st.width } : {}),
       ...(st.dash ? { dash: true } : {}),
     };
     an.els.push(x);
@@ -1221,12 +1279,12 @@ export function applyToolStyle(settings = {}) {
 // ------------------------------------------------------------- open
 
 let wired = false;
-export function openAnnotate(freeze, frameCanvas, { onDone, onExport, onFreeze, keys, actKeys, style, positions, armTool, autoSelect = true, onDraw, colorPresets, textSize, toolOrder, shapeStyle } = {}) {
+export function openAnnotate(freeze, frameCanvas, { onDone, onExport, onFreeze, keys, actKeys, style, positions, armTool, autoSelect = true, onDraw, colorPresets, textSize, toolOrder, shapeStyle, shapeAlpha, arrowHead } = {}) {
   const root = el('anRoot');
   root.hidden = false;
   // Preferences are module state, not per-freeze state: the bar is on screen
   // before any freeze exists and has to read the same values then.
-  setToolPrefs({ toolKeys: keys, toolStyle: style, colorPresets, toolOrder, shapeStyle, actKeys });
+  setToolPrefs({ toolKeys: keys, toolStyle: style, colorPresets, toolOrder, shapeStyle, shapeAlpha, arrowHead, actKeys });
   an = {
     freeze,
     els: structuredClone(freeze.elements || []),

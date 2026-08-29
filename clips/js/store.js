@@ -171,6 +171,11 @@ const DEFAULT_SETTINGS = () => ({
   // segmented control on the toolbar and is a setting now - it is how a
   // coach draws, not a decision made between two marks.
   shapeStyle: 'fill',
+  // The wash strength inside a box or circle, 0.05 to 1. Was hardcoded at
+  // 0.3, which is right over plain ice and far too heavy over a busy frame.
+  shapeAlpha: 0.3,
+  // The head every arrow tool draws: triangle (filled), open, or none.
+  arrowHead: 'triangle',
   // Telestration caption size, in 1280-wide video units.
   textSize: 34,
   // Per-tool telestration style (2026-08-27, Tony's spec). Every drawing

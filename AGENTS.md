@@ -785,6 +785,37 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   TEMPLATE LITERAL IS STILL STRING CONTENT: a backtick in that comment ENDS
   THE STRING, which is how `.tb-player` in a comment became a bare `player`
   reference. Keep prose in JS comments, outside the template.
+- **THE FIVE MOTION ARROWS ARE ON THE CLIPS TOOLBAR TOO** (2026-08-29, Tony's
+  call): Skate `a`, Skate With Puck `s`, Skate Backwards `z`, Shoot `x`, Pass
+  `p` - the rink editor's own order, icons, names and keys, copied to the
+  letter. A coach who has learned that row on a rink must not have to learn it
+  again over film. `LINE_SPEC` in annotate.js is the same table as the one in
+  diagrams/js/editor.js; change one, change both. `motion` is written only
+  when there is one, so a plain skate arrow is byte-identical to every arrow
+  saved before today, and `drawEl` already renders all four decorations.
+  - A NEW TOOL LANDS BESIDE ITS NEIGHBOUR, NOT AT THE END. `orderList` used to
+    append anything a saved `toolOrder` did not know about, which would have
+    put Pass and Shoot past the spotlight instead of next to Skate. It now
+    splices each missing tool in after the nearest earlier tool the saved
+    order already has. Verified against a legacy order with the spotlight
+    dragged to the front.
+  - The four extra arrows SHARE the plain arrow's style entry, because they
+    are one stroke wearing different motions - separate widths would make a
+    pass and a shot drawn back to back come out different weights.
+- **SHAPE OPACITY AND ARROWHEAD ARE SETTINGS** (`settings.shapeAlpha`,
+  `settings.arrowHead`, 2026-08-29, Tony's call). The wash inside a box or
+  circle was hardcoded at 0.3, which is right over plain ice and far too heavy
+  over a busy frame; the head was hardcoded to `triangle`. Both resolve onto
+  the element as it is drawn, like every other style here, so changing one
+  tomorrow leaves today's freezes exactly as they were drawn. Opacity is
+  EDITED as a percent and STORED as a fraction - a coach thinks in percent and
+  the canvas takes a fraction - and the scratch `shapeAlphaPct` key is deleted
+  on save so it never lands in the record.
+- **A VIDEO IS RENAMED BY DOUBLE-CLICKING ITS TITLE** (2026-08-29, Tony's
+  call). It edits the LIBRARY RECORD's `name`, never the file: renaming on
+  disk would break the `path` every clip resolves through. Return commits,
+  Escape reverts, clicking away commits - the same contract every other field
+  in this app has.
 - **PER-TOOL TELESTRATION STYLE** (`settings.toolStyle`, 2026-08-27): colour,
   thickness and dash for pen, arrow, line, freearrow, box, circle, spotlight
   and the position chip, edited in Settings under Telestration Tools.

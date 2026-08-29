@@ -437,7 +437,7 @@ async function showPlayer(id) {
     <div class="vp">
       <header class="ed-head">
         <button class="btn btn-back" id="vpBack" title="Back To The Library">${BACK_ICON}</button>
-        <div class="vp-title">${esc(game.name)}</div>
+        <div class="vp-title" id="vpTitle" data-tip="Double-Click To Rename This Video" tabindex="0" role="button">${esc(game.name)}</div>
         <span class="ed-status" id="vpStatus">Saved</span>
         <div class="ed-head-actions">
           <button class="btn" id="vpFreeze" title="Freeze This Frame And Draw On It (F)">Freeze</button>
@@ -516,6 +516,47 @@ async function showPlayer(id) {
   $('#vpFreeze').oncontextmenu = (e) => { e.preventDefault(); void editBuffer('freezeBuf', 'Freeze'); };
   $('#vpRecord').onclick = () => void openRecord(game);
   $('#vpCompare').onclick = () => void openCompare({ name: game.name, url: src, startAt: video().currentTime });
+
+  // RENAME BY DOUBLE-CLICKING THE TITLE (2026-08-29, Tony's call). It is the
+  // library's name for the video, not the file's - renaming a file on disk
+  // would break the `path` every clip resolves through - so this edits the
+  // RECORD and says so. Return commits, Escape reverts, and clicking away
+  // commits, which is the same contract every other field in this app has.
+  const title = $('#vpTitle');
+  title.ondblclick = () => {
+    if (title.isContentEditable) return;
+    const was = game.name;
+    title.contentEditable = 'plaintext-only';
+    title.classList.add('editing');
+    title.focus();
+    // Select the whole name, so typing replaces it - which is what a rename
+    // usually is.
+    const range = document.createRange();
+    range.selectNodeContents(title);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    let done = false;
+    const finish = async (keep) => {
+      if (done) return;
+      done = true;
+      title.contentEditable = 'false';
+      title.classList.remove('editing');
+      const next = (title.textContent || '').trim().replace(/\s+/g, ' ');
+      if (!keep || !next || next === was) { title.textContent = was; return; }
+      game.name = next;
+      title.textContent = next;
+      document.title = `${next} - CTH Clips`;
+      await putGame(game);
+      toast('Video Renamed');
+    };
+    title.onkeydown = (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') { e.preventDefault(); void finish(true); title.blur(); }
+      if (e.key === 'Escape') { e.preventDefault(); void finish(false); title.blur(); }
+    };
+    title.onblur = () => void finish(true);
+  };
   // Nothing on disk changes, so there is nothing to reload: the grade is
   // handed straight to the player, which puts it on the video element.
   $('#vpEdit').onclick = () => void openVideoEditor({
@@ -1205,7 +1246,11 @@ const DEFAULT_POSITIONS = ['D1', 'D2', 'C', 'W1', 'W2', 'F1', 'F2', 'F3'];
 // Every tool that carries a look, in toolbar order.
 const TOOL_STYLE_ROWS = [
   ['pen', 'Pen'],
-  ['arrow', 'Arrow'],
+  ['arrow', 'Skate Arrow'],
+  ['skatepuck', 'Skate With Puck'],
+  ['skateback', 'Skate Backwards'],
+  ['shoot', 'Shoot'],
+  ['dasharrow', 'Pass'],
   ['line', 'Line'],
   ['freearrow', 'Freeform Arrow'],
   ['box', 'Box'],
@@ -1264,6 +1309,10 @@ export async function openClipSettings(focus = null) {
           ${num('holdSec', 'Default Hold', s.holdSec, 1, 15, 'How long an exported freeze holds on the frame, in seconds.')}
           ${seg('shapeStyle', 'Boxes And Circles', [['fill', 'Fill'], ['outline', 'Outline']], s.shapeStyle || 'fill',
             'A light wash reads well over plain ice; a solid outline reads better over a busy frame. This used to be a pair of buttons on the toolbar, which was the only text control in a row of glyphs.')}
+          ${num('shapeAlphaPct', 'Shape Opacity', Math.round((s.shapeAlpha ?? 0.3) * 100), 5, 100,
+            'How strong the wash inside a box or circle is, as a percent. Applies to NEW shapes; anything already drawn keeps the strength it was drawn with. Ignored when Boxes And Circles is set to Outline.')}
+          ${seg('arrowHead', 'Arrowhead', [['triangle', 'Solid'], ['open', 'Open'], ['none', 'None']], s.arrowHead || 'triangle',
+            'The head every arrow tool draws. Solid is the filled triangle a rink diagram uses; None makes an arrow behave like the Line tool.')}
           ${num('textSize', 'Caption Size', s.textSize ?? 34, 14, 90, 'Telestration text size, measured on a 1280-wide frame so it looks the same on any clip.')}
           <label class="bs-row"><span>Colour Presets${info('The three swatches on the annotation toolbar. Any of them can be any colour, here or by right-clicking the swatch itself.')}</span>
             <span class="cs-swatches">${(s.colorPresets || ['#1e1e1e', '#75d8ff', '#d9d9d9']).map((hex, i) =>
@@ -1362,6 +1411,12 @@ export async function openClipSettings(focus = null) {
       const list = String(next.positionsCsv).split(',').map((x) => x.trim()).filter(Boolean).slice(0, 12);
       next.positions = list.length ? list : DEFAULT_POSITIONS;
       delete next.positionsCsv;
+    }
+    // Opacity is edited as a percent because a coach thinks in percent, and
+    // stored as a fraction because that is what the canvas takes.
+    if (next.shapeAlphaPct != null) {
+      next.shapeAlpha = Math.max(0.05, Math.min(1, Number(next.shapeAlphaPct) / 100 || 0.3));
+      delete next.shapeAlphaPct;
     }
     await putSettings(next);
     const live = playerSettings();
