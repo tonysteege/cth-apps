@@ -361,11 +361,18 @@
 .log-row:nth-child(even) { background: var(--sunken); }
 .log-row:hover { background: var(--n-200); color: var(--ink); }
 .log-row.picked { background: var(--select-soft); }
+/* A RATED CLIP WEARS ITS COLOUR (2026-08-29, Tony's call), replacing the
+   three dots that had a column to themselves. A bar down the leading edge
+   plus a wash: readable at a glance down a long list, and it costs no width. */
+.log-row.rated { box-shadow: inset 3px 0 0 0 var(--rate); }
+.log-row.rated:not(.on) { background: color-mix(in oklab, var(--rate) 9%, var(--cloud)); }
+.log-row.rated:nth-child(even):not(.on) { background: color-mix(in oklab, var(--rate) 13%, var(--cloud)); }
+.log-row.rated:hover:not(.on) { background: color-mix(in oklab, var(--rate) 20%, var(--cloud)); }
+.log-row.on.rated { box-shadow: inset 3px 0 0 0 var(--rate), inset 0 1px 0 0 rgba(255, 255, 255, 0.18); }
 .log-row.on { background-image: var(--grad-primary); color: #fff; box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.18); }
 .log-row.on .log-time { color: rgba(255,255,255,.78); }
 .log-row.on .log-tagline { color: rgba(255,255,255,.72); }
 .log-row.on .log-tagline::placeholder { color: rgba(255,255,255,.5); }
-.log-row.on .rate-dot { background: rgba(255,255,255,.32); }
 .log-time {
   width: 58px; flex-shrink: 0; font-size: 11px; letter-spacing: 0.2px; color: var(--mist);
   font-variant-numeric: tabular-nums;
@@ -373,13 +380,6 @@
 /* THREE DOTS, ONE MEANING EACH: good, bad, star. Grey until the tag is on
    (2026-08-27, Tony's call). The old single dot wore the clip button's own
    colour, which restated the name and told you nothing else. */
-.log-rate { flex: none; display: inline-flex; gap: 3px; }
-.rate-dot {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: var(--n-300);
-  transition: background var(--dur) ease;
-}
-.rate-dot.on { background: var(--c); }
 .log-name {
   flex-shrink: 1; min-width: 0; font-weight: 600;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -583,7 +583,9 @@
    colour and the roster has to read as a different kind of thing, so it
    borrows the top bar's white-on-hairline recipe at 28px instead of 36. */
 .vp-prail {
-  width: 108px; flex-shrink: 0; overflow-y: auto;
+  /* 116, not 108: the Players button at the top is the longest label the
+     column carries, and at 108 it ellipsised to "Play...". */
+  width: 116px; flex-shrink: 0; overflow-y: auto;
   display: flex; flex-direction: column; gap: 4px;
   padding: 8px 7px 12px;
   background: var(--sunken);
@@ -635,8 +637,11 @@
   font-size: 12px; letter-spacing: 0.15px; font-weight: 700; text-transform: none; color: var(--ink); margin: 9px 2px 3px;
 }
 .side-label:first-child { margin-top: 0; }
-.side-div { padding: 4px 2px; cursor: grab; }
-.side-div span { display: block; height: 1px; background: var(--edge); }
+/* Darker and taller than a hairline (2026-08-29, Tony's call): at --edge on
+   a white column a divider was invisible, which defeats the one thing it is
+   for - saying where one group of buttons ends. */
+.side-div { padding: 6px 2px; cursor: grab; }
+.side-div span { display: block; height: 2px; border-radius: 1px; background: var(--n-300); }
 .side-div.drag-over span { background: var(--select); }
 /* THE TAG PANEL IS THE PLAYER RAIL'S BUTTON (2026-08-29, Tony's call),
    reversing the solid-colour buttons of 2026-08-26. Same white BoardUI
@@ -1330,3 +1335,68 @@ button.crumb:hover { color: var(--mist); background: var(--n-100); }
 .ve-live { flex: 1; font-size: 12px; letter-spacing: 0.15px; color: var(--mist); }
 .ve-state { font-size: 12px; letter-spacing: 0.15px; color: var(--soft); }
 .ve-state.on { color: var(--select); font-weight: 500; }
+
+/* ---------------------------------------------- the toolbar's popovers
+   The bar is ONE ROW and stays one row (2026-08-29). Colour and the position
+   markers moved into popovers rather than being twenty-seven controls wide -
+   the same rule the Diagrams toolbar follows. */
+/* `position: relative` is needed to anchor the popover - but the shared `.tb`
+   rule is `position: fixed; left: 50%; transform: translateX(-50%)`, and
+   `left` and `bottom` KEEP APPLYING to a relatively-positioned box. Leaving
+   them set pushed the whole bar half the strip to the right. Neutralise all
+   three whenever this changes position. */
+.an-tb { position: relative; left: auto; bottom: auto; transform: none; flex-wrap: nowrap; }
+.tb-colour { gap: 3px; }
+.tb-swatchdot {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--c, #ff3b30);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.16);
+}
+.tb-caret {
+  width: 0; height: 0; margin-left: 1px;
+  border-left: 3px solid transparent; border-right: 3px solid transparent;
+  border-top: 3.5px solid currentColor; opacity: 0.5;
+}
+.tb-pop {
+  position: absolute; bottom: calc(100% + 8px);
+  display: flex; flex-direction: column; gap: 7px;
+  padding: 10px;
+  background: var(--cloud);
+  border-radius: 16px;
+  box-shadow: var(--shadow-dropdown);
+  z-index: 40;
+}
+.tb-poprow { display: flex; gap: 5px; }
+.tb-poplabel { font-size: 11px; letter-spacing: 0.2px; color: var(--soft); }
+.tb-posgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.tb-posbtn {
+  height: 26px; min-width: 34px; padding: 0 7px;
+  border: 1px solid var(--edge); border-radius: 6px;
+  background: var(--cloud); color: var(--n-700);
+  font: inherit; font-size: 12px; letter-spacing: 0.15px; font-weight: 600;
+  cursor: pointer;
+  transition: background var(--dur) ease, border-color var(--dur) ease, color var(--dur) ease;
+}
+.tb-posbtn:hover { background: var(--n-100); border-color: var(--n-300); color: var(--ink); }
+.tb-posbtn.on { background-image: var(--grad-primary); border-color: transparent; color: #fff; box-shadow: var(--shadow-nav); }
+.tb-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.an-hold input:disabled { opacity: 0.5; }
+/* The Players button opens the roster sheet and now sits at the top of the
+   roster column rather than in the tag panel (2026-08-29). Same white button
+   as the names beneath it, separated by a rule so it reads as an action
+   rather than as a player called "Players". */
+.prail-open { margin-bottom: 6px; position: relative; }
+.prail-open::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: -4px;
+  height: 2px; border-radius: 1px; background: var(--n-300);
+}
+/* The Clips bar sits in a FIXED STRIP beside a video, where Diagrams' bar
+   floats over a canvas with room to spare - so it runs one step tighter than
+   the shared 40px toolbar button. This is scoped to .an-tb on purpose: do not
+   shrink .tb-btn globally, Diagrams needs the larger target. */
+.an-tb { gap: 4px; }
+.an-tb .tb-btn { width: 36px; height: 36px; border-radius: var(--r-md); }
+.an-tb .tb-btn svg { width: 18px; height: 18px; }
+.an-tb .tb-btn.tb-word { width: auto; }
+.an-tb .an-hold { gap: 3px; }
+.an-tb .an-hold input { width: 34px; height: 26px; }

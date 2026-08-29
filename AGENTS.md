@@ -397,6 +397,38 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
     resized from eight handles, with optional aspect locks. While the crop
     overlay is open THE PREVIEW IS UNCROPPED - cropping the picture under a
     crop tool would move the thing being aimed at.
+- **THE CLIP LOG SHOWS A RATING AS THE ROW'S OWN COLOUR** (2026-08-29,
+  Tony's call). Three `.rate-dot`s used to sit in a column of their own on
+  every row; the row now wears the rating as a bar down its leading edge and
+  a wash behind it (`rateOf`, `--rate`), which says the same thing in no width
+  at all. First match wins - a clip tagged both good and bad shows as one of
+  them rather than as a stripe.
+- **THE TIMECODE COLUMN HIDES** (`settings.hideTime`, 2026-08-29): a clock
+  toggle beside the search icon, remembered like the panel widths. It drops
+  the header cell AND the per-row value, not just the value.
+- **THE PLAYERS BUTTON DRAWS IN THE ROSTER COLUMN** (2026-08-29, Tony's
+  call), at the top, above the names, with a rule under it. It is STILL a
+  record in `panel.buttons` carrying `act: 'players'`, so its key and colour
+  are still edited in Edit Buttons - only where it renders changed. `item()`
+  in paintBar returns '' for it and `paintPRail` draws it.
+- **THE ANNOTATION TOOLBAR IS ONE ROW, ALWAYS** (2026-08-29, Tony's call).
+  It carried twenty-seven controls - ten tools, five swatches, a Fill/Outline
+  pair, eight position chips, Hold and three actions - and wrapped onto two
+  rows, pushing the video up. Two groups moved into POPOVERS, which is the
+  rule the Diagrams toolbar already follows: COLOUR (the five presets plus
+  Fill/Outline, since both are "how the next mark looks") and POSITION (D1 to
+  F3, which also arms the tool, so dropping a marker is still one decision).
+  - THE IDLE BAR DRAWS THE SAME ROW (`toolbarHtml({ live })`), so the toolbar
+    never changes shape; the actions are simply disabled until there is a
+    frozen frame. Picking anything, popovers included, freezes first.
+  - `.an-tb` RUNS ONE STEP TIGHTER THAN THE SHARED TOOLBAR - 36px buttons,
+    4px gaps - because it sits in a fixed strip beside a video where Diagrams'
+    bar floats over a canvas with room. Do not shrink `.tb-btn` globally.
+  - WHEN `.an-tb` TAKES `position: relative` FOR THE POPOVER ANCHOR IT MUST
+    ALSO NEUTRALISE `left` AND `bottom`. The shared `.tb` is
+    `position: fixed; left: 50%; transform: translateX(-50%)`, and left/bottom
+    keep applying to a relatively-positioned box - leaving them set pushed the
+    whole bar half the strip to the right.
 - **THE ANNOTATION TOOLBAR IS ALWAYS ON SCREEN** (2026-08-27, Tony's call).
   It used to live inside `#anRoot`, so it existed only once a freeze was
   already open - the tools were invisible exactly when you were deciding

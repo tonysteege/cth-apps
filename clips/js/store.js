@@ -146,6 +146,7 @@ const DEFAULT_SETTINGS = () => ({
   playerTrigger: '0',
   playerWindow: 3000,
   railOpen: true,
+  hideTime: false,   // the Clip Log's timecode column
   // Per-tool telestration style (2026-08-27, Tony's spec). Every drawing
   // tool carries its own colour, thickness and dash, so an arrow can be a
   // fat red solid while a line is a thin white dash without touching a

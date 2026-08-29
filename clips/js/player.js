@@ -879,13 +879,18 @@ export function paintPRail() {
   // While armed, a player whose number cannot still be reached by the next
   // keystroke is dimmed, so the shortlist narrows in front of you.
   const live = (p) => !cap || String(p.num).startsWith(cap.typed);
+  const pb = (cur.settings.panel.buttons || []).find((b) => b.act === 'players');
   rail.innerHTML = `
     <div class="prail-head">${cap ? `Number… <b>${esc(cap.typed || '_')}</b>` : 'Players'}</div>
+    ${pb ? `<button class="prail-btn prail-open" data-act="players" title="Open The Roster Sheet${pb.key ? ` (${keyLabel(pb.key)})` : ''}">
+      <span class="tag-dot" style="--c:${pb.color}"></span><span class="prail-name">${esc(pb.label)}</span>${keyBadge(pb.key)}
+    </button>` : ''}
     ${roster.map((p) => `
       <button class="prail-btn${(c?.tags || []).includes(normTag(p.first)) ? ' on' : ''}${live(p) ? '' : ' dim'}" data-pid="${esc(p.id)}" title="Tag ${esc(p.first)}${p.num ? ` (#${esc(String(p.num))})` : ''}">
         <span class="prail-num">${esc(String(p.num ?? ''))}</span>
         <span class="prail-name">${esc(p.first)}</span>
       </button>`).join('')}`;
+  rail.querySelectorAll('[data-act="players"]').forEach((b) => { b.onclick = () => openPlayers(); });
   rail.querySelectorAll('[data-pid]').forEach((b) => {
     b.onclick = () => {
       const p = roster.find((x) => x.id === b.dataset.pid);
@@ -944,10 +949,10 @@ export function paintBar() {
     // An `act` button runs something instead of toggling a tag. It drags,
     // re-keys and re-colours exactly like its neighbours, which is the whole
     // point of it being a real button rather than an injected one.
-    if (b.act === 'players') return `
-    <button class="tag-btn tag-btn-players" draggable="true" data-drag="${b.id}" data-act="players" style="--c:${b.color}" title="Tag The Players In This Clip${b.key ? ` (${keyLabel(b.key)})` : ''}. Drag To Reorder">
-      ${dot}<span class="tag-btn-word">${esc(btnLabel(b.label))}</span>${keyBadge(b.key)}
-    </button>`;
+    // Players draws in the ROSTER column instead, at the top - see
+    // paintPRail. It is still a panel record, so its key and colour are still
+    // edited in Edit Buttons; only where it appears changed.
+    if (b.act === 'players') return '';
     return b.tier === 1 ? `
     <button class="tag-btn" draggable="true" data-drag="${b.id}" data-clipbtn="${b.id}" style="--c:${b.color}" title="${esc(b.label)}: Clip ${b.lead}s Before To ${b.lag}s After The Playhead. Drag To Reorder">
       ${dot}<span class="tag-btn-word">${esc(btnLabel(b.label))}</span>${keyBadge(b.key)}
@@ -1015,9 +1020,11 @@ const view = {
   labels: [], tags: [],
   sortBy: 'time', sortDir: 'desc',
   playlist: false,
+  hideTime: false,
 };
 
 const SEARCH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>';
+const CLOCK_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.25"/><path d="M12 7.4V12l3 1.8"/></svg>';
 
 // ---- undo -----------------------------------------------------------
 // Cmd+Z takes back the last tag or clip. One shallow stack, capped: this
@@ -1361,6 +1368,13 @@ const RATINGS = [
   { tag: 'star', color: '#2b7fff' },
 ];
 
+// A clip's rating as a colour. This replaced the three dots that used to sit
+// in a column of their own on every row (2026-08-29, Tony's call): the row
+// itself now carries the colour, which says the same thing in no space at
+// all. First match wins - a clip tagged both good and bad is a mistake worth
+// showing as one of them rather than as a stripe.
+const rateOf = (c) => RATINGS.find((r) => (c.tags || []).includes(r.tag))?.color || '';
+
 // A clip's tags as ONE editable line rather than a row of pills: pills ate
 // the width the log has least of. Typing commits on Enter or blur, and the
 // whole set is replaced by what is in the field, so removing a tag is
@@ -1395,6 +1409,7 @@ export function paintLog() {
   log.innerHTML = `
     <div class="log-head">
       <button class="log-iconbtn${view.search ? ' on' : ''}" id="vpLogSearchBtn" title="Search Clips" aria-label="Search Clips">${SEARCH_ICON}</button>
+      <button class="log-iconbtn${view.hideTime ? '' : ' on'}" id="vpLogTime" title="${view.hideTime ? 'Show' : 'Hide'} The Timecode" aria-label="${view.hideTime ? 'Show' : 'Hide'} The Timecode">${CLOCK_ICON}</button>
       <input id="vpLogSearch" type="search" placeholder="Search Clips…" value="${esc(view.search)}" autocomplete="off"${view.searchOpen || view.search ? '' : ' hidden'}>
       <div class="log-filters"${view.searchOpen ? ' hidden' : ''}>
         <button class="log-filter${view.labels.length ? ' on' : ''}" data-menu="label">Clips${view.labels.length ? ` (${view.labels.length})` : ''}</button>
@@ -1404,7 +1419,7 @@ export function paintLog() {
     </div>
     <div class="log-cols">
       <span class="c-check"><input type="checkbox" id="vpAllCheck" title="Select Every Clip Below"${ticked && ticked === list.length ? ' checked' : ''}></span>
-      <button class="c-time c-sort${view.sortBy === 'time' ? ' on' : ''}" data-sort="time">Time${arrow('time')}</button>
+      ${view.hideTime ? '' : `<button class="c-time c-sort${view.sortBy === 'time' ? ' on' : ''}" data-sort="time">Time${arrow('time')}</button>`}
       <button class="c-sort c-grow${view.sortBy === 'name' ? ' on' : ''}" data-sort="name">Clip${arrow('name')}</button>
       <span class="log-count">${list.length} Of ${all.length}</span>
     </div>
@@ -1420,10 +1435,9 @@ export function paintLog() {
     <datalist id="vpTagOpts">${tagOpts.map((t) => `<option value="${esc(t)}">`).join('')}</datalist>
     <div class="log-list">
       ${list.map((c) => `
-        <div class="log-row${c.id === cur.sel ? ' on' : ''}${selection.has(c.id) ? ' picked' : ''}" data-id="${c.id}">
+        <div class="log-row${c.id === cur.sel ? ' on' : ''}${selection.has(c.id) ? ' picked' : ''}${rateOf(c) ? ' rated' : ''}" data-id="${c.id}"${rateOf(c) ? ` style="--rate:${rateOf(c)}"` : ''}>
           <span class="c-check"><input type="checkbox" data-pick="${c.id}"${selection.has(c.id) ? ' checked' : ''} aria-label="Select ${esc(c.name || c.label)}"></span>
-          <span class="log-time">${fmtHMS(c.in)}</span>
-          <span class="log-rate">${RATINGS.map((r) => `<i class="rate-dot${(c.tags || []).includes(r.tag) ? ' on' : ''}" style="--c:${r.color}" title="${r.tag}"></i>`).join('')}</span>
+          ${view.hideTime ? '' : `<span class="log-time">${fmtHMS(c.in)}</span>`}
           <span class="log-name">${esc(c.name || c.label)}</span>
           <input class="log-tagline" data-tagrow="${c.id}" list="vpTagOpts" value="${esc(tagLine(c))}" autocomplete="off" spellcheck="false" aria-label="Tags">
         </div>`).join('') || '<div class="log-empty">No Clips Yet - Press A Tag Button (Or Its Key) While The Video Plays.</div>'}
@@ -1433,6 +1447,12 @@ export function paintLog() {
   const sBtn = el('vpLogSearchBtn');
   const sIn = el('vpLogSearch');
   sBtn.onclick = () => { view.searchOpen = !view.searchOpen; paintLog(); if (view.searchOpen) el('vpLogSearch')?.focus(); };
+  el('vpLogTime').onclick = () => {
+    view.hideTime = !view.hideTime;
+    // A view preference, so it holds across sessions like the panel widths.
+    if (cur?.settings) { cur.settings.hideTime = view.hideTime; void putSettings(cur.settings); }
+    paintLog();
+  };
   sIn.addEventListener('input', (e) => { view.search = e.target.value; paintLog(); });
   sIn.addEventListener('keydown', (e) => {
     e.stopPropagation();
@@ -2017,6 +2037,7 @@ export async function openPlayer(game, videoUrl, h = {}) {
   }, { once: true });
   wireOnce();
   applyGrade(cur.game.grade);
+  view.hideTime = !!cur.settings.hideTime;
   // The rail's open state is a preference, so restore it before the first
   // paint rather than letting it flash open and then close.
   document.querySelector('.vp')?.classList.toggle('rail-hidden', cur.settings.railOpen === false);
