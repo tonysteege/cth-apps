@@ -368,6 +368,14 @@ function pt(e) {
 
 function onDown(e) {
   if (!an) return;
+  // A CLICK OFF AN OPEN FIELD CLOSES IT AND DOES NOTHING ELSE (2026-08-29,
+  // Tony's call). Two things were in the way. This handler preventDefaults
+  // every pointerdown, which suppresses the browser's own focus change, so a
+  // field never blurred on its own - closing it here directly rather than
+  // through blur() is what makes the click actually land. And the click is
+  // SWALLOWED: letting it fall through would place a second text box, or
+  // select whatever sits under the pointer, on the way out.
+  if (activeField) { e.preventDefault(); activeField.finish(true); return; }
   e.preventDefault();
   const p = pt(e);
   const s = vs();
@@ -609,6 +617,20 @@ const TEXT_SIZE = 34;
 // than seen. The colour swatches still recolour every other kind of mark.
 const TEXT_INK = '#1e1e1e';
 
+// THE EDITOR IS THE TEXT BOX (2026-08-29, Tony's call). It used to be a
+// shadowed white slab of its own, offset by `translate(-4px, -1.1em)`, in the
+// tool's colour - so committing a caption made it jump, shrink, change colour
+// and grow a border. Every number below is read from the SAME `TEXT_CHIP`
+// geometry flat.js commits with, converted into screen pixels, so what is on
+// screen while typing is the mark that lands: white fill, ink border at
+// `size * 0.17`, radius `size * 0.32`, `padX 0.5 / padY 0.3` of padding, 800
+// weight at the element's own size, and ALWAYS INK TEXT - the chip is a white
+// pill, so a coloured caption is the one mark that has to be read rather than
+// seen. The field grows with the text through the same `measureText` the chip
+// is sized by, which is the last thing that could still make it jump.
+//
+// The canvas strokes ON the rect path, straddling it, so the CSS box is
+// pulled out by half a border width to put the two outer edges in one place.
 function openTextInput(p, existing = null) {
   const root = el('anRoot');
   const v = viewBox();
@@ -616,34 +638,53 @@ function openTextInput(p, existing = null) {
   const scale = v.scale;
   const size = existing ? existing.size : (an.textSize || TEXT_SIZE) * vs();
   const T = TEXT_CHIP;
+  const padX = size * T.padX;
+  const padY = size * T.padY;
+  const bw = Math.max(1.5, size * T.border);
   const input = document.createElement('input');
   input.className = 'an-textinput';
   input.value = existing ? existing.text : '';
-  const fpx = Math.max(11, size * scale);
-  input.style.left = `${v.left - rootR.left + p.x * scale}px`;
-  input.style.top = `${v.top - rootR.top + p.y * scale}px`;
-  input.style.fontSize = `${fpx}px`;
-  input.style.padding = `${size * T.padY * scale}px ${size * T.padX * scale}px`;
-  input.style.borderRadius = `${size * 0.22 * scale}px`;
-  input.style.color = existing ? existing.color : an.color;
+  input.style.left = `${v.left - rootR.left + (p.x - padX - bw / 2) * scale}px`;
+  input.style.top = `${v.top - rootR.top + (p.y - size - padY - bw / 2) * scale}px`;
+  input.style.height = `${size * T.height * scale}px`;
+  input.style.lineHeight = `${size * T.height * scale}px`;
+  input.style.fontSize = `${size * scale}px`;
+  input.style.padding = `${padY * scale}px ${padX * scale}px`;
+  input.style.borderWidth = `${bw * scale}px`;
+  input.style.borderRadius = `${size * T.radius * scale}px`;
+  input.style.color = TEXT_INK;
+  const fit = () => {
+    const w = measureText({ size, text: input.value });
+    input.style.width = `${Math.max(w, size * 0.9) * scale}px`;
+  };
+  fit();
   root.appendChild(input);
   if (existing) an.els = an.els.filter((z) => z.id !== existing.id);
   redraw();
 
+  let done = false;
   const finish = (keep) => {
-    const v = input.value.trim();
+    if (done) return;
+    done = true;
+    activeField = null;
+    const val = input.value.trim();
     input.remove();
-    if (keep && v) {
-      const x = { id: existing?.id || uid(), type: 'text', x: p.x, y: p.y, text: v, size, color: TEXT_INK };
+    if (keep && val) {
+      const x = { id: existing?.id || uid(), type: 'text', x: p.x, y: p.y, text: val, size, color: TEXT_INK };
       an.els.push(x);
-      an.sel.clear();
-      an.sel.add(x.id);
       markDirty();
     } else if (existing) {
       an.els.push(existing);
     }
+    // Nothing else happens: no selection chrome is left on the caption and
+    // the select tool is armed, so the next click is whatever you meant it
+    // to be rather than a second text box.
+    an.sel.clear();
+    setTool('select');
     redraw();
   };
+  activeField = { finish };
+  input.oninput = fit;
   input.onkeydown = (e) => {
     e.stopPropagation();
     if (e.key === 'Enter') { e.preventDefault(); finish(true); }
@@ -658,8 +699,14 @@ function openTextInput(p, existing = null) {
 // ratio flat.js draws the label at, so what is typed sits exactly where the
 // committed label will. The element's own label is NOT updated as you type -
 // the canvas would draw it under the field and every glyph would double.
+// The one field open on the picture at a time, whichever kind it is. It is
+// held here rather than found in the DOM because `onDown` has to CLOSE it,
+// not just detect it, and a hidden or unfocused field never fires blur.
+let activeField = null;
+
 function openPlayerLabelInput(x) {
   const root = el('anRoot');
+  activeField?.finish(true);
   root.querySelector('.an-poslabel')?.remove();
   const v = viewBox();
   const rootR = root.getBoundingClientRect();
@@ -691,12 +738,19 @@ function openPlayerLabelInput(x) {
   const finish = (keep) => {
     if (done) return;
     done = true;
+    activeField = null;
     const val = keep ? input.value.trim().toUpperCase().slice(0, 2) : was;
     input.remove();
     x.label = val;
     if (val !== was) markDirty();
+    // Return, Escape and a click off the disc all mean the same thing: this
+    // marker is finished. Drop the selection so no chrome is left on it and
+    // arm select, which is what anyone does next.
+    an.sel.clear();
+    setTool('select');
     redraw();
   };
+  activeField = { finish };
   input.oninput = size;
   input.onkeydown = (e) => {
     e.stopPropagation();

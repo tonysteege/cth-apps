@@ -560,6 +560,17 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
     frozen. The idle bar cannot arm an editor that does not exist yet, so the
     colour and label chosen there are parked in `pendingPos`, which
     `openAnnotator` reads ONCE and clears.
+  - A FIELD CLOSES ON RETURN, ON ESCAPE, AND ON A CLICK ANYWHERE OFF IT
+    (2026-08-29, Tony's call), and closing means finished: the mark is
+    committed (or reverted, on Escape), the SELECTION IS DROPPED so no chrome
+    is left on it, and the select tool is armed. Two things had to change for
+    the click to work at all. `onDown` preventDefaults every pointerdown,
+    which suppresses the browser's own focus change, so a field never blurred
+    on its own - the open field is held in `activeField` and CLOSED DIRECTLY
+    rather than through blur(). And the dismissing click is SWALLOWED: letting
+    it fall through would place a second text box, or select whatever sits
+    under the pointer, on the way out. One field is open at a time, whichever
+    kind it is.
   - THE DEFAULT PLAYER IS BLANK AND TYPEABLE. It used to be a hardcoded 'C',
     so every unnamed marker claimed to be the centre. Placing a blank one
     opens `.an-poslabel`, a transparent two-character field centred on the
@@ -569,6 +580,20 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
     open; live-syncing it would draw the glyphs twice, once on the canvas and
     once in the field. Double-clicking a placed player reopens it, and the
     position menu is still there for anyone who would rather pick.
+- **THE TEXT EDITOR IS THE TEXT BOX** (2026-08-29, Tony's call). It was a
+  shadowed white slab of its own, nudged by `translate(-4px, -1.1em)` and
+  printing in the tool's colour, so committing a caption made it jump, resize,
+  lose its shadow, gain a border and change colour. Every number that decides
+  its shape is now read from the SAME `TEXT_CHIP` geometry flat.js commits
+  with and written inline in screen pixels - fill, ink border at
+  `size * 0.17`, radius `size * 0.32`, `padX 0.5 / padY 0.3`, 800 weight at
+  the element's own size - and the field GROWS with the text through the same
+  `measureText` the chip is sized by. The canvas strokes ON the rect path, so
+  the CSS box is pulled out by half a border width to put the two outer edges
+  in one place. Verified by re-opening a committed chip: the field lands on
+  the identical rect to the pixel. Only what never varies is left in the
+  stylesheet, and it must stay that way - a shadow or a transform here is
+  exactly the kind of difference that reads as a jump.
 - **TELESTRATION TEXT IS ALWAYS INK** (2026-08-29, Tony's call). The text chip
   is a WHITE PILL with a dark border, so a coloured caption was the one mark
   in the app that had to be read rather than seen. The colour swatches still
