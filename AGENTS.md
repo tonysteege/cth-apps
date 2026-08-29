@@ -495,6 +495,13 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   it is not mouse-only. There are no `.bs-note` paragraphs left; adding one
   back is a regression. The filename token legend is a tooltip on its own
   field, which is where you look while typing the pattern.
+  - THE TIP IS A REAL VIEWPORT-POSITIONED ELEMENT (`.cs-tip`), never a
+    `::after` on the glyph: the sheet body scrolls, so a pseudo-element inside
+    it is cropped at the edges and a tip near the left rail lost its first
+    characters. It is parked at the origin BEFORE being measured - reading the
+    rect in place returns the PREVIOUS tip's height, which put one of them 12px
+    off the top - and then clamped on both axes, so no arithmetic mistake can
+    put it off screen. Verified across every glyph at six scroll positions.
 - **PER-TOOL TELESTRATION STYLE** (`settings.toolStyle`, 2026-08-27): colour,
   thickness and dash for pen, arrow, line, freearrow, box, circle, spotlight
   and the position chip, edited in Settings under Telestration Tools.
