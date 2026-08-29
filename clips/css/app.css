@@ -222,7 +222,7 @@
    a shortcut - the same rule the tag panel now follows. */
 .an-tb .tb-key {
   position: absolute; right: 3px; bottom: 1px;
-  font-size: 11px; letter-spacing: 0.2px; font-weight: 700; color: var(--soft);
+  font-size: 11px; font-weight: 700; color: var(--soft);
   pointer-events: none;
 }
 .an-tb .tb-btn.on .tb-key { color: rgba(255, 255, 255, 0.8); }
@@ -230,15 +230,15 @@
 .an-canvas { cursor: crosshair; }
 /* Fill or outline for boxes and circles, as a segmented pair - it is one
    choice with two states, not two buttons. */
-.an-seg { display: inline-flex; gap: 2px; padding: 2px; background: var(--n-100); border-radius: 8px; }
+.an-seg { display: inline-flex; gap: 2px; padding: 4px; background: var(--n-100); border-radius: 10px; }
 .an-segbtn {
   border: none; background: none; cursor: pointer;
   font: inherit; font-size: 12px; letter-spacing: 0.15px; font-weight: 600; color: var(--mist);
-  padding: 4px 9px; border-radius: 8px;
+  padding: 4px 10px; border-radius: 6px;
   transition: background var(--dur) ease, color var(--dur) ease;
 }
 .an-segbtn:hover { color: var(--ink); }
-.an-segbtn.on { background: var(--cloud); color: var(--ink); box-shadow: var(--shadow-card); }
+.an-segbtn.on { background: var(--cloud); color: var(--ink); box-shadow: var(--shadow-2xs); }
 
 
 /* ============================================================
@@ -699,7 +699,9 @@
    over every button colour. */
 .tag-key {
   margin-left: auto; flex-shrink: 0;
-  font-size: 11px; letter-spacing: 0.2px; font-weight: 700;
+  /* BoardUI Kbd is caption-1-SEMIBOLD; .tb-key was already 600 and this
+     was 700, so the suite had two key pills at two weights. */
+  font-size: 11px; font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: color-mix(in srgb, var(--fg, #fff) 94%, transparent);
   background: rgb(0 0 0 / 0.17);

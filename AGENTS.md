@@ -726,6 +726,30 @@ after a live inspection of it. The two live side by side.
     Slides. Re-run the sweep in `~/.claude/skills/audit-ui` before claiming a
     design change is clean.
 
+- **COMPONENT-LEVEL CONFORMANCE** (2026-08-27, second pass, once the Pro seat
+  was free and the MCP served component source). The Pro unlock did NOT change
+  the foundations - `get_theme` is byte-identical to the Pro repo already on
+  disk, so the scale pass above stands. What it added was component recipes:
+  - THE SEGMENTED CONTROL (`.an-seg`) selects with a WHITE THUMB on an n-100
+    track plus `--shadow-2xs` (`0 1px rgb(0 0 0 / .16)`, added as a token),
+    NEVER the accent gradient - it is the one "selected" state in the suite
+    that is not the gradient pill, and that is BoardUI's own design. Track is
+    p-1 (4px) at radius 10, segments px-2.5 (10px) at radius 6. CTH had 2px /
+    8px / 9px / 8px and `--shadow-card`.
+  - KBD PILLS (`.tag-key`, `.tb-key`) set **tracking-normal**, overriding
+    Caption 1's 0.15px - BoardUI's Kbd does this explicitly, so a key hint is
+    the one small-text exception to the tracking rule. Weight is 600; one of
+    the two pills was 700, so the suite had two key pills at two weights.
+  - DELIBERATE DEVIATIONS, both density calls in dense chrome rather than
+    dashboard surfaces: the segmented control keeps Caption 1 (12) where
+    BoardUI specs Body (14), and the Kbd pills keep 11 where BoardUI specs 12.
+    A 14px segment does not fit the annotation toolbar row.
+  - MOST PRO COMPONENTS DO NOT APPLY HERE: they are chart cards, dashboard
+    templates and AI-agent chrome. The two worth adopting if Bots is ever
+    reworked are `agent-progress` (its run states are hand-rolled) and
+    `composer`. Do not install chart cards into a hockey app for the sake of
+    using the licence.
+
 - **Component recipes are BoardUI's own** (2026-08-26, full-fidelity pass,
   taken from the cth-boardui-starter source, not eyeballed):
   - INPUTS ARE FILLED, never outlined: n-200 surface (`--field`), no
