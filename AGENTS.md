@@ -467,6 +467,34 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
     strip back. A row that changed shape on freeze would be a different
     toolbar, not the same one waiting.
   - `.an-tb` is `position: static` now and wraps; it is not a floating panel.
+- **THE TOOLBAR IS ALWAYS FULLY EXPANDED** (2026-08-29, Tony's call). It used
+  to collapse to a row of tool icons whenever no freeze was open, so the
+  colours, the shape style, the markers and the actions appeared and vanished
+  under the pointer. `barHtml(live)` draws BOTH states: idle differs only in
+  that the tools carry `data-idle` (picking one freezes the frame and arms it
+  in one gesture) and everything else is disabled, because there is nothing
+  yet to act on. A bar that changes shape is a different bar.
+- **DONE FINISHES, IT DOES NOT EXPORT** (2026-08-29, Tony's call, REVERSING
+  the 2026-08-27 rule where Done was the export). NOTHING LEAVES THIS APP
+  UNLESS EXPORT IS PRESSED. `settings.exportKind` chooses what Export writes:
+  the held clip (default, and what Done used to produce) or a PNG of the
+  annotated frame. Escape still steps out - disarm the tool, clear the
+  selection, then close - so a stray Escape mid-drawing cannot throw a session
+  away.
+- **THE VIDEO STAYS PAUSED** through a draw, Clear, Export and Done
+  (`onDraw`/`onDone`/`onExport` all pause). Coming back to a moving picture
+  loses the play that was being marked.
+- **A DRAW ARMS SELECT AGAIN** (`settings.autoSelect`, default on, 2026-08-29,
+  Tony's call, reversing the tool-stays-armed rule of 2026-08-27), so the
+  thing just drawn can be moved without re-arming - which is what anyone does
+  next. Off keeps the tool armed for repeated marks.
+- **EVERY SETTINGS DESCRIPTION IS A HOVER TOOLTIP** (`.cs-info`, 2026-08-29,
+  Tony's call). A sheet that prints its own explanations is twice as tall and
+  reads as documentation. The glyph is a BoardUI Tooltip - light surface,
+  radius 10, dropdown elevation - and it opens on FOCUS as well as hover, so
+  it is not mouse-only. There are no `.bs-note` paragraphs left; adding one
+  back is a regression. The filename token legend is a tooltip on its own
+  field, which is where you look while typing the pattern.
 - **PER-TOOL TELESTRATION STYLE** (`settings.toolStyle`, 2026-08-27): colour,
   thickness and dash for pen, arrow, line, freearrow, box, circle, spotlight
   and the position chip, edited in Settings under Telestration Tools.

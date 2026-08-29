@@ -152,6 +152,12 @@ const DEFAULT_SETTINGS = () => ({
   // twenty tags and six players wants the tag column dense and the roster
   // comfortable, and that is a per-column decision.
   btnH: { clip: 28, tag: 28, player: 28 },
+  // After drawing, arm Select again so the new object can be moved without
+  // re-arming. False keeps the tool armed for repeated marks.
+  autoSelect: true,
+  // What the toolbar's Export button writes: the held clip, or a PNG of the
+  // annotated frame.
+  exportKind: 'clip',
   // Per-tool telestration style (2026-08-27, Tony's spec). Every drawing
   // tool carries its own colour, thickness and dash, so an arrow can be a
   // fat red solid while a line is a thin white dash without touching a

@@ -98,13 +98,10 @@ export function annotating() { return !!an; }
 export function paintIdleBar(onPick) {
   const bar = el('anBar');
   if (!bar || an) return;
-  bar.innerHTML = `
-    ${TOOLS.map(([t, label, icon]) => `<button class="tb-btn" data-idle="${t}" title="${label} - Freezes This Frame And Starts Drawing" aria-label="${label}">${icon}</button>`).join('')}
-    <span class="tb-sep"></span>
-    <span class="an-idle">Pick a tool to freeze this frame and draw on it</span>`;
-  bar.querySelectorAll('[data-idle]').forEach((b) => {
+  bar.innerHTML = barHtml(false);
+  for (const b of bar.querySelectorAll('[data-idle]')) {
     b.onclick = () => onPick?.(b.dataset.idle);
-  });
+  }
 }
 
 // Diagnostic tap, the Film Room idiom: only meaningful to someone who went
@@ -382,7 +379,10 @@ function onDown(e) {
     };
     an.els.push(x);
     an.sel = new Set([x.id]);
-    markDirty(); redraw();
+    markDirty();
+    an.onDraw?.();
+    if (an.autoSelect) setTool('select');
+    redraw();
     return;
   }
   if (an.tool === 'pen' || an.tool === 'freearrow') {
@@ -546,12 +546,15 @@ function onUp() {
   // still gets one, at a sensible default size, so tapping a player works.
   if (x && d.kind === 'spot' && x.r < 10) x.r = 44 * vs();
   if (d.kind !== 'band') markDirty();
-  // THE TOOL STAYS ARMED (2026-08-27, Tony's call). Every draw used to snap
-  // back to Select, so three arrows on one play meant re-arming twice.
-  // Escape disarms; another tool replaces it; nothing else does.
+  // A DRAW REVERTS TO SELECT (2026-08-29, Tony's call), so the thing just
+  // drawn can be moved without re-arming - which is what anyone does next.
+  // `settings.autoSelect` turns it off for the old behaviour, where the tool
+  // stayed armed and three arrows on one play cost no re-arming.
   if (['pen', 'arrow', 'shape', 'angle', 'spot'].includes(d.kind) && an.els.some((z) => z.id === d.id)) {
     an.sel.clear();
     an.sel.add(d.id);
+    an.onDraw?.();
+    if (an.autoSelect) { setTool('select'); an.sel.clear(); an.sel.add(d.id); }
   }
   redraw();
 }
@@ -662,38 +665,56 @@ function clearAll() {
   an.els = [];
   an.sel.clear();
   markDirty();
+  an.onDraw?.();   // the video stays paused through Clear too
   redraw();
 }
 
 // ------------------------------------------------------------- toolbar
 
-function paintBar() {
-  const bar = el('anBar');
+// THE BAR IS ALWAYS FULLY EXPANDED (2026-08-29, Tony's call). It used to
+// collapse to a row of tool icons whenever no freeze was open, so the colours,
+// the shape style, the position markers and the actions appeared and vanished
+// under the pointer. One builder draws both states now: idle differs only in
+// that the tools carry `data-idle` (picking one freezes the frame and arms it)
+// and the actions are disabled, because there is nothing yet to act on.
+function barHtml(live) {
   const key = (k) => (k ? `<span class="tb-key">${k.toUpperCase()}</span>` : '');
-  bar.innerHTML = `
-    ${TOOLS.map(([t, label]) => {
-      const icon = TOOLS.find((x) => x[0] === t)[2];
-      return `<button class="tb-btn${an.tool === t ? ' on' : ''}" data-tool="${t}" title="${label} (${keyFor(t).toUpperCase()}) - Right-Click To Change The Key" aria-label="${label}">${icon}${key(keyFor(t))}</button>`;
+  const dis = live ? '' : ' disabled';
+  return `
+    ${TOOLS.map(([t, label, icon]) => {
+      const on = live && an.tool === t;
+      const k = live ? keyFor(t) : (DEFAULT_KEYS[t] || '');
+      const attr = live ? `data-tool="${t}"` : `data-idle="${t}"`;
+      const tip = live ? `${label} (${k.toUpperCase()}) - Right-Click To Change The Key` : `${label} - Freezes This Frame And Starts Drawing`;
+      return `<button class="tb-btn${on ? ' on' : ''}" ${attr} title="${tip}" aria-label="${label}">${icon}${key(k)}</button>`;
     }).join('')}
     <span class="tb-sep"></span>
-    ${COLORS.map(([, hex]) => `<button class="tb-swatch${an.color === hex ? ' on' : ''}" data-color="${hex}" style="--c:${hex}"></button>`).join('')}
+    ${COLORS.map(([name, hex]) => `<button class="tb-swatch${live && an.color === hex ? ' on' : ''}" data-color="${hex}" style="--c:${hex}" title="${name}" aria-label="${name}"${dis}></button>`).join('')}
     <span class="tb-sep"></span>
     <span class="an-seg" role="group" aria-label="Shape Style">
-      <button class="an-segbtn${an.shapeStyle !== 'outline' ? ' on' : ''}" data-shape="fill" title="Boxes And Circles As A Light Wash">Fill</button>
-      <button class="an-segbtn${an.shapeStyle === 'outline' ? ' on' : ''}" data-shape="outline" title="Boxes And Circles As A Solid Outline">Outline</button>
+      <button class="an-segbtn${live && an.shapeStyle !== 'outline' ? ' on' : ''}" data-shape="fill" title="Boxes And Circles As A Light Wash"${dis}>Fill</button>
+      <button class="an-segbtn${live && an.shapeStyle === 'outline' ? ' on' : ''}" data-shape="outline" title="Boxes And Circles As A Solid Outline"${dis}>Outline</button>
     </span>
     <span class="tb-sep"></span>
     <!-- Position chips. One click arms the tool AND picks the label, so
          dropping a D1 on the frame is a single decision, not two. -->
     <span class="bui-group bui-group--dense" role="group" aria-label="Position Indicators">
-      ${(an.positions || []).map((lab) => `<button class="${an.tool === 'pos' && an.posLabel === lab ? 'on' : ''}" data-pos="${esc(lab)}" title="Drop A ${esc(lab)} Marker">${esc(lab)}</button>`).join('')}
+      ${(POSITIONS(live)).map((lab) => `<button class="${live && an.tool === 'pos' && an.posLabel === lab ? 'on' : ''}" data-pos="${esc(lab)}" title="Drop A ${esc(lab)} Marker"${dis}>${esc(lab)}</button>`).join('')}
     </span>
     <span class="tb-sep"></span>
-    <label class="an-hold" title="How Long The Exported Clip Holds On This Frame">Hold <input id="anHold" type="number" min="0" max="30" value="${an.freeze.hold ?? 3}">s</label>
+    <label class="an-hold" title="How Long The Exported Clip Holds On This Frame">Hold <input id="anHold" type="number" min="0" max="30" value="${live ? (an.freeze.hold ?? 3) : 3}"${dis}>s</label>
     <span class="tb-sep"></span>
-    <button class="tb-btn tb-word" data-act="clear" title="Remove Every Drawing (${(an.actKeys.clear || ACT_KEYS.clear).toUpperCase()})">Clear${key(an.actKeys.clear || ACT_KEYS.clear)}</button>
-    <button class="tb-btn tb-word" data-act="export" title="Save The Annotated Frame As A PNG (${(an.actKeys.export || ACT_KEYS.export).toUpperCase()})">Export${key(an.actKeys.export || ACT_KEYS.export)}</button>
-    <button class="tb-btn tb-word on" data-act="done" title="Finish (Return)">Done<span class="tb-key">&crarr;</span></button>`;
+    <button class="tb-btn tb-word" data-act="clear" title="Remove Every Drawing (${(live ? an.actKeys.clear : ACT_KEYS.clear).toUpperCase()})"${dis}>Clear${key(live ? an.actKeys.clear : ACT_KEYS.clear)}</button>
+    <button class="tb-btn tb-word" data-act="export" title="Export This Freeze - Nothing Leaves This App Until You Press It (${(live ? an.actKeys.export : ACT_KEYS.export).toUpperCase()})"${dis}>Export${key(live ? an.actKeys.export : ACT_KEYS.export)}</button>
+    <button class="tb-btn tb-word${live ? ' on' : ''}" data-act="done" title="Finish Without Exporting (Return Or Escape)"${dis}>Done<span class="tb-key">&crarr;</span></button>`;
+}
+
+// The idle bar cannot read `an.positions`, so it falls back to the defaults.
+const POSITIONS = (live) => (live ? (an.positions || []) : ['D1', 'D2', 'C', 'W1', 'W2', 'F1', 'F2', 'F3']);
+
+function paintBar() {
+  const bar = el('anBar');
+  bar.innerHTML = barHtml(true);
   bar.querySelectorAll('[data-tool]').forEach((b) => {
     b.onclick = () => setTool(b.dataset.tool);
     // Right-click a tool to rebind its key - the same idea the Diagrams
@@ -768,6 +789,10 @@ export function annotationElements() { return an ? an.els : []; }
 export function annotationSize() { return an ? { w: an.vw, h: an.vh } : null; }
 export function paintAnnotations(ctx) { if (an) for (const x of an.els) drawAny(ctx, x); }
 
+// DONE FINISHES, IT DOES NOT EXPORT (2026-08-29, Tony's call, reversing the
+// 2026-08-27 rule where Done was the export). Nothing leaves this app unless
+// Export is pressed. `onDone` still fires so the app can pause and tidy up -
+// it just no longer writes a file.
 function done() {
   an.freeze.elements = an.els;
   const cb = an.onDone;
@@ -808,7 +833,7 @@ export function applyToolStyle(style, positions) {
 // ------------------------------------------------------------- open
 
 let wired = false;
-export function openAnnotate(freeze, frameCanvas, { onDone, onExport, keys, actKeys, onKeys, style, positions, armTool } = {}) {
+export function openAnnotate(freeze, frameCanvas, { onDone, onExport, keys, actKeys, onKeys, style, positions, armTool, autoSelect = true, onDraw } = {}) {
   const root = el('anRoot');
   root.hidden = false;
   an = {
@@ -824,6 +849,8 @@ export function openAnnotate(freeze, frameCanvas, { onDone, onExport, keys, actK
     positions: positions || ['D1', 'D2', 'C', 'W1', 'W2', 'F1', 'F2', 'F3'],
     posLabel: 'D1',
     colorSet: false,
+    autoSelect,
+    onDraw,
     keys: { ...DEFAULT_KEYS, ...(keys || {}) },
     actKeys: { ...ACT_KEYS, ...(actKeys || {}) },
     onKeys,

@@ -547,11 +547,24 @@ async function showPlayer(id) {
           if (live) live.toolKeys = keys;
           await putSettings({ ...(live || st), toolKeys: keys });
         },
-        // Done exports the clip and nothing else (2026-08-27, Tony's
-        // call). A freeze used to be saved onto the game record and
-        // replayed during playback; the deliverable is the file.
-        onDone: (f) => void runFreezeExport(game, f, f.elements || []),
-        onExport: (canvas, f) => void exportFrame(game, canvas, f),
+        autoSelect: st.autoSelect !== false,
+        // THE VIDEO STAYS PAUSED through all of it (2026-08-29, Tony's
+        // call): after a draw, and after Done, Export or Clear. Coming
+        // back to a moving picture loses the play that was being marked.
+        onDraw: () => video().pause(),
+        // DONE FINISHES, IT DOES NOT EXPORT. Nothing leaves this app
+        // unless Export is pressed - the 2026-08-27 rule where Done was
+        // the export is reversed.
+        onDone: () => video().pause(),
+        // Export writes whichever deliverable Settings names: the held
+        // clip (the default, and what Done used to produce) or a PNG of
+        // the annotated frame.
+        onExport: (canvas, f) => {
+          video().pause();
+          const live = playerSettings() || st;
+          if ((live.exportKind || 'clip') === 'png') void exportFrame(game, canvas, f);
+          else void runFreezeExport(game, f, f.elements || []);
+        },
       });
     },
   });
@@ -1158,6 +1171,8 @@ const NAME_TOKENS = [
   ['{date}', "today's date"],
 ];
 
+const INFO_ICON = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 11.2v5"/><path d="M12 7.9h.01"/></svg>';
+
 const DEFAULT_POSITIONS = ['D1', 'D2', 'C', 'W1', 'W2', 'F1', 'F2', 'F3'];
 
 // Every tool that carries a look, in toolbar order.
@@ -1177,10 +1192,23 @@ export async function openClipSettings(focus = null) {
   document.querySelector('.sheet-veil')?.remove();
   const veil = document.createElement('div');
   veil.className = 'sheet-veil';
+  // EVERY DESCRIPTION IS A HOVER TOOLTIP (2026-08-29, Tony's call). A settings
+  // sheet that prints its own explanations is twice as tall and reads as
+  // documentation; the glyph keeps the sheet scannable and the words one
+  // hover away.
+  const info = (t) => (t ? `<span class="cs-info" tabindex="0" role="note" aria-label="${esc(t)}" data-tip="${esc(t)}">${INFO_ICON}</span>` : '');
   const num = (k, label, v, min, max, hint = '') => `
-    <label class="bs-row"><span>${label}</span>
+    <label class="bs-row"><span>${label}${info(hint)}</span>
       <input type="number" data-k="${k}" value="${v}" min="${min}" max="${max}">
-      ${hint ? `<em class="cs-hint">${hint}</em>` : ''}
+    </label>`;
+  const check = (k, label, on, hint = '') => `
+    <label class="bs-row"><span>${label}${info(hint)}</span>
+      <input type="checkbox" data-k="${k}"${on ? ' checked' : ''}>
+    </label>`;
+  const seg = (k, label, opts, cur, hint = '') => `
+    <label class="bs-row"><span>${label}${info(hint)}</span>
+      <span class="an-seg" role="group">${opts.map(([val, txt]) =>
+        `<button type="button" class="an-segbtn${cur === val ? ' on' : ''}" data-seg="${k}" data-val="${val}">${txt}</button>`).join('')}</span>
     </label>`;
   veil.innerHTML = `
     <div class="sheet sheet-pe cs-sheet" role="dialog" aria-modal="true">
@@ -1190,17 +1218,16 @@ export async function openClipSettings(focus = null) {
       </div>
       <div class="pe-body">
         <section class="pe-section">
-          <div class="pe-title">Players</div>
+          <div class="pe-title">Players${info('A player\'s FIRST name becomes the tag. The key is one character, pressed inside the Players dialogue.')}</div>
           <div class="cs-players" data-players></div>
           <div class="bs-styleadd"><button class="mini" data-addplayer>+ Player</button></div>
-          <p class="bs-note">A player's FIRST name becomes the tag. The key is one character, pressed inside the Players dialogue.</p>
+          
         </section>
         <section class="pe-section">
           <div class="pe-title">Export</div>
-          <label class="bs-row"><span>File Name</span>
+          <label class="bs-row"><span>File Name${info(`Tokens: ${NAME_TOKENS.map(([t, w]) => `${t} is the ${w}`).join(', ')}. An empty token collapses without leaving the dash that joined it.`)}</span>
             <input type="text" data-k="naming" value="${esc(s.naming)}" spellcheck="false">
           </label>
-          <p class="bs-note">${NAME_TOKENS.map(([t, w]) => `<code>${t}</code> ${w}`).join(' &middot; ')}</p>
           ${num('freezeBuf.before', 'Freeze In', s.freezeBuf.before, 0, 60, 'seconds before the playhead')}
           ${num('freezeBuf.after', 'Freeze Out', s.freezeBuf.after, 1, 120, 'seconds after')}
           ${num('holdSec', 'Freeze Hold', s.holdSec, 1, 15, 'how long the frame holds')}
@@ -1208,14 +1235,22 @@ export async function openClipSettings(focus = null) {
           ${num('pullBuf.after', 'Pull Out', s.pullBuf.after, 1, 120, 'seconds after')}
         </section>
         <section class="pe-section">
-          <div class="pe-title">Panels</div>
+          <div class="pe-title">Drawing</div>
+          ${check('autoSelect', 'Back To Select After Drawing', s.autoSelect !== false,
+            'After you draw or place something, the Select tool arms again so you can move it. Turn this off to keep the tool armed for repeated marks.')}
+          ${seg('exportKind', 'Export Button Writes', [['clip', 'Clip'], ['png', 'PNG']], s.exportKind || 'clip',
+            'What the toolbar Export button produces: the held video clip, or a PNG of the annotated frame. Nothing is ever written until you press Export.')}
+          ${num('holdSec', 'Default Hold', s.holdSec, 1, 15, 'How long an exported freeze holds on the frame, in seconds.')}
+        </section>
+        <section class="pe-section">
+          <div class="pe-title">Panels${info('One height each, because a dense tag column and a comfortable roster are different decisions.')}</div>
           ${num('btnH.clip', 'Clip Buttons', (s.btnH || {}).clip ?? 28, 20, 48, 'pixels tall')}
           ${num('btnH.tag', 'Tag Buttons', (s.btnH || {}).tag ?? 28, 20, 48, 'pixels tall')}
           ${num('btnH.player', 'Player Buttons', (s.btnH || {}).player ?? 28, 20, 48, 'pixels tall')}
-          <p class="bs-note">One height each, because a dense tag column and a comfortable roster are different decisions.</p>
+          
         </section>
         <section class="pe-section">
-          <div class="pe-title">Telestration Tools</div>
+          <div class="pe-title">Telestration Tools${info('Thickness is measured on a 1280-wide frame and scales with the video, so 8 looks the same on any clip. A style applies to NEW drawings; anything already drawn keeps the look it was drawn with.')}</div>
           <div class="cs-toolhead"><span></span><span>Colour</span><span>Thickness</span><span>Dashed</span></div>
           ${TOOL_STYLE_ROWS.map(([k, label]) => {
             const t = (s.toolStyle || {})[k] || {};
@@ -1228,7 +1263,7 @@ export async function openClipSettings(focus = null) {
           <label class="bs-row"><span>Position Chips</span>
             <input type="text" data-k="positionsCsv" value="${esc((s.positions || []).join(', '))}" spellcheck="false">
           </label>
-          <p class="bs-note">Thickness is measured on a 1280-wide frame and scales with the video, so a 8 looks the same on any clip. A style applies to NEW drawings; anything already drawn keeps the look it was drawn with.</p>
+          
         </section>
         <section class="pe-section">
           <div class="pe-title">Recording</div>
@@ -1287,6 +1322,14 @@ export async function openClipSettings(focus = null) {
   const close = () => veil.remove();
   veil.addEventListener('mousedown', (e) => { if (e.target === veil) close(); });
   veil.querySelector('[data-x="cancel"]').onclick = close;
+  // Segmented rows carry their value on the pressed button.
+  const segVals = {};
+  for (const b of veil.querySelectorAll('[data-seg]')) {
+    b.onclick = () => {
+      segVals[b.dataset.seg] = b.dataset.val;
+      for (const o of veil.querySelectorAll(`[data-seg="${b.dataset.seg}"]`)) o.classList.toggle('on', o === b);
+    };
+  }
   veil.querySelector('[data-x="save"]').onclick = async () => {
     const next = { ...s };
     veil.querySelectorAll('[data-k]').forEach((i) => {
@@ -1300,6 +1343,7 @@ export async function openClipSettings(focus = null) {
       node[path[0]] = raw;
     });
     // A player with no first name is nothing to tag with.
+    Object.assign(next, segVals);
     next.players = roster.filter((p) => (p.first || '').trim());
     // The position chips arrive as one comma-separated field; store the list
     // and drop the scratch key so it never lands in the record.
