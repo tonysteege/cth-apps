@@ -11,6 +11,7 @@
 
 import { getSettings, putSettings, putGame, uid } from './store.js';
 import { openScrubSource, releaseScrubSource, scrubProviderFor } from './scrubsource.js';
+import { gradeFrame, gradeCss } from './grade.js';
 import { toast, esc } from './ui.js';
 import { wireStageZoom, resetStageZoom } from './zoom.js';
 import { ctxMenu } from '/diagrams/js/ui.js';
@@ -1934,7 +1935,21 @@ export function grabFrame() {
   const c = document.createElement('canvas');
   c.width = v.videoWidth; c.height = v.videoHeight;
   c.getContext('2d').drawImage(v, 0, 0);
-  return c;
+  // The freeze editor must draw on the picture the coach can SEE, not the raw
+  // decode - otherwise an arrow lands somewhere else once the crop applies.
+  return gradeFrame(c, cur?.game?.grade);
+}
+
+// The grade is a view transform, so it rides on the video element exactly the
+// way zoom does. Called on open and whenever the editor writes a new one.
+export function applyGrade(grade) {
+  const v = video();
+  if (!v) return;
+  if (cur?.game) cur.game.grade = grade || null;
+  const css = gradeCss(grade);
+  v.style.filter = css.filter;
+  v.style.transform = css.transform;
+  v.style.transformOrigin = 'top left';
 }
 
 // ------------------------------------------------------------- open/close
@@ -1990,6 +2005,7 @@ export async function openPlayer(game, videoUrl, h = {}) {
     paintClock();
   }, { once: true });
   wireOnce();
+  applyGrade(cur.game.grade);
   // The rail's open state is a preference, so restore it before the first
   // paint rather than letting it flash open and then close.
   document.querySelector('.vp')?.classList.toggle('rail-hidden', cur.settings.railOpen === false);

@@ -349,35 +349,42 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   you type - `pe-key--dup` (danger ring: two buttons on one letter, only the
   first fires) and `pe-key--takes` (grey ring: this button takes a transport
   key over) - so a takeover is a choice, never a surprise.
-- **THE VIDEO EDITOR** (`clips/js/videoedit.js`, 2026-08-27, Tony's spec):
-  trim, crop, colour, watermark patch and compress, reached from Edit on the
-  transport bar. Finishing REPLACES the file in `videos/`. What it is, and the
-  limits that shaped every decision in it:
-  - THERE IS NO FFMPEG AND NO SERVER. Everything is a frame painted into a
-    canvas and captured by MediaRecorder (`recordRange`, extended here with
-    `filter`, `scale` and `bitrate`). So: EDITING IS INSTANT because every
-    control previews through a CSS filter and a transform, and RENDERING IS
-    REAL TIME because a recorder captures a playing video. Trim first; it is
-    the only control that makes the others cheaper. Do not "upgrade" this to
-    ffmpeg.wasm without Tony asking - it is a ~30MB vendored blob, it breaks
-    the no-build rule, and it will not survive a 90 minute game in memory.
-  - ONE FILTER STRING drives the preview AND the render (`filterString`), so
-    what is on screen is what lands in the file. Two code paths would drift.
-  - "ENHANCE" IS A FILTER PRESET, not AI upscaling. "REMOVE WATERMARK"
-    PATCHES with a blur or a solid block, it does not inpaint. Both are
-    labelled that way in the UI and must stay labelled that way.
-  - THE ORIGINAL IS COPIED TO `/videos/.originals/<name>` BEFORE the first
-    overwrite and ONLY the first: a second edit must never overwrite an
-    untouched original with an already edited file, or Revert restores the
-    wrong thing.
-  - **THE TRIM SHIFT IS A PURE OFFSET AND IS NEVER CLAMPED** (`shiftGame`).
-    Clips, freezes and the timeline all store absolute seconds, so trimming
-    the front moves every one of them. The first version clamped to zero and
-    DESTROYED DATA - a clip at 5s trimmed by 30 became 0, and reverting added
-    30 back to give 30. Lossless arithmetic is what makes Revert exact. A
-    negative in-point is fine; seeking already clamps at playback.
-    `clipsOutside` warns which tags a trim would strand, before Apply. It
-    never fixes them silently: which clips matter is the coach's call.
+- **THE VIDEO EDITOR IS NON-DESTRUCTIVE: IT WRITES A GRADE, NOT A FILE**
+  (`clips/js/grade.js`, rebuilt 2026-08-27 on Tony's "instant or remove it").
+  The first version re-encoded the whole file through MediaRecorder in REAL
+  TIME - a 90 minute game cost 90 minutes and came back lossy. Crop, colour
+  and a watermark patch are not changes to the footage; they are changes to
+  how it is SHOWN. So nothing is re-encoded, ever.
+  - `game.grade` is `{ crop, color, patches, trim }`, additive and optional -
+    absent means no edit, which is what every older record says. A grade that
+    would change nothing is stored as NULL (`isNeutral`), so opening the
+    editor and leaving it alone writes nothing.
+  - IT IS APPLIED IN EXACTLY THREE PLACES, all from the same module: the
+    video element at playback (`gradeCss`, the same trick zoom uses), the
+    canvas `grabFrame` returns (`gradeFrame`, so an annotation is drawn on the
+    picture the coach can SEE), and every export (`mergeRecordOpts`).
+    Measured: 0.1ms for the maths, 0.4-0.8ms to bake a 1080p frame.
+  - EXPORTS COMPOSE, THEY DO NOT OVERWRITE. Record passes its own region crop
+    and Freeze passes the annotation paint, so `mergeRecordOpts` composes the
+    crops (`composeCrop`, region-inside-grade, because the region was chosen
+    on the graded picture) and REMAPS the patches into the final output
+    rectangle - they are stored as full-frame fractions, and the canvas being
+    painted is the cropped region. Grade patches paint FIRST so an annotation
+    still reads on top of a covered watermark.
+  - `shiftGame` AND THE WHOLE TIMECODE-SHIFT PROBLEM ARE GONE. Trim is a view
+    window, so the file's own clock never moves and no clip has to be
+    renumbered. Do not reintroduce a destructive trim.
+  - THE TRADE, stated plainly: the file in videos/ stays ungraded. Everything
+    that leaves Clips leaves through an export and exports are graded, so this
+    only matters if Tony hands someone a raw game file - and a raw master is
+    the right thing to hand over.
+  - "ENHANCE" IS A FILTER PRESET, not AI upscaling. "COVER A WATERMARK" covers
+    it, it does not inpaint. Both say so in the UI and must keep saying so.
+  - THE CROP IS DRAWN, not picked from six presets: a dimmed surround with a
+    rule-of-thirds grid and the Diagrams selection grips, dragged to move and
+    resized from eight handles, with optional aspect locks. While the crop
+    overlay is open THE PREVIEW IS UNCROPPED - cropping the picture under a
+    crop tool would move the thing being aimed at.
 - **THE ANNOTATION TOOLBAR IS ALWAYS ON SCREEN** (2026-08-27, Tony's call).
   It used to live inside `#anRoot`, so it existed only once a freeze was
   already open - the tools were invisible exactly when you were deciding

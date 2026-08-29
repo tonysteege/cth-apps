@@ -1218,6 +1218,7 @@ button.crumb:hover { color: var(--mist); background: var(--n-100); }
   background: var(--ink); border-radius: var(--r-md);
   aspect-ratio: 16 / 9; width: 100%;
 }
+.ve-fit { position: absolute; inset: 0; overflow: hidden; }
 .ve-frame video { width: 100%; height: 100%; object-fit: contain; display: block; }
 .ve-patches { position: absolute; inset: 0; }
 .ve-patch {
@@ -1261,17 +1262,50 @@ button.crumb:hover { color: var(--mist); background: var(--n-100); }
 .ve-chip--static:hover { background: var(--sunken); border-color: var(--edge); color: var(--n-700); }
 .ve-patchlist { display: flex; flex-wrap: wrap; gap: 4px; }
 .ve-foot { display: flex; align-items: center; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--edge-soft); }
-.ve-progress { font-size: 12px; letter-spacing: 0.15px; color: var(--select); font-variant-numeric: tabular-nums; }
 
 @media (max-width: 860px) {
   .ve-veil .ve-sheet { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto; }
   .ve-stage { padding: 12px; }
   .ve-panel { padding: 0 12px 12px; }
 }
-/* A trim that strands tags is a warning, not an error: the edit is legal and
-   fully reversible, it just costs something the coach should see first. */
-.ve-warn {
-  font-size: 11px; letter-spacing: 0.2px; line-height: 1.45; margin: 0;
-  color: var(--danger); background: var(--danger-soft);
-  border-radius: 6px; padding: 6px 8px;
+
+/* --------------------------------------------------- the crop overlay
+   A dimmed frame with a clear rectangle punched through it, dragged by its
+   body and resized by eight grips. The grips are the Diagrams selection
+   grips, because a rectangle being resized should feel the same everywhere
+   in the suite. */
+.ve-croplay { position: absolute; inset: 0; }
+/* The dim is drawn by the BOX, not the layer, using an enormous spread
+   shadow - that gives a real hole rather than four positioned panels. */
+.ve-cropbox {
+  position: absolute;
+  outline: 1.5px dashed var(--select);
+  box-shadow: 0 0 0 100vmax rgb(0 0 0 / 0.45);
+  cursor: move;
 }
+/* The thirds, drawn inside the box - the standard framing aid. */
+.ve-cropbox::before, .ve-cropbox::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  border-style: solid; border-color: rgb(255 255 255 / 0.28);
+}
+.ve-cropbox::before { border-width: 0 1px; left: 33.33%; right: 33.33%; }
+.ve-cropbox::after { border-width: 1px 0; top: 33.33%; bottom: 33.33%; }
+.ve-h {
+  position: absolute; width: 11px; height: 11px;
+  background: var(--cloud); border: 2px solid var(--select);
+  border-radius: 2px; box-sizing: border-box;
+}
+.ve-h--nw { left: -6px; top: -6px; cursor: nwse-resize; }
+.ve-h--ne { right: -6px; top: -6px; cursor: nesw-resize; }
+.ve-h--sw { left: -6px; bottom: -6px; cursor: nesw-resize; }
+.ve-h--se { right: -6px; bottom: -6px; cursor: nwse-resize; }
+.ve-h--n { left: 50%; top: -6px; margin-left: -6px; cursor: ns-resize; }
+.ve-h--s { left: 50%; bottom: -6px; margin-left: -6px; cursor: ns-resize; }
+.ve-h--w { left: -6px; top: 50%; margin-top: -6px; cursor: ew-resize; }
+.ve-h--e { right: -6px; top: 50%; margin-top: -6px; cursor: ew-resize; }
+
+/* "Changes apply instantly" belongs beside the title, not in a toast that
+   fires sixty times during a slider drag. */
+.ve-live { flex: 1; font-size: 12px; letter-spacing: 0.15px; color: var(--mist); }
+.ve-state { font-size: 12px; letter-spacing: 0.15px; color: var(--soft); }
+.ve-state.on { color: var(--select); font-weight: 500; }

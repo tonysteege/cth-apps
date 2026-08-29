@@ -1,82 +1,41 @@
-// CTH Clips - the video editor (2026-08-27, Tony's spec).
+// CTH Clips - the video editor.
 //
-// Trim, crop, colour, patch out a watermark, compress. Finish and the file in
-// videos/ IS the edited video, with the original kept so it can be put back.
+// Rebuilt 2026-08-27 on Tony's "instant or remove it". The first version
+// re-encoded the whole file through MediaRecorder in real time, so a 90
+// minute game cost 90 minutes and came back lossy. Nothing is re-encoded
+// now: the edit is a GRADE on the game record (see grade.js), applied at
+// playback, on a frozen frame and in every export. Apply and Revert are one
+// IndexedDB write each, which is why they are instant rather than merely
+// fast.
 //
-// WHAT THIS IS AND IS NOT, because the honest limits shape every decision
-// below. Clips is a zero-build, fully client-side app: there is no server to
-// hand a file to and no ffmpeg. Everything here is done by painting frames
-// into a canvas and recording that canvas, which means:
+// THE EDITOR IS A PREVIEW OF THE GRADE, nothing more. Every control writes
+// into `ed.g` and repaints through the same `gradeCss` the player uses, so
+// what is on screen here is exactly what the player and the exports produce.
+// There is no second rendering path to drift.
 //
-//   - EDITING IS INSTANT, RENDERING IS REAL TIME. Every control previews live
-//     off CSS filters and a transform, so the whole edit is free to design.
-//     Only Apply costs anything, and it costs one second per second of
-//     footage, because MediaRecorder captures a playing video. TRIM FIRST:
-//     it is the one control that makes every other one cheaper.
-//   - THE RESULT IS RE-ENCODED, so it is lossy. That is the price of not
-//     having ffmpeg, and it is why the original is always kept.
-//   - "ENHANCE" IS A FILTER PRESET, not AI upscaling. It lifts contrast,
-//     saturation and brightness the way a camera profile would. Nothing in a
-//     browser can invent detail that is not in the source.
-//   - "REMOVE WATERMARK" PATCHES, it does not inpaint. A blur or a solid
-//     block over the region. Real inpainting needs a model and a server.
-//
-// THE ONE THING THAT MUST NOT BE GOT WRONG: trimming the front of a video
-// shifts every timecode in the game. Clips, freezes and the timeline all
-// store absolute seconds, so a 30 second trim moves all of them 30 seconds.
-// `shiftGame` does that in the same transaction as the swap.
+// THERE IS NO APPLY BUTTON, on purpose: there is nothing to wait for. A
+// change is written straight onto the record and the player behind the sheet
+// moves with it.
 
-import { fsWrite, fsGetFile, fsExists, fsCreateFolder, fsConnected, fsLabel } from './localfs.js';
-import { recordRange, deliver } from './export.js';
 import { toast, esc } from './ui.js';
 import { putGame } from './store.js';
-
-// Originals live beside the videos in one folder, not scattered as
-// `name.original.mp4` siblings: a folder can be ignored at a glance and a
-// suffix cannot.
-const ORIGINALS = '/videos/.originals';
+import {
+  emptyGrade, normalizeGrade, isNeutral, gradeCss,
+  NEUTRAL, ENHANCE, FULL_CROP,
+} from './grade.js';
 
 let ed = null;
 
 export function editing() { return !!ed; }
 
-// ---------------------------------------------------------------- the look
-//
-// Colour is a CSS filter string, which is the same grammar the canvas takes.
-// One expression drives the live preview AND the render, so what is on screen
-// is what lands in the file - there is no second code path to drift.
-export function filterString(c) {
-  const p = [];
-  if (c.brightness !== 100) p.push(`brightness(${c.brightness}%)`);
-  if (c.contrast !== 100) p.push(`contrast(${c.contrast}%)`);
-  if (c.saturate !== 100) p.push(`saturate(${c.saturate}%)`);
-  // Temperature is faked with sepia plus a hue turn: warm adds sepia and
-  // rotates back toward orange, cool rotates toward blue. A real white
-  // balance needs per-channel gain, which CSS filters do not expose.
-  if (c.temp > 0) p.push(`sepia(${c.temp}%) saturate(${100 + c.temp}%)`);
-  if (c.temp < 0) p.push(`hue-rotate(${c.temp * 0.6}deg) saturate(${100 - c.temp * 0.3}%)`);
-  return p.length ? p.join(' ') : 'none';
-}
-
-export const NEUTRAL = { brightness: 100, contrast: 100, saturate: 100, temp: 0 };
-// Measured to be a lift, not a look: enough to cut through arena lighting
-// without turning white ice grey-blue.
-export const ENHANCE = { brightness: 104, contrast: 112, saturate: 115, temp: 4 };
-
-const QUALITY = [
-  ['Original', { scale: 1, bitrate: 16_000_000 }],
-  ['High', { scale: 1, bitrate: 8_000_000 }],
-  ['Medium', { scale: 0.75, bitrate: 4_000_000 }],
-  ['Small', { scale: 0.5, bitrate: 2_000_000 }],
-];
-
-const CROPS = [
-  ['Full', { x: 0, y: 0, w: 1, h: 1 }],
-  ['16:9 Tight', { x: 0.06, y: 0.06, w: 0.88, h: 0.88 }],
-  ['Left Half', { x: 0, y: 0, w: 0.5, h: 1 }],
-  ['Right Half', { x: 0.5, y: 0, w: 0.5, h: 1 }],
-  ['Top Half', { x: 0, y: 0, w: 1, h: 0.5 }],
-  ['Bottom Half', { x: 0, y: 0.5, w: 1, h: 0.5 }],
+// Aspect presets set the SHAPE and centre it; the box is then dragged. A
+// starting point, not the six fixed crops this used to offer.
+const ASPECTS = [
+  ['Free', null],
+  ['16:9', 16 / 9],
+  ['4:3', 4 / 3],
+  ['1:1', 1],
+  ['9:16', 9 / 16],
 ];
 
 const fmt = (t) => {
@@ -84,25 +43,23 @@ const fmt = (t) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
 
-// ---------------------------------------------------------------- the sheet
+const clamp01 = (v) => Math.max(0, Math.min(1, v));
 
-export async function openVideoEditor({ game, video, src, onReplaced }) {
+export async function openVideoEditor({ game, video, src, onApplied }) {
   if (ed) return;
   const dur = video.duration || 0;
   if (!dur) { toast('The Video Is Still Loading', true); return; }
+  const wasPlaying = !video.paused;
   video.pause();
 
   ed = {
     game,
     video,
-    src,
-    onReplaced,
-    trim: { in: 0, out: dur },
-    crop: { x: 0, y: 0, w: 1, h: 1 },
-    color: { ...NEUTRAL },
-    patches: [],
-    quality: 0,
-    rendering: false,
+    onApplied,
+    g: normalizeGrade(game.grade) || emptyGrade(),
+    aspect: null,
+    patchBlur: false,
+    wasPlaying,
   };
 
   const veil = document.createElement('div');
@@ -111,43 +68,42 @@ export async function openVideoEditor({ game, video, src, onReplaced }) {
     <div class="sheet ve-sheet" role="dialog" aria-modal="true" aria-label="Edit Video">
       <div class="ve-top">
         <h3>Edit ${esc(game.name)}</h3>
-        <button class="mini" data-x="close" title="Close Without Changing Anything">Close</button>
+        <span class="ve-live">Changes apply instantly - nothing is re-encoded</span>
+        <button class="mini" data-x="close" title="Close">Close</button>
       </div>
 
       <div class="ve-stage">
         <div class="ve-frame" id="veFrame">
-          <video id="veVideo" playsinline muted></video>
-          <div class="ve-patches" id="vePatches"></div>
+          <div class="ve-fit" id="veFit">
+            <video id="veVideo" playsinline muted></video>
+            <div class="ve-patches" id="vePatches"></div>
+            <div class="ve-croplay" id="veCropLay" hidden>
+              <div class="ve-cropbox" id="veCropBox">
+                ${['nw', 'ne', 'sw', 'se', 'n', 's', 'w', 'e'].map((h) => `<i class="ve-h ve-h--${h}" data-h="${h}"></i>`).join('')}
+              </div>
+            </div>
+          </div>
         </div>
         <div class="ve-scrub">
           <button class="mini" data-x="play">Play</button>
-          <input type="range" id="veSeek" min="0" max="${dur}" step="0.05" value="0">
+          <input type="range" id="veSeek" min="0" max="${dur}" step="0.05" value="0" aria-label="Position">
           <span class="ve-tc" id="veTc">0:00</span>
         </div>
       </div>
 
       <div class="ve-panel">
         <section class="ve-sec">
-          <div class="ve-title">Trim</div>
-          <p class="ve-note">Rendering runs in real time, so trimming first is what makes everything else quick.</p>
-          <p class="ve-warn" id="veStranded" hidden></p>
-          <label class="ve-row"><span>Start</span>
-            <input type="range" id="veIn" min="0" max="${dur}" step="0.1" value="0">
-            <em id="veInTc">0:00</em>
-            <button class="mini" data-x="inHere" title="Set The Start To Where The Preview Is">Set Here</button>
-          </label>
-          <label class="ve-row"><span>End</span>
-            <input type="range" id="veOut" min="0" max="${dur}" step="0.1" value="${dur}">
-            <em id="veOutTc">${fmt(dur)}</em>
-            <button class="mini" data-x="outHere" title="Set The End To Where The Preview Is">Set Here</button>
-          </label>
-        </section>
-
-        <section class="ve-sec">
           <div class="ve-title">Crop</div>
-          <div class="an-seg ve-seg" id="veCrops" role="group" aria-label="Crop">
-            ${CROPS.map(([n], i) => `<button class="an-segbtn${i === 0 ? ' on' : ''}" data-crop="${i}">${n}</button>`).join('')}
+          <div class="ve-chips">
+            <span class="an-seg ve-seg" id="veAspect" role="group" aria-label="Aspect">
+              ${ASPECTS.map(([n], i) => `<button class="an-segbtn${i === 0 ? ' on' : ''}" data-asp="${i}">${n}</button>`).join('')}
+            </span>
           </div>
+          <div class="ve-chips">
+            <button class="mini" data-x="cropOn">Draw A Crop</button>
+            <button class="mini" data-x="cropOff">Full Frame</button>
+          </div>
+          <p class="ve-note" id="veCropNote">Full frame.</p>
         </section>
 
         <section class="ve-sec">
@@ -159,14 +115,14 @@ export async function openVideoEditor({ game, video, src, onReplaced }) {
           ${[['brightness', 'Brightness', 50, 150], ['contrast', 'Contrast', 50, 200],
              ['saturate', 'Saturation', 0, 200], ['temp', 'Warmth', -60, 60]].map(([k, label, lo, hi]) => `
             <label class="ve-row"><span>${label}</span>
-              <input type="range" data-c="${k}" min="${lo}" max="${hi}" step="1" value="${NEUTRAL[k]}">
+              <input type="range" data-c="${k}" min="${lo}" max="${hi}" step="1" value="${NEUTRAL[k]}" aria-label="${label}">
               <em data-cv="${k}">${NEUTRAL[k]}</em>
             </label>`).join('')}
         </section>
 
         <section class="ve-sec">
-          <div class="ve-title">Patch Out A Watermark</div>
-          <p class="ve-note">Drag a box over the logo. It is covered with a blur or a solid block - the pixels underneath cannot be recovered, so this hides a mark rather than removing it.</p>
+          <div class="ve-title">Cover A Watermark</div>
+          <p class="ve-note">Drag a box over the logo. It is covered, not removed - the pixels underneath cannot be recovered.</p>
           <div class="ve-chips">
             <button class="mini" data-x="addPatch">+ Box</button>
             <span class="an-seg" role="group" aria-label="Patch Style">
@@ -176,22 +132,13 @@ export async function openVideoEditor({ game, video, src, onReplaced }) {
           </div>
           <div class="ve-patchlist" id="vePatchList"></div>
         </section>
-
-        <section class="ve-sec">
-          <div class="ve-title">Quality And Size</div>
-          <div class="an-seg ve-seg" id="veQual" role="group" aria-label="Quality">
-            ${QUALITY.map(([n], i) => `<button class="an-segbtn${i === 0 ? ' on' : ''}" data-q="${i}">${n}</button>`).join('')}
-          </div>
-          <p class="ve-note" id="veEstimate"></p>
-        </section>
       </div>
 
       <div class="sheet-row ve-foot">
-        <button class="btn" data-x="revert" id="veRevert" hidden title="Put The Original File Back">Revert To Original</button>
+        <button class="btn" data-x="revert" id="veRevert">Remove All Edits</button>
         <span class="vp-flex"></span>
-        <span class="ve-progress" id="veProgress" hidden></span>
-        <button class="btn" data-x="close">Cancel</button>
-        <button class="btn btn-ink" data-x="apply">Apply And Replace</button>
+        <span class="ve-state" id="veState"></span>
+        <button class="btn btn-ink" data-x="close">Done</button>
       </div>
     </div>`;
   document.body.appendChild(veil);
@@ -199,59 +146,76 @@ export async function openVideoEditor({ game, video, src, onReplaced }) {
 
   const v = veil.querySelector('#veVideo');
   v.src = src;
+  const fit = veil.querySelector('#veFit');
   const seek = veil.querySelector('#veSeek');
-  const tc = veil.querySelector('#veTc');
-  const frame = veil.querySelector('#veFrame');
+  const cropLay = veil.querySelector('#veCropLay');
+  const cropBox = veil.querySelector('#veCropBox');
 
-  // The preview is CSS only, so every control is instant and nothing is
-  // encoded until Apply.
-  const paintPreview = () => {
-    v.style.filter = filterString(ed.color);
-    const c = ed.crop;
-    // Crop is shown by scaling the video up and shifting it, so the frame
-    // element becomes the viewport onto the kept region.
-    v.style.transform = `scale(${1 / c.w}) translate(${-c.x * 100}%, ${-c.y * 100}%)`;
+  // -------------------------------------------------------------- painting
+
+  const paint = () => {
+    const css = gradeCss(ed.g);
+    v.style.filter = css.filter;
+    // While the crop overlay is open the picture stays UNCROPPED, because the
+    // box is drawn on the full frame - cropping the preview under a crop tool
+    // would move the thing being aimed at.
+    v.style.transform = cropLay.hidden ? css.transform : 'none';
     v.style.transformOrigin = 'top left';
     paintPatches();
-    paintEstimate();
+    paintCropBox();
+    paintState();
+  };
+
+  const paintCropBox = () => {
+    const c = ed.g.crop;
+    cropBox.style.left = `${c.x * 100}%`;
+    cropBox.style.top = `${c.y * 100}%`;
+    cropBox.style.width = `${c.w * 100}%`;
+    cropBox.style.height = `${c.h * 100}%`;
+    const full = c.x === 0 && c.y === 0 && c.w === 1 && c.h === 1;
+    veil.querySelector('#veCropNote').textContent = full
+      ? 'Full frame.'
+      : `Keeping ${Math.round(c.w * 100)}% by ${Math.round(c.h * 100)}% of the frame.`;
   };
 
   const paintPatches = () => {
     const box = veil.querySelector('#vePatches');
-    box.innerHTML = ed.patches.map((p, i) => `
+    box.innerHTML = ed.g.patches.map((p, i) => `
       <div class="ve-patch${p.blur ? ' blur' : ''}" data-p="${i}"
         style="left:${p.x * 100}%;top:${p.y * 100}%;width:${p.w * 100}%;height:${p.h * 100}%">
         <button class="ve-patchdel" data-delp="${i}" title="Remove This Box">&times;</button>
       </div>`).join('');
-    veil.querySelector('#vePatchList').innerHTML = ed.patches.length
-      ? ed.patches.map((p, i) => `<span class="ve-chip ve-chip--static">Box ${i + 1} &middot; ${p.blur ? 'Blur' : 'Solid'}</span>`).join('')
+    veil.querySelector('#vePatchList').innerHTML = ed.g.patches.length
+      ? ed.g.patches.map((p, i) => `<span class="ve-chip ve-chip--static">Box ${i + 1} &middot; ${p.blur ? 'Blur' : 'Solid'}</span>`).join('')
       : '<span class="ve-note">No boxes yet.</span>';
-    box.querySelectorAll('[data-delp]').forEach((b) => {
-      b.onclick = (e) => { e.stopPropagation(); ed.patches.splice(Number(b.dataset.delp), 1); paintPreview(); };
-    });
+    for (const b of box.querySelectorAll('[data-delp]')) {
+      b.onclick = (e) => { e.stopPropagation(); ed.g.patches.splice(Number(b.dataset.delp), 1); commit(); };
+    }
     wirePatchDrag(box);
   };
 
-  const paintEstimate = () => {
-    const len = Math.max(0, ed.trim.out - ed.trim.in);
-    const q = QUALITY[ed.quality][1];
-    const mb = (q.bitrate / 8) * len / 1_000_000;
-    veil.querySelector('#veEstimate').textContent =
-      `About ${mb < 1024 ? `${Math.round(mb)} MB` : `${(mb / 1024).toFixed(1)} GB`}, and about ${fmt(len)} to render because it encodes in real time.`;
-    // Stranded tags are named, not silently moved. Which clips matter is the
-    // coach's call; this only makes sure the call is an informed one.
-    const out = clipsOutside(ed.game, ed.trim.in, ed.trim.out);
-    const warn = veil.querySelector('#veStranded');
-    const bits = [];
-    if (out.clips) bits.push(`${out.clips} clip${out.clips === 1 ? '' : 's'}`);
-    if (out.freezes) bits.push(`${out.freezes} freeze${out.freezes === 1 ? '' : 's'}`);
-    warn.hidden = !bits.length;
-    warn.textContent = bits.length
-      ? `${bits.join(' and ')} sit outside this trim and will point at footage that is gone. Reverting puts them back exactly.`
-      : '';
+  const paintState = () => {
+    const s = veil.querySelector('#veState');
+    s.textContent = isNeutral(ed.g) ? 'No edits' : 'Applied';
+    s.classList.toggle('on', !isNeutral(ed.g));
+    veil.querySelector('#veRevert').disabled = isNeutral(ed.g);
   };
 
-  // ---- preview transport
+  // The write is debounced only so a slider drag is one save rather than
+  // sixty; the PREVIEW is never debounced, so the picture is always live.
+  let saveTimer = 0;
+  const commit = () => {
+    paint();
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(async () => {
+      ed.game.grade = isNeutral(ed.g) ? null : ed.g;
+      await putGame(ed.game);
+      ed.onApplied?.(ed.game.grade);
+    }, 180);
+  };
+
+  // -------------------------------------------------------------- transport
+
   veil.querySelector('[data-x="play"]').onclick = (e) => {
     if (v.paused) { void v.play(); e.target.textContent = 'Pause'; }
     else { v.pause(); e.target.textContent = 'Play'; }
@@ -259,279 +223,191 @@ export async function openVideoEditor({ game, video, src, onReplaced }) {
   seek.oninput = () => { v.currentTime = Number(seek.value); };
   v.addEventListener('timeupdate', () => {
     seek.value = v.currentTime;
-    tc.textContent = fmt(v.currentTime);
+    veil.querySelector('#veTc').textContent = fmt(v.currentTime);
   });
-  v.addEventListener('loadedmetadata', paintPreview);
+  v.addEventListener('loadedmetadata', () => {
+    v.currentTime = Math.min(video.currentTime, v.duration || 0);
+    paint();
+  });
 
-  // ---- trim
-  const inR = veil.querySelector('#veIn');
-  const outR = veil.querySelector('#veOut');
-  const syncTrim = () => {
-    // The handles cannot cross. Half a second apart is the floor, which is
-    // still shorter than any clip anyone would keep.
-    if (ed.trim.in > ed.trim.out - 0.5) ed.trim.in = Math.max(0, ed.trim.out - 0.5);
-    inR.value = ed.trim.in; outR.value = ed.trim.out;
-    veil.querySelector('#veInTc').textContent = fmt(ed.trim.in);
-    veil.querySelector('#veOutTc').textContent = fmt(ed.trim.out);
-    paintEstimate();
-  };
-  inR.oninput = () => { ed.trim.in = Number(inR.value); syncTrim(); v.currentTime = ed.trim.in; };
-  outR.oninput = () => { ed.trim.out = Number(outR.value); syncTrim(); v.currentTime = ed.trim.out; };
-  veil.querySelector('[data-x="inHere"]').onclick = () => { ed.trim.in = v.currentTime; syncTrim(); };
-  veil.querySelector('[data-x="outHere"]').onclick = () => { ed.trim.out = v.currentTime; syncTrim(); };
+  // ------------------------------------------------------------ custom crop
 
-  // ---- crop
-  veil.querySelectorAll('[data-crop]').forEach((b) => {
-    b.onclick = () => {
-      ed.crop = { ...CROPS[Number(b.dataset.crop)][1] };
-      veil.querySelectorAll('[data-crop]').forEach((o) => o.classList.toggle('on', o === b));
-      paintPreview();
+  const setAspect = (a) => {
+    ed.aspect = a;
+    if (!a) return;
+    const c = ed.g.crop;
+    const boxW = fit.clientWidth * c.w;
+    const boxH = fit.clientHeight * c.h;
+    let w = c.w;
+    let h = c.h;
+    if (boxW / boxH > a) w = (boxH * a) / fit.clientWidth;
+    else h = (boxW / a) / fit.clientHeight;
+    w = Math.min(1, w); h = Math.min(1, h);
+    ed.g.crop = {
+      x: clamp01(Math.min(c.x + (c.w - w) / 2, 1 - w)),
+      y: clamp01(Math.min(c.y + (c.h - h) / 2, 1 - h)),
+      w, h,
     };
-  });
-
-  // ---- colour
-  const syncColor = () => {
-    veil.querySelectorAll('[data-c]').forEach((i) => {
-      i.value = ed.color[i.dataset.c];
-      veil.querySelector(`[data-cv="${i.dataset.c}"]`).textContent = ed.color[i.dataset.c];
-    });
-    paintPreview();
+    commit();
   };
-  veil.querySelectorAll('[data-c]').forEach((i) => {
-    i.oninput = () => { ed.color[i.dataset.c] = Number(i.value); syncColor(); };
-  });
-  veil.querySelector('[data-x="enhance"]').onclick = () => { ed.color = { ...ENHANCE }; syncColor(); };
-  veil.querySelector('[data-x="neutral"]').onclick = () => { ed.color = { ...NEUTRAL }; syncColor(); };
 
-  // ---- patches
-  let patchBlur = false;
+  for (const b of veil.querySelectorAll('[data-asp]')) {
+    b.onclick = () => {
+      for (const o of veil.querySelectorAll('[data-asp]')) o.classList.toggle('on', o === b);
+      cropLay.hidden = false;
+      if (ed.g.crop.w === 1 && ed.g.crop.h === 1) ed.g.crop = { x: 0.1, y: 0.1, w: 0.8, h: 0.8 };
+      setAspect(ASPECTS[Number(b.dataset.asp)][1]);
+      paint();
+    };
+  }
+  veil.querySelector('[data-x="cropOn"]').onclick = () => {
+    cropLay.hidden = false;
+    if (ed.g.crop.w === 1 && ed.g.crop.h === 1) ed.g.crop = { x: 0.1, y: 0.1, w: 0.8, h: 0.8 };
+    commit();
+  };
+  veil.querySelector('[data-x="cropOff"]').onclick = () => {
+    cropLay.hidden = true;
+    ed.g.crop = { ...FULL_CROP };
+    commit();
+  };
+
+  // Drag the box to move it; drag a handle to resize. Both clamp to the
+  // frame, and an aspect lock drives the other axis.
+  cropBox.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const handle = e.target.dataset?.h || null;
+    const r = fit.getBoundingClientRect();
+    const start = { ...ed.g.crop };
+    const px = (ev) => clamp01((ev.clientX - r.left) / r.width);
+    const py = (ev) => clamp01((ev.clientY - r.top) / r.height);
+    const ox = px(e) - start.x;
+    const oy = py(e) - start.y;
+
+    const move = (ev) => {
+      let c = { ...start };
+      if (!handle) {
+        c.x = clamp01(Math.min(px(ev) - ox, 1 - start.w));
+        c.y = clamp01(Math.min(py(ev) - oy, 1 - start.h));
+      } else {
+        const mx = px(ev);
+        const my = py(ev);
+        const right = start.x + start.w;
+        const bottom = start.y + start.h;
+        if (handle.includes('w')) { c.x = Math.min(mx, right - 0.05); c.w = right - c.x; }
+        if (handle.includes('e')) { c.w = Math.max(0.05, mx - start.x); }
+        if (handle.includes('n')) { c.y = Math.min(my, bottom - 0.05); c.h = bottom - c.y; }
+        if (handle.includes('s')) { c.h = Math.max(0.05, my - start.y); }
+        if (ed.aspect) {
+          if (handle === 'n' || handle === 's') {
+            c.w = Math.min(1 - c.x, (c.h * r.height * ed.aspect) / r.width);
+          } else {
+            c.h = Math.min(1 - c.y, (c.w * r.width) / ed.aspect / r.height);
+          }
+        }
+      }
+      ed.g.crop = {
+        x: clamp01(c.x),
+        y: clamp01(c.y),
+        w: Math.max(0.05, Math.min(c.w, 1 - clamp01(c.x))),
+        h: Math.max(0.05, Math.min(c.h, 1 - clamp01(c.y))),
+      };
+      paint();
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      commit();
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  });
+
+  // ---------------------------------------------------------------- colour
+
+  const syncColor = () => {
+    for (const i of veil.querySelectorAll('[data-c]')) {
+      i.value = ed.g.color[i.dataset.c];
+      i.dispatchEvent(new Event('input', { bubbles: true }));
+      veil.querySelector(`[data-cv="${i.dataset.c}"]`).textContent = ed.g.color[i.dataset.c];
+    }
+  };
+  for (const i of veil.querySelectorAll('[data-c]')) {
+    i.addEventListener('input', () => {
+      ed.g.color[i.dataset.c] = Number(i.value);
+      veil.querySelector(`[data-cv="${i.dataset.c}"]`).textContent = i.value;
+      commit();
+    });
+  }
+  veil.querySelector('[data-x="enhance"]').onclick = () => { ed.g.color = { ...ENHANCE }; syncColor(); commit(); };
+  veil.querySelector('[data-x="neutral"]').onclick = () => { ed.g.color = { ...NEUTRAL }; syncColor(); commit(); };
+
+  // --------------------------------------------------------------- patches
+
   veil.querySelector('[data-x="patchBlur"]').onclick = (e) => {
-    patchBlur = true;
+    ed.patchBlur = true;
     e.target.classList.add('on');
     veil.querySelector('[data-x="patchSolid"]').classList.remove('on');
   };
   veil.querySelector('[data-x="patchSolid"]').onclick = (e) => {
-    patchBlur = false;
+    ed.patchBlur = false;
     e.target.classList.add('on');
     veil.querySelector('[data-x="patchBlur"]').classList.remove('on');
   };
   veil.querySelector('[data-x="addPatch"]').onclick = () => {
-    // Lands bottom right, because that is where a broadcast bug almost
-    // always is, and is then dragged anywhere.
-    ed.patches.push({ x: 0.72, y: 0.8, w: 0.24, h: 0.14, blur: patchBlur });
-    paintPreview();
+    // Bottom right, because that is where a broadcast bug almost always is.
+    ed.g.patches.push({ x: 0.72, y: 0.8, w: 0.24, h: 0.14, blur: ed.patchBlur });
+    commit();
   };
 
   function wirePatchDrag(box) {
-    box.querySelectorAll('.ve-patch').forEach((elm) => {
+    for (const elm of box.querySelectorAll('.ve-patch')) {
       elm.onpointerdown = (e) => {
         if (e.target.dataset.delp != null) return;
         e.preventDefault();
-        const p = ed.patches[Number(elm.dataset.p)];
-        const r = frame.getBoundingClientRect();
-        const ox = e.clientX / r.width - p.x;
-        const oy = e.clientY / r.height - p.y;
-        const rx = r.left / r.width;
-        const ry = r.top / r.height;
+        const p = ed.g.patches[Number(elm.dataset.p)];
+        const r = fit.getBoundingClientRect();
+        const ox = (e.clientX - r.left) / r.width - p.x;
+        const oy = (e.clientY - r.top) / r.height - p.y;
         const mv = (ev) => {
-          p.x = Math.max(0, Math.min(1 - p.w, ev.clientX / r.width - ox - rx));
-          p.y = Math.max(0, Math.min(1 - p.h, ev.clientY / r.height - oy - ry));
+          p.x = Math.max(0, Math.min(1 - p.w, (ev.clientX - r.left) / r.width - ox));
+          p.y = Math.max(0, Math.min(1 - p.h, (ev.clientY - r.top) / r.height - oy));
           elm.style.left = `${p.x * 100}%`;
           elm.style.top = `${p.y * 100}%`;
         };
         const up = () => {
           window.removeEventListener('pointermove', mv);
           window.removeEventListener('pointerup', up);
+          commit();
         };
         window.addEventListener('pointermove', mv);
         window.addEventListener('pointerup', up);
       };
-    });
+    }
   }
 
-  // ---- quality
-  veil.querySelectorAll('[data-q]').forEach((b) => {
-    b.onclick = () => {
-      ed.quality = Number(b.dataset.q);
-      veil.querySelectorAll('[data-q]').forEach((o) => o.classList.toggle('on', o === b));
-      paintEstimate();
-    };
-  });
+  // ------------------------------------------------------------------ exit
 
-  // ---- revert, only offered when an original is actually on disk
-  const origPath = `${ORIGINALS}/${game.name}`;
-  if (fsConnected()) {
-    try {
-      if (await fsExists(origPath)) {
-        const rb = veil.querySelector('#veRevert');
-        rb.hidden = false;
-        rb.onclick = () => void revertToOriginal(game, origPath, onReplaced);
-      }
-    } catch (_) { /* no originals folder yet is the normal case */ }
-  }
+  veil.querySelector('[data-x="revert"]').onclick = () => {
+    ed.g = emptyGrade();
+    ed.aspect = null;
+    cropLay.hidden = true;
+    for (const o of veil.querySelectorAll('[data-asp]')) o.classList.toggle('on', o.dataset.asp === '0');
+    syncColor();
+    commit();
+    toast('Edits Removed');
+  };
+  for (const b of veil.querySelectorAll('[data-x="close"]')) b.onclick = () => closeEditor();
+  veil.addEventListener('mousedown', (e) => { if (e.target === veil) closeEditor(); });
 
-  veil.querySelectorAll('[data-x="close"]').forEach((b) => { b.onclick = () => closeEditor(); });
-  veil.addEventListener('mousedown', (e) => { if (e.target === veil && !ed.rendering) closeEditor(); });
-  veil.querySelector('[data-x="apply"]').onclick = () => void applyEdit();
-
-  syncTrim();
   syncColor();
-  paintPatches();
+  paint();
 }
 
 export function closeEditor() {
   if (!ed) return;
-  if (ed.rendering) { toast('Still Rendering - Let It Finish', true); return; }
-  ed.veil.remove();
+  const { video, wasPlaying, veil } = ed;
+  veil.remove();
   ed = null;
-}
-
-// ------------------------------------------------------------------ render
-
-async function applyEdit() {
-  if (!ed || ed.rendering) return;
-  const { game, video, trim, crop, color, patches } = ed;
-  const q = QUALITY[ed.quality][1];
-  const len = Math.max(0, trim.out - trim.in);
-  if (len < 0.5) { toast('Nothing To Render - Check The Trim', true); return; }
-
-  if (game.source === 'local') {
-    toast('This Video Was Opened As A One-Off File - The Edit Will Download Instead Of Replacing It', true);
-  }
-
-  ed.rendering = true;
-  const prog = ed.veil.querySelector('#veProgress');
-  prog.hidden = false;
-  const apply = ed.veil.querySelector('[data-x="apply"]');
-  apply.disabled = true;
-
-  // The patches are painted in OUTPUT pixels, after the frame is drawn and
-  // after the filter has been cleared, so a blur box blurs the picture rather
-  // than the picture plus its own edge.
-  const paint = (ctx, cv) => {
-    for (const p of patches) {
-      const px = p.x * cv.width; const py = p.y * cv.height;
-      const pw = p.w * cv.width; const ph = p.h * cv.height;
-      if (p.blur) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(px, py, pw, ph);
-        ctx.clip();
-        ctx.filter = `blur(${Math.max(6, Math.round(pw * 0.08))}px)`;
-        ctx.drawImage(cv, 0, 0);
-        ctx.restore();
-      } else {
-        ctx.fillStyle = '#000';
-        ctx.fillRect(px, py, pw, ph);
-      }
-    }
-  };
-
-  const started = Date.now();
-  try {
-    const { blob, ext } = await recordRange(video, {
-      from: trim.in,
-      to: trim.out,
-      crop,
-      filter: filterString(color),
-      scale: q.scale,
-      bitrate: q.bitrate,
-      paint: patches.length ? paint : null,
-      audio: 'video',
-      onFrame: (t) => {
-        const done = Math.max(0, t - trim.in);
-        prog.textContent = `Rendering ${Math.round((done / len) * 100)}%  (${fmt(done)} of ${fmt(len)})`;
-      },
-    });
-    prog.textContent = 'Saving…';
-    await swapInEdited(game, blob, ext, trim.in, ed.onReplaced);
-    toast(`Edited In ${fmt((Date.now() - started) / 1000)}`);
-    closeEditorForce();
-  } catch (e) {
-    console.error(e);
-    toast(e.message || 'The Render Failed', true);
-    ed.rendering = false;
-    prog.hidden = true;
-    apply.disabled = false;
-  }
-}
-
-function closeEditorForce() {
-  if (!ed) return;
-  ed.rendering = false;
-  ed.veil.remove();
-  ed = null;
-}
-
-// ------------------------------------------------------------------ the swap
-//
-// The original is copied aside BEFORE anything is overwritten, and only once:
-// a second edit must not overwrite the untouched original with an already
-// edited one, or Revert would put back the first edit instead of the source.
-
-async function swapInEdited(game, blob, ext, trimIn, onReplaced) {
-  if (game.source === 'local' || !fsConnected()) {
-    await deliver(game, blob, `${game.name.replace(/\.[^.]+$/, '')}-edited.${ext}`);
-    return;
-  }
-  const path = game.path;
-  try { await fsCreateFolder(ORIGINALS); } catch (_) { /* already there */ }
-  const orig = `${ORIGINALS}/${game.name}`;
-  if (!(await fsExists(orig))) {
-    const src = await fsGetFile(path);
-    await fsWrite(orig, src);
-  }
-  await fsWrite(path, blob);
-  await shiftGame(game, trimIn);
-  onReplaced?.();
-}
-
-export async function revertToOriginal(game, origPath, onReplaced) {
-  try {
-    const orig = await fsGetFile(origPath);
-    await fsWrite(game.path, orig);
-    // Everything shifted by the trims is put back in one step, which is why
-    // the total is carried on the record rather than each edit separately.
-    await shiftGame(game, -(game.editShift || 0));
-    game.editShift = 0;
-    game.edited = false;
-    await putGame(game);
-    toast(`Original Put Back From ${fsLabel(origPath)}`);
-    closeEditorForce();
-    onReplaced?.();
-  } catch (e) {
-    console.error(e);
-    toast(e.message || 'Could Not Put The Original Back', true);
-  }
-}
-
-// EVERY TIMECODE IN THE GAME MOVES WITH A TRIM. Clips, freezes and the log all
-// store absolute seconds into the file, so cutting 30 seconds off the front
-// silently moves all of them unless this runs.
-//
-// THE SHIFT IS A PURE OFFSET AND IS NEVER CLAMPED. Clamping was the first
-// version and it destroyed data: a clip at 5s trimmed by 30 became 0, and
-// reverting added the 30 back to give 30 - the original 5 was gone. Keeping
-// the arithmetic lossless means revert is exact for every clip, including the
-// ones that fall outside the kept footage. A negative in-point is handled at
-// playback, where seeking already clamps to zero, and `clipsOutside` warns
-// before an edit rather than silently mangling anything.
-export async function shiftGame(game, seconds) {
-  if (!seconds) return;
-  for (const c of game.clips || []) {
-    c.in = (c.in || 0) - seconds;
-    c.out = (c.out || 0) - seconds;
-  }
-  for (const f of game.freezes || []) f.t = (f.t || 0) - seconds;
-  game.editShift = (game.editShift || 0) + seconds;
-  game.edited = true;
-  await putGame(game);
-}
-
-// How many tags a trim would strand. Reported before Apply, never fixed
-// silently: which clips matter is the coach's call, not this file's.
-export function clipsOutside(game, from, to) {
-  const c = (game.clips || []).filter((x) => x.out <= from || x.in >= to).length;
-  const f = (game.freezes || []).filter((x) => x.t < from || x.t > to).length;
-  return { clips: c, freezes: f };
+  if (wasPlaying) void video.play().catch(() => {});
 }

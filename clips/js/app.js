@@ -33,11 +33,13 @@ import {
   playerDuration,
   playerSel,
   addFreezeHere,
+  applyGrade,
 } from './player.js';
 import { openAnnotate, annotationElements, paintIdleBar, onAnnotateIdle, applyToolStyle } from './annotate.js';
 import { recordRange, deliver, fileStem, CROP_PRESETS, openMic } from './export.js';
 import { openCompare, closeCompare, comparing } from './compare.js';
 import { openVideoEditor } from './videoedit.js';
+import { mergeRecordOpts } from './grade.js';
 import { drawEl } from '/diagrams/js/flat.js';
 import { toast, esc, confirmSheet, fmtDate } from './ui.js';
 import { putDrill, uid as drillUid } from '/diagrams/js/store.js';
@@ -477,7 +479,7 @@ async function showPlayer(id) {
               <button class="tbtn" id="vpFrameF" title="Next Frame"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 17l5-5-5-5"/><path d="M18 6v12"/></svg></button>
               <button class="tbtn" id="vpFwd5" title="Forward 5s"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 17l5-5-5-5"/><path d="M6 17l5-5-5-5"/></svg></button>
               <button class="tbtn tbtn-word" id="vpSpeed" title="Playback Speed">1x</button>
-              <button class="tbtn tbtn-word" id="vpEdit" title="Trim, Crop, Colour, Patch And Compress This Video">Edit</button>
+              <button class="tbtn tbtn-word" id="vpEdit" title="Crop, Colour And Cover A Watermark - Applies Instantly">Edit</button>
             </span>
             <!-- The timeline moved INTO the transport bar, which is where a
                  scrubber belongs anyway: the clock, the transport and the
@@ -506,14 +508,13 @@ async function showPlayer(id) {
   $('#vpFreeze').oncontextmenu = (e) => { e.preventDefault(); void editBuffer('freezeBuf', 'Freeze'); };
   $('#vpRecord').onclick = () => void openRecord(game);
   $('#vpCompare').onclick = () => void openCompare({ name: game.name, url: src, startAt: video().currentTime });
+  // Nothing on disk changes, so there is nothing to reload: the grade is
+  // handed straight to the player, which puts it on the video element.
   $('#vpEdit').onclick = () => void openVideoEditor({
     game,
     video: video(),
     src,
-    // The file on disk changed under the player, so the whole view is rebuilt
-    // rather than patched: the duration, the timeline and every clip position
-    // all moved together.
-    onReplaced: () => { void showPlayer(id); },
+    onApplied: (grade) => applyGrade(grade),
   });
   wirePanels();
 
@@ -937,7 +938,7 @@ async function runFreezeExport(game, freeze, elements) {
   const meta = namingFor(game, freeze.t);
   const stemName = fileStem(st.naming, { ...meta, suffix: '-freeze' });
   try {
-    const { blob, ext } = await recordRange(v, {
+    const { blob, ext } = await recordRange(v, mergeRecordOpts(game.grade, {
       from: w.from,
       to: w.to,
       holdAt: freeze.t,
@@ -952,7 +953,7 @@ async function runFreezeExport(game, freeze, elements) {
         for (const el2 of elements || []) drawEl(ctx, el2);
         ctx.restore();
       },
-    });
+    }));
     await deliver(game, blob, `${stemName}.${ext}`);
   } catch (e) {
     console.error(e);
@@ -967,7 +968,7 @@ async function runPull(game, t, nameMeta = null) {
   const w = clipWindow(t, buf, playerDuration());
   const meta = nameMeta || namingFor(game, t);
   try {
-    const { blob, ext } = await recordRange(v, { from: w.from, to: w.to });
+    const { blob, ext } = await recordRange(v, mergeRecordOpts(game.grade, { from: w.from, to: w.to }));
     await deliver(game, blob, `${fileStem(st.naming, meta)}.${ext}`);
   } catch (e) {
     console.error(e);
@@ -1112,7 +1113,7 @@ async function startRecord(game, crop, st) {
 
   recording = { cancel: null, cleanup: () => window.removeEventListener('pointermove', track) };
   try {
-    const { blob, ext } = await recordRange(v, {
+    const { blob, ext } = await recordRange(v, mergeRecordOpts(game.grade, {
       from: null,
       to: null,
       crop,
@@ -1120,7 +1121,7 @@ async function startRecord(game, crop, st) {
       audio: 'video',
       mic,
       onFrame: () => { if (recording?.stopRequested) throw 0; },
-    });
+    }));
     await deliver(game, blob, `${fileStem(st.naming, namingFor(game, v.currentTime))}-analysis.${ext}`);
   } catch (e) {
     if (e) { console.error(e); toast(e.message || 'Recording Failed', true); }
