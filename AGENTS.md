@@ -769,8 +769,10 @@ after a live inspection of it. The two live side by side.
   beats a tall one. A new app is inserted in alphabetical order, never
   appended.
 - **SECTION LABELS ARE TITLE CASE, INK, BOLD** (2026-08-27, Tony's call),
-  suite-wide: `font-size: 15px; font-weight: 700; text-transform: none;
-  letter-spacing: -0.01em; color: var(--ink)`. This replaced the 11px
+  suite-wide: `font-size: 14px; font-weight: 700; text-transform: none;
+  color: var(--ink)` - 15px and the -0.01em were both off BoardUI's scales
+  and were corrected in the 2026-08-27 conformance pass above; 14 is Body
+  Bold and still steps up from the 13px it sits beside. This replaced the 11px
   uppercase-grey label every app used - the markup already carried Title
   Case text, the caps were the css. The same values are written into
   `.pe-title` and `.clib-title` (clips), `.dlib-title` (diagrams) and
