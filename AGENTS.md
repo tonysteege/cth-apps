@@ -503,6 +503,38 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   number each, not one shared: a dense tag column and a comfortable roster are
   different decisions. Every fallback is 28px, so a record without the field
   looks exactly as it did.
+- **THE LOG IS A REAL TABLE, BUILT ON SUBGRID** (2026-08-29, Tony's call,
+  REVERSING the timecode-rides-on-the-name rule below). Name, timecode and
+  tags line up in columns across every row, and each column is exactly as wide
+  as its widest cell - measured from the actual clips, never a guessed number.
+  - THE MECHANISM HAS TO BE SUBGRID. `display: contents` on the row would let
+    the cells join the list's grid directly, but it also deletes the row as a
+    box: no striping, no hover, no selection fill, no `--rate` inset. A
+    subgrid row stays a real element that paints all of that AND contributes
+    its cells to the parent's tracks, which is what makes the columns fit.
+  - The name track is `minmax(0, auto)` so it fits the longest clip name but
+    can still give way before the tag column is squeezed to nothing.
+    `settings.hideTime` drops the COLUMN from the template rather than
+    emptying it, or its gap would remain.
+- **THE ZEBRA IS ALWAYS VISIBLE, EVEN UNDER A HIGHLIGHT** (2026-08-29, Tony's
+  call). Every state used to REPLACE the row's background, so ticking a box or
+  landing on the playing clip flattened the striping the eye tracks a name by.
+  The stripe is the `background-color` and every highlight is a TRANSLUCENT
+  `background-image` over it - two layers, so they compose instead of
+  fighting. Anything added here must be an image layer too: a `background`
+  shorthand resets the colour and takes the stripe with it. The playing clip
+  is a strong accent wash plus a bolder name, NOT the gradient pill - the pill
+  is opaque, and opaque is the whole problem.
+- **SELECTING NEVER MOVES THE LIST** (2026-08-29, Tony's call). The bulk
+  actions were a band of their own between the head row and the list, so
+  ticking a box pushed every clip down and the row under the pointer was no
+  longer the row about to be clicked. They take the FILTER ROW'S place inside
+  the head, exactly as the search field does, and the head's height never
+  changes. They are icon-only for the same reason the filters are: as words
+  they needed 348px in a column whose default is 300.
+  - THERE IS NO CLEAR BUTTON, because the select-all box is right beside them
+    and was a second control for one job. It goes INDETERMINATE on a partial
+    selection and clears on the next click, which is what a table header does.
 - **THE TIMECODE RIDES ON THE CLIP NAME, NOT A COLUMN** (2026-08-29, Tony's
   call). `.log-when` sits inside `.log-name`, before the tags. In a narrow log
   the name is what a coach reads and the timecode is a reference, so the name

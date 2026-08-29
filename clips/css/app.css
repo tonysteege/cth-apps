@@ -453,6 +453,9 @@
   box-shadow: 0 0 0 1.5px var(--sunken);
 }
 .log-filter.on .log-fcount { background: #fff; color: var(--select); }
+/* The one destructive action in the row, tinted only on hover so it does not
+   shout while the other three are being read. */
+.log-filter--danger:hover { border-color: var(--danger); color: var(--danger); background: var(--danger-soft); }
 
 /* A multi-select filter menu with a count beside every option, so it also
    reads as a summary of what the game holds. */
@@ -485,9 +488,35 @@
 .fm-dir { font-size: 11px; letter-spacing: 0.2px; color: var(--soft); white-space: nowrap; }
 .filter-menu--sort .fm-row.on .fm-dir { color: var(--mist); }
 
-.log-list { flex: 1; overflow-y: auto; }
+/* THE LOG IS A REAL TABLE (2026-08-29, Tony's call, reversing the
+   timecode-rides-on-the-name rule of the same day). Names, timecodes and tags
+   line up in columns across every row, and each column is exactly as wide as
+   its widest cell - fit-to-width, measured from the actual clips, never a
+   guessed number.
+     THE MECHANISM IS SUBGRID, and it has to be. `display: contents` on the
+   row would let the cells join the list's grid directly, but it also deletes
+   the row as a box - no striping, no hover, no selection fill, and no
+   `--rate` inset for a starred clip. A subgrid row stays a real element that
+   paints all of that AND contributes its cells to the parent's track sizing,
+   which is what makes the columns fit. */
+.log-list {
+  flex: 1; overflow-y: auto;
+  display: grid;
+  /* check | name | time | tags. The name is `auto` so it fits the longest
+     clip name, and `minmax(0, auto)` so it can still give way before the tag
+     column is squeezed to nothing in a narrow log. */
+  grid-template-columns: 16px minmax(0, auto) auto minmax(40px, 1fr);
+  align-content: start;
+}
+/* With the timecode hidden its track would still hold a gap, so the template
+   loses the column rather than emptying it. */
+.log-list--notime { grid-template-columns: 16px minmax(0, auto) minmax(40px, 1fr); }
+.log-empty { grid-column: 1 / -1; }
 /* The select-all box lives in the head row now; a clip row's own box uses the
    same 16px column, so the two line up down the whole log. */
+/* `flex: none` is for the head row, `width: 16px` matches the list grid's
+   first track - the two together are what keep the select-all box sitting
+   exactly over the column of ticks below it. */
 .c-check { flex: none; width: 16px; display: inline-flex; align-items: center; }
 .c-check input { width: 13px; height: 13px; margin: 0; cursor: pointer; accent-color: var(--select); }
 .log-count { flex: none; color: var(--soft); font-size: 11px; letter-spacing: 0.2px; white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -497,26 +526,61 @@
 .c-arrow { width: 14px; height: 14px; margin-left: 1px; flex: none; vertical-align: -2px; }
 .c-arrow.up { transform: rotate(180deg); }
 
+/* THE BULK ACTIONS SIT IN THE HEAD ROW, NOT IN A BAND OF THEIR OWN
+   (2026-08-29, Tony's call). As their own strip they pushed every clip down
+   the moment a box was ticked, so the row under the pointer was no longer the
+   row about to be clicked - selecting a second clip meant re-aiming. They
+   take the filters' place instead, exactly as the search field does, and the
+   head row's height never changes. The count is a chip rather than "N
+   Selected": the words were the widest thing in the row and the number is
+   already beside a column of ticked boxes. */
 .log-bulk {
-  display: flex; align-items: center; gap: 6px;
-  padding: 6px 10px; background: var(--select-soft);
-  border-bottom: 1px solid var(--edge);
+  display: flex; align-items: center; gap: 5px;
   font-size: 12px; letter-spacing: 0.15px;
 }
-.log-bulkn { font-weight: 600; color: var(--ink); }
+.log-bulkn {
+  flex: none; min-width: 20px; height: 20px; padding: 0 6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 6px; background: var(--select); color: #fff;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.2px;
+  font-variant-numeric: tabular-nums;
+}
 .log-bulk .mini { height: 22px; padding: 0 7px; font-size: 11px; letter-spacing: 0.2px; }
 
 /* ALTERNATING ROWS (mChapters' own look): the stripe is what lets the eye
    track a timecode across to its name in a long list. */
 .log-row {
-  display: flex; align-items: center; gap: 8px;
+  display: grid; grid-column: 1 / -1; grid-template-columns: subgrid;
+  align-items: center; gap: 8px;
   padding: 0 10px; min-height: 26px; cursor: pointer;
   border-bottom: 1px solid transparent;
   font-size: 12px; letter-spacing: 0.15px; color: var(--graphite);
 }
-.log-row:nth-child(even) { background: var(--sunken); }
-.log-row:hover { background: var(--n-200); color: var(--ink); }
-.log-row.picked { background: var(--select-soft); }
+/* The four washes, defined once. They are translucent ON PURPOSE - an opaque
+   value here would hide the stripe, which is the whole point of the rule
+   below. Neutral for hover, accent for a selection, strongest for the clip
+   actually playing. */
+.vp-log {
+  --wash-hover: rgb(0 0 0 / 0.05);
+  --wash-pick: color-mix(in oklab, var(--select) 13%, transparent);
+  --wash-pick2: color-mix(in oklab, var(--select) 19%, transparent);
+  --wash-on: color-mix(in oklab, var(--select) 24%, transparent);
+  --wash-on2: color-mix(in oklab, var(--select) 30%, transparent);
+}
+
+/* THE ZEBRA IS ALWAYS VISIBLE, EVEN UNDER A HIGHLIGHT (2026-08-29, Tony's
+   call). Every state used to REPLACE the row's background, so ticking a box
+   or landing on the playing clip flattened the striping the eye tracks a name
+   by - which is the one thing this list is read with.
+     THE STRIPE IS THE BACKGROUND-COLOR AND EVERY HIGHLIGHT IS A TRANSLUCENT
+   BACKGROUND-IMAGE OVER IT. Two layers, so they compose instead of fighting:
+   an odd row and an even row under the same selection stay visibly different.
+   Anything added here must be an image layer too - a `background` shorthand
+   would reset the colour and take the stripe with it. */
+.log-row:nth-child(even) { background-color: var(--sunken); }
+.log-row:hover { background-image: linear-gradient(var(--wash-hover), var(--wash-hover)); color: var(--ink); }
+.log-row.picked { background-image: linear-gradient(var(--wash-pick), var(--wash-pick)); }
+.log-row.picked:hover { background-image: linear-gradient(var(--wash-pick2), var(--wash-pick2)); }
 /* A RATED CLIP WEARS ITS COLOUR (2026-08-29, Tony's call), replacing the
    three dots that had a column to themselves. A bar down the leading edge
    plus a wash: readable at a glance down a long list, and it costs no width. */
@@ -525,34 +589,42 @@
    striping the log already reads by. 5px instead of 3: the bar is now the
    only signal, so it has to carry it on its own. */
 .log-row.rated { box-shadow: inset 5px 0 0 0 var(--rate); }
-.log-row.on.rated { box-shadow: inset 5px 0 0 0 var(--rate), inset 0 1px 0 0 rgba(255, 255, 255, 0.18); }
-.log-row.on { background-image: var(--grad-primary); color: #fff; box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.18); }
 
-.log-row.on .log-tagline { color: rgba(255,255,255,.72); }
-.log-row.on .log-tagline::placeholder { color: rgba(255,255,255,.5); }
+/* THE PLAYING CLIP IS A TINT, NOT THE GRADIENT PILL. The pill is the suite's
+   selected state everywhere else, but here it is an opaque fill across a
+   striped list, and it took the stripe with it. A strong accent wash plus a
+   bolder name reads as clearly and lets the row underneath stay itself. */
+.log-row.on { background-image: linear-gradient(var(--wash-on), var(--wash-on)); color: var(--ink); }
+.log-row.on:hover { background-image: linear-gradient(var(--wash-on2), var(--wash-on2)); }
+.log-row.on .log-name { font-weight: 700; }
+
+.log-row.on .log-tagline { color: var(--graphite); }
 /* The timecode rides on the end of the NAME rather than holding a column of
    its own (2026-08-29, Tony's call). In a narrow log the name is what a coach
    reads and the timecode is a reference, so the name gets the width and the
    timecode takes whatever is left - and is the first thing dropped when the
    row runs out of room. */
+/* Its own column now, not a suffix on the name. Tabular figures so every
+   timecode is the same width and the column never twitches as the list
+   re-sorts. */
 .log-when {
   font-style: normal; font-weight: 400;
-  margin-left: 6px; font-size: 11px; letter-spacing: 0.2px;
+  font-size: 11px; letter-spacing: 0.2px; white-space: nowrap;
   color: var(--soft); font-variant-numeric: tabular-nums;
 }
-.log-row.on .log-when { color: rgba(255, 255, 255, 0.7); }
+.log-row.on .log-when { color: var(--mist); }
 /* THREE DOTS, ONE MEANING EACH: good, bad, star. Grey until the tag is on
    (2026-08-27, Tony's call). The old single dot wore the clip button's own
    colour, which restated the name and told you nothing else. */
 .log-name {
-  flex-shrink: 1; min-width: 0; font-weight: 600;
+  min-width: 0; font-weight: 600;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 /* Tags as ONE editable line, not pills: pills ate the width this column
    has least of. Lighter and quieter than the clip name beside it, so the
    name still leads. */
 .log-tagline {
-  flex: 1; min-width: 40px;
+  min-width: 0; width: 100%;
   border: none; background: none; outline: none;
   font: inherit; font-size: 12px; letter-spacing: 0.15px; font-weight: 400;
   color: var(--soft);

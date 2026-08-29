@@ -1052,6 +1052,16 @@ const CLOCK_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" 
 // glyph, drawn on the same 24 grid at the same weight as the filter icons.
 const SORT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 6.5h10M3.5 12h6.5M3.5 17.5h4"/><path d="M17.5 5.5v13"/><path d="m14.6 15.6 2.9 2.9 2.9-2.9"/></svg>';
 const SORT_LABEL = { time: 'Time', name: 'Clip' };
+// The bulk actions REPLACE the filter row while a selection exists, so they
+// are drawn the same way it is: 28px glyphs with a tooltip each. As words
+// they needed 348px in a column whose default is 300, which put Clear off the
+// end of a sideways scroll - a button nobody would find.
+const BULK_ICONS = {
+  pull: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.6v11"/><path d="m7.9 10.6 4.1 4.1 4.1-4.1"/><path d="M4.6 16.4v2.2a1.8 1.8 0 0 0 1.8 1.8h11.2a1.8 1.8 0 0 0 1.8-1.8v-2.2"/></svg>',
+  tag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11.5V4.5a1.5 1.5 0 0 1 1.5-1.5h7l9 9a1.5 1.5 0 0 1 0 2.1l-6.9 6.9a1.5 1.5 0 0 1-2.1 0z"/><circle cx="7.6" cy="7.6" r="1.3"/></svg>',
+  rename: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.2 6.6a2.4 2.4 0 0 0-3.4-3.4L4.6 15.4a1.7 1.7 0 0 0-.44.72l-1.1 3.62a.42.42 0 0 0 .52.53l3.63-1.1a1.7 1.7 0 0 0 .71-.44z"/></svg>',
+  del: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 7h15"/><path d="M9.5 7V5.4A1.4 1.4 0 0 1 10.9 4h2.2a1.4 1.4 0 0 1 1.4 1.4V7"/><path d="m6.4 7 .8 11.2A1.8 1.8 0 0 0 9 19.9h6a1.8 1.8 0 0 0 1.8-1.7L17.6 7"/></svg>',
+};
 
 // ---- undo -----------------------------------------------------------
 // Cmd+Z takes back the last tag or clip. One shallow stack, capped: this
@@ -1502,32 +1512,31 @@ export function paintLog() {
   // into ONE icon-only sort button that opens a menu naming both.
   log.innerHTML = `
     <div class="log-head">
-      <span class="c-check"><input type="checkbox" id="vpAllCheck" data-tip="Select Every Clip Below" aria-label="Select Every Clip Below"${ticked && ticked === list.length ? ' checked' : ''}></span>
+      <span class="c-check"><input type="checkbox" id="vpAllCheck" data-tip="${ticked ? 'Clear The Selection' : 'Select Every Clip Below'}" aria-label="${ticked ? 'Clear The Selection' : 'Select Every Clip Below'}"${ticked && ticked === list.length ? ' checked' : ''}></span>
       <button class="log-iconbtn${view.search ? ' on' : ''}" id="vpLogSearchBtn" data-tip="Search Clips" aria-label="Search Clips">${SEARCH_ICON}</button>
       <input id="vpLogSearch" type="search" placeholder="Search Clips…" value="${esc(view.search)}" autocomplete="off"${view.searchOpen || view.search ? '' : ' hidden'}>
-      <div class="log-filters"${view.searchOpen ? ' hidden' : ''}>
+      <div class="log-filters"${view.searchOpen || ticked ? ' hidden' : ''}>
         <button class="log-filter" id="vpLogSort" data-tip="Sort By ${SORT_LABEL[view.sortBy]}, ${view.sortDir === 'asc' ? 'Ascending' : 'Descending'}" aria-label="Sort">${SORT_ICON}</button>
         <button class="log-filter${view.labels.length ? ' on' : ''}" data-menu="label" data-tip="Filter By Clip Button" aria-label="Filter By Clip Button">${FILTER_ICONS.label}${fCount(view.labels.length)}</button>
         <button class="log-filter${view.tags.length ? ' on' : ''}" data-menu="tag" data-tip="Filter By Tag" aria-label="Filter By Tag">${FILTER_ICONS.tag}${fCount(view.tags.length)}</button>
         <button class="log-filter${view.playlist ? ' on' : ''}" id="vpPlaylist" data-tip="Playlist - Play Every Clip Below, Back To Back" aria-label="Playlist">${FILTER_ICONS.playlist}</button>
         <button class="log-filter${view.hideTime ? '' : ' on'}" id="vpLogTime" data-tip="${view.hideTime ? 'Show' : 'Hide'} The Timecode" aria-label="${view.hideTime ? 'Show' : 'Hide'} The Timecode">${CLOCK_ICON}</button>
       </div>
+      ${ticked ? `<div class="log-bulk">
+        <span class="log-bulkn">${ticked}</span>
+        <button class="log-filter" data-bulk="pull" data-tip="Export All ${ticked} Selected Clips" aria-label="Pull">${BULK_ICONS.pull}</button>
+        <button class="log-filter" data-bulk="tag" data-tip="Add Tags To All ${ticked} Selected Clips" aria-label="Tag">${BULK_ICONS.tag}</button>
+        <button class="log-filter" data-bulk="rename" data-tip="Rename All ${ticked} Selected Clips" aria-label="Rename">${BULK_ICONS.rename}</button>
+        <button class="log-filter log-filter--danger" data-bulk="del" data-tip="Delete All ${ticked} Selected Clips" aria-label="Delete">${BULK_ICONS.del}</button>
+      </div>` : ''}
     </div>
-    ${ticked ? `<div class="log-bulk">
-      <span class="log-bulkn">${ticked} Selected</span>
-      <span class="vp-flex"></span>
-      <button class="mini" data-bulk="pull">Pull</button>
-      <button class="mini" data-bulk="tag">Tag</button>
-      <button class="mini" data-bulk="rename">Rename</button>
-      <button class="mini mini-danger" data-bulk="del">Delete</button>
-      <button class="mini" data-bulk="none">Clear</button>
-    </div>` : ''}
     <datalist id="vpTagOpts">${tagOpts.map((t) => `<option value="${esc(hashTag(t))}">`).join('')}</datalist>
-    <div class="log-list">
+    <div class="log-list${view.hideTime ? ' log-list--notime' : ''}">
       ${list.map((c) => `
         <div class="log-row${c.id === cur.sel ? ' on' : ''}${selection.has(c.id) ? ' picked' : ''}${rateOf(c) ? ' rated' : ''}" data-id="${c.id}"${rateOf(c) ? ` style="--rate:${rateOf(c)}"` : ''}>
           <span class="c-check"><input type="checkbox" data-pick="${c.id}"${selection.has(c.id) ? ' checked' : ''} aria-label="Select ${esc(c.name || c.label)}"></span>
-          <span class="log-name">${esc(c.name || c.label)}${view.hideTime ? '' : `<i class="log-when">${fmtHMS(c.in)}</i>`}</span>
+          <span class="log-name">${esc(c.name || c.label)}</span>
+          ${view.hideTime ? '' : `<span class="log-when">${fmtHMS(c.in)}</span>`}
           <input class="log-tagline" data-tagrow="${c.id}" list="vpTagOpts" value="${esc(tagLine(c))}" autocomplete="off" spellcheck="false" aria-label="Tags">
         </div>`).join('') || '<div class="log-empty">No Clips Yet - Press A Tag Button (Or Its Key) While The Video Plays.</div>'}
     </div>`;
@@ -1555,8 +1564,14 @@ export function paintLog() {
   el('vpPlaylist').onclick = () => togglePlaylist();
 
   // ---- selection
-  el('vpAllCheck').onchange = (e) => {
-    for (const c of list) if (e.target.checked) selection.add(c.id); else selection.delete(c.id);
+  const allBox = el('vpAllCheck');
+  // Indeterminate on a partial selection, and the next click CLEARS rather
+  // than completing it - so this one box does the job the Clear button used
+  // to, which is why there is no Clear button.
+  allBox.indeterminate = ticked > 0 && ticked < list.length;
+  allBox.onclick = () => {
+    const wipe = ticked > 0;
+    for (const c of list) if (wipe) selection.delete(c.id); else selection.add(c.id);
     paintLog();
   };
   log.querySelectorAll('[data-pick]').forEach((cb) => {
