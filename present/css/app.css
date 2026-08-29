@@ -13,19 +13,20 @@ body.dark { background: #0b0b0b; }
 }
 #phUrl:focus { border-color: var(--soft); box-shadow: 0 0 0 3px rgba(26, 26, 26, .08); }
 .ph-title {
-  font-size: 10.5px; font-weight: 800; text-transform: uppercase;
-  letter-spacing: .09em; color: var(--soft); margin: 26px 4px 10px;
+  /* Section label: Title Case, ink, bold (2026-08-27). BoardUI has no
+     all-caps micro-label, and tracking is 0 from Body up. */
+  font-size: 14px; font-weight: 700; color: var(--ink); margin: 26px 4px 10px;
 }
 .ph-recents { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 6px; }
 .ph-card { border: 1px solid var(--edge); border-radius: var(--r-lg); padding: 18px 22px; box-shadow: var(--shadow-1); }
-.ph-card p { color: var(--mist); line-height: 1.6; font-size: 13.5px; margin: 0 0 12px; }
+.ph-card p { color: var(--mist); line-height: 1.6; font-size: 14px; margin: 0 0 12px; }
 .ph-card p:last-child { margin: 0; }
 .ph-formula {
   display: flex; align-items: center; gap: 10px;
   background: var(--sunken); border-radius: var(--r-sm); padding: 10px 12px; margin: 0 0 12px;
 }
-.ph-formula code { flex: 1; font-size: 12.5px; overflow-x: auto; white-space: nowrap; }
-.ph-note { font-size: 12.5px; }
+.ph-formula code { flex: 1; font-size: 13px; overflow-x: auto; white-space: nowrap; }
+.ph-note { font-size: 13px; }
 
 /* ---------------------------------------------------------- deck shell */
 .pr { position: fixed; inset: 0; background: #0b0b0b; display: flex; flex-direction: column; }
@@ -56,7 +57,7 @@ body.dark { background: #0b0b0b; }
 #prProgressFill { height: 100%; background: #fff; width: 0; transition: width .2s; }
 .pr-counter {
   position: fixed; right: 14px; bottom: 12px; z-index: 41;
-  color: rgba(255, 255, 255, .55); font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, .55); font-size: 12px; letter-spacing: 0.15px; font-weight: 800; font-variant-numeric: tabular-nums;
 }
 .pr-black { position: fixed; inset: 0; background: #000; z-index: 60; }
 .pr-black[hidden], .pr-grid[hidden] { display: none; }
@@ -71,7 +72,7 @@ body.dark { background: #0b0b0b; }
 }
 .prg-card:hover { border-color: rgba(255, 255, 255, .5); }
 .prg-card.on { border-color: #fff; background: rgba(255, 255, 255, .12); }
-.prg-n { display: block; color: rgba(255, 255, 255, .45); font-size: 11px; font-weight: 800; margin-bottom: 5px; }
+.prg-n { display: block; color: rgba(255, 255, 255, .45); font-size: 11px; letter-spacing: 0.2px; font-weight: 800; margin-bottom: 5px; }
 .prg-t { font-weight: 800; font-size: 14px; }
 
 /* ---------------------------------------------------------- slides */
@@ -84,12 +85,12 @@ body.dark { background: #0b0b0b; }
   background: linear-gradient(180deg, #101010, #0a0a0a); background-size: cover; background-position: center;
   padding: 0 6vw;
 }
-.pr-slide.darkslide h1 { color: #fff; font-size: clamp(28px, 5.4vw, 64px); font-weight: 800; letter-spacing: -0.02em; margin: 0; }
+.pr-slide.darkslide h1 { color: #fff; font-size: clamp(28px, 5.4vw, 64px); font-weight: 800; margin: 0; }
 .sl-icon { font-size: clamp(38px, 6vw, 72px); }
 .sl-logo { position: absolute; bottom: 5vh; left: 50%; transform: translateX(-50%); height: clamp(16px, 2.6vh, 26px); opacity: .9; }
 
 .pr-slide.light { background: #fff; color: var(--ink); padding: clamp(18px, 4.5vh, 44px) clamp(20px, 4.5vw, 56px); overflow-y: auto; }
-.sl-h { font-size: clamp(22px, 3.4vw, 40px); font-weight: 800; letter-spacing: -0.02em; margin: 0 0 clamp(10px, 2.4vh, 22px); }
+.sl-h { font-size: clamp(22px, 3.4vw, 40px); font-weight: 800; margin: 0 0 clamp(10px, 2.4vh, 22px); }
 .sl-flow, .sl-text { font-size: clamp(15px, 1.7vw, 21px); line-height: 1.55; font-weight: 500; }
 .sl-flow p, .sl-text p { margin: 0 0 .7em; }
 .sl-flow h3, .sl-text h3 { font-size: 1.15em; font-weight: 800; margin: 1em 0 .4em; }
@@ -104,7 +105,7 @@ blockquote { border-left: 4px solid var(--ink); margin: 0 0 .8em; padding: .2em 
 .sl-todo { display: flex; align-items: baseline; gap: 10px; margin: 0 0 .45em; }
 .sl-check {
   width: 1.05em; height: 1.05em; flex-shrink: 0; align-self: center;
-  border: 2px solid var(--ink); border-radius: 5px; font-size: .8em;
+  border: 2px solid var(--ink); border-radius: 4px; font-size: .8em;
   display: inline-flex; align-items: center; justify-content: center; font-weight: 800;
 }
 .sl-todo.done .sl-check { background: var(--ink); color: #fff; }
@@ -117,7 +118,7 @@ blockquote { border-left: 4px solid var(--ink); margin: 0 0 .8em; padding: .2em 
 .sl-bookmark { color: var(--ink); word-break: break-all; }
 .sl-embed { position: relative; aspect-ratio: 16/9; margin: 0 0 .8em; }
 .sl-embed iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; border-radius: 10px; }
-.sl-num { position: absolute; right: 18px; bottom: 12px; color: var(--soft); font-size: 12px; font-weight: 800; }
+.sl-num { position: absolute; right: 18px; bottom: 12px; color: var(--soft); font-size: 12px; letter-spacing: 0.15px; font-weight: 800; }
 .sl-mark { position: absolute; left: 18px; bottom: 12px; height: 16px; opacity: .55; }
 
 .sl-split { display: flex; gap: clamp(16px, 2.5vw, 32px); align-items: stretch; height: calc(100% - clamp(40px, 8vh, 76px)); }
@@ -137,10 +138,10 @@ blockquote { border-left: 4px solid var(--ink); margin: 0 0 .8em; padding: .2em 
 }
 .pv-play { width: 30px; height: 30px; border: none; border-radius: 8px; background: rgba(255, 255, 255, .16); color: #fff; display: inline-flex; align-items: center; justify-content: center; }
 .pv-play svg { width: 15px; height: 15px; }
-.pv-strip { flex: 1; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, .25); cursor: pointer; }
-.pv-fill { height: 100%; border-radius: 3px; background: #fff; width: 0; }
-.pv-clock { color: #fff; font-size: 11.5px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.pv-title { color: rgba(255, 255, 255, .7); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 34%; }
+.pv-strip { flex: 1; height: 5px; border-radius: 4px; background: rgba(255, 255, 255, .25); cursor: pointer; }
+.pv-fill { height: 100%; border-radius: 4px; background: #fff; width: 0; }
+.pv-clock { color: #fff; font-size: 12px; letter-spacing: 0.15px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.pv-title { color: rgba(255, 255, 255, .7); font-size: 12px; letter-spacing: 0.15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 34%; }
 
 /* ---------------------------------------------------------- telestration rail */
 .pr-rail {
@@ -151,7 +152,7 @@ blockquote { border-left: 4px solid var(--ink); margin: 0 0 .8em; padding: .2em 
 .tl-body { display: flex; flex-direction: column; gap: 6px; align-items: center; }
 .tl-btn {
   width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center;
-  border: 1px solid rgba(255, 255, 255, .2); border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, .2); border-radius: 12px;
   background: rgba(20, 20, 20, .82); color: #eee; backdrop-filter: blur(8px);
 }
 .tl-btn svg { width: 19px; height: 19px; }

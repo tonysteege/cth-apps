@@ -31,15 +31,14 @@ body.dark { background: #0b0b0b; }
      little larger than body, so a section reads as a heading. The markup
      already carried Title Case text - the caps were the css. Same values
      in clips, diagrams and slides; keep the three in step. */
-  font-size: 15px; font-weight: 700; text-transform: none;
-  letter-spacing: -0.01em; color: var(--ink); margin: 26px 4px 12px;
+  font-size: 14px; font-weight: 700; text-transform: none; color: var(--ink); margin: 26px 4px 12px;
 }
 .ph-recents { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 6px; }
 .ph-card { border: 1px solid var(--edge); border-radius: 16px; padding: 18px 22px; box-shadow: var(--shadow-card); background: var(--cloud); }
-.ph-card p { color: var(--mist); line-height: 1.6; font-size: 13.5px; margin: 0 0 12px; }
+.ph-card p { color: var(--mist); line-height: 1.6; font-size: 14px; margin: 0 0 12px; }
 .ph-card p:last-child { margin: 0; }
 /* .ph-formula now lives in the shared base (diagrams/css/app.css). */
-.ph-note { font-size: 12.5px; }
+.ph-note { font-size: 13px; }
 
 /* ---------------------------------------------------------- deck shell */
 .pr { position: fixed; inset: 0; background: #0b0b0b; display: flex; flex-direction: column; }
@@ -71,7 +70,7 @@ body.dark { background: #0b0b0b; }
 #prProgressFill { height: 100%; background: var(--a-400); width: 0; transition: width .2s; }
 .pr-counter {
   position: fixed; right: 14px; bottom: 12px; z-index: 41;
-  color: rgba(255, 255, 255, .55); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, .55); font-size: 12px; letter-spacing: 0.15px; font-weight: 600; font-variant-numeric: tabular-nums;
 }
 .pr-black { position: fixed; inset: 0; background: #000; z-index: 60; }
 .pr-black[hidden], .pr-grid[hidden] { display: none; }
@@ -86,7 +85,7 @@ body.dark { background: #0b0b0b; }
 }
 .prg-card:hover { border-color: rgba(255, 255, 255, .5); }
 .prg-card.on { border-color: var(--a-400); background: color-mix(in srgb, var(--a-500) 22%, transparent); }
-.prg-n { display: block; color: rgba(255, 255, 255, .45); font-size: 11px; font-weight: 600; margin-bottom: 5px; font-variant-numeric: tabular-nums; }
+.prg-n { display: block; color: rgba(255, 255, 255, .45); font-size: 11px; letter-spacing: 0.2px; font-weight: 600; margin-bottom: 5px; font-variant-numeric: tabular-nums; }
 .prg-t { font-weight: 600; font-size: 14px; }
 
 /* ---------------------------------------------------------- slides */
@@ -123,7 +122,7 @@ body.dark { background: #0b0b0b; }
 .pr-slide.darkslide .sl-cover-title {
   color: #fff;
   font-size: clamp(30px, 6vw, 74px);
-  font-weight: 700; letter-spacing: -0.03em; line-height: 1.04;
+  font-weight: 700; line-height: 1.04;
   margin: 0; text-wrap: balance;
 }
 .sl-cover-sub {
@@ -138,7 +137,7 @@ body.dark { background: #0b0b0b; }
   position: absolute;
   right: clamp(34px, 6vw, 78px); bottom: clamp(28px, 6.2vh, 62px);
   color: rgb(255 255 255 / 0.38);
-  font-size: clamp(10px, 1.15vw, 14px); font-weight: 400; letter-spacing: 0.01em;
+  font-size: clamp(11px, 1.15vw, 14px); font-weight: 400;
 }
 .sl-icon { font-size: clamp(30px, 4.4vw, 56px); margin-bottom: clamp(6px, 1.4vh, 16px); }
 
@@ -156,13 +155,13 @@ body.dark { background: #0b0b0b; }
   display: block;
   color: var(--n-400);
   font-size: clamp(11px, 1.15vw, 16px);
-  font-weight: 500; letter-spacing: 0.01em;
+  font-weight: 500;
   margin-bottom: clamp(2px, 0.7vh, 8px);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .sl-h {
   font-size: clamp(22px, 3.5vw, 44px);
-  font-weight: 700; letter-spacing: -0.025em; line-height: 1.08;
+  font-weight: 700; line-height: 1.08;
   margin: 0; text-wrap: balance;
 }
 .sl-flow, .sl-text { font-size: clamp(15px, 1.7vw, 21px); line-height: 1.55; font-weight: 400; }
@@ -179,7 +178,7 @@ blockquote { border-left: 3px solid var(--a-500); margin: 0 0 .8em; padding: .2e
 .sl-todo { display: flex; align-items: baseline; gap: 10px; margin: 0 0 .45em; }
 .sl-check {
   width: 1.05em; height: 1.05em; flex-shrink: 0; align-self: center;
-  border: 2px solid var(--ink); border-radius: 5px; font-size: .8em;
+  border: 2px solid var(--ink); border-radius: 4px; font-size: .8em;
   display: inline-flex; align-items: center; justify-content: center; font-weight: 700;
 }
 .sl-todo.done .sl-check { background: var(--ink); color: #fff; }
@@ -253,10 +252,10 @@ blockquote { border-left: 3px solid var(--a-500); margin: 0 0 .8em; padding: .2e
 }
 .pv-play { width: 30px; height: 30px; border: none; border-radius: 8px; background: rgba(255, 255, 255, .16); color: #fff; display: inline-flex; align-items: center; justify-content: center; }
 .pv-play svg { width: 15px; height: 15px; }
-.pv-strip { flex: 1; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, .25); cursor: pointer; }
-.pv-fill { height: 100%; border-radius: 3px; background: var(--a-400); width: 0; }
-.pv-clock { color: #fff; font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.pv-title { color: rgba(255, 255, 255, .7); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 34%; }
+.pv-strip { flex: 1; height: 5px; border-radius: 4px; background: rgba(255, 255, 255, .25); cursor: pointer; }
+.pv-fill { height: 100%; border-radius: 4px; background: var(--a-400); width: 0; }
+.pv-clock { color: #fff; font-size: 12px; letter-spacing: 0.15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.pv-title { color: rgba(255, 255, 255, .7); font-size: 12px; letter-spacing: 0.15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 34%; }
 
 /* ---------------------------------------------------------- telestration rail */
 .pr-rail {
@@ -267,7 +266,7 @@ blockquote { border-left: 3px solid var(--a-500); margin: 0 0 .8em; padding: .2e
 .tl-body { display: flex; flex-direction: column; gap: 6px; align-items: center; }
 .tl-btn {
   width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center;
-  border: 1px solid rgba(255, 255, 255, .2); border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, .2); border-radius: 12px;
   background: rgba(20, 20, 20, .82); color: #eee; backdrop-filter: blur(8px);
 }
 .tl-btn svg { width: 19px; height: 19px; }
@@ -323,7 +322,7 @@ blockquote { border-left: 3px solid var(--a-500); margin: 0 0 .8em; padding: .2e
   content: ''; flex: none;
   width: .85em; height: .85em;
   border: 1.5px solid var(--soft);
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
 /* The video slot before its player mounts. Without a reserved box the
@@ -359,7 +358,7 @@ blockquote { border-left: 3px solid var(--a-500); margin: 0 0 .8em; padding: .2e
 .pv-play.playing::after {
   content: '';
   position: absolute; top: 50%; transform: translateY(-50%);
-  width: 3.5px; height: 13px; border-radius: 1px; background: currentColor;
+  width: 3.5px; height: 13px; border-radius: 2px; background: currentColor;
 }
 .pv-play.playing::before { left: 10px; }
 .pv-play.playing::after { right: 10px; }
@@ -369,7 +368,7 @@ blockquote { border-left: 3px solid var(--a-500); margin: 0 0 .8em; padding: .2e
    than the 5px line so it can actually be grabbed. */
 .pv-strip { position: relative; padding: 6px 0; height: auto; background: none; }
 .pv-strip::before {
-  content: ''; display: block; height: 5px; border-radius: 3px;
+  content: ''; display: block; height: 5px; border-radius: 4px;
   background: rgb(255 255 255 / 0.25);
 }
 .pv-strip .pv-fill { position: absolute; left: 0; top: 6px; height: 5px; }
@@ -400,7 +399,7 @@ blockquote { border-left: 3px solid var(--a-500); margin: 0 0 .8em; padding: .2e
 .de-flex { flex: 1; }
 .de-name {
   min-width: 0; width: 260px; height: 32px; padding: 0 10px;
-  font: inherit; font-size: 15px; font-weight: 600;
+  font: inherit; font-size: 14px; font-weight: 600;
   border: none; border-radius: var(--r-sm);
   background: transparent; color: var(--ink);
   box-shadow: inset 0 0 0 1px transparent;
@@ -435,7 +434,7 @@ blockquote { border-left: 3px solid var(--a-500); margin: 0 0 .8em; padding: .2e
   position: absolute; left: 0; bottom: 100%;
   transform: scale(var(--inv)); transform-origin: 0 100%;
   padding: 0 0 6px 2px;
-  font-size: 12px; color: var(--soft); font-variant-numeric: tabular-nums;
+  font-size: 12px; letter-spacing: 0.15px; color: var(--soft); font-variant-numeric: tabular-nums;
 }
 .de-frame.on .de-framen { color: var(--select); font-weight: 600; }
 .de-frame::after {
@@ -457,7 +456,7 @@ blockquote { border-left: 3px solid var(--a-500); margin: 0 0 .8em; padding: .2e
   border: none; border-radius: 50%; cursor: pointer;
   background: var(--cloud); color: var(--mist);
   border: 1px solid var(--edge); box-shadow: var(--shadow-2);
-  font: inherit; font-size: 26px; line-height: 1;
+  font: inherit; font-size: 24px; line-height: 1;
   opacity: 0; transition: opacity var(--dur) ease, color var(--dur) ease, background var(--dur) ease;
 }
 .de-board:hover .de-insert { opacity: .5; }
@@ -482,7 +481,7 @@ blockquote { border-left: 3px solid var(--a-500); margin: 0 0 .8em; padding: .2e
 .de-raillist { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
 .de-thumb { display: flex; gap: 6px; align-items: flex-start; cursor: pointer; }
 .de-thumb.dragging { opacity: .6; }
-.de-thumbn { width: 14px; flex: none; font-size: 10.5px; color: var(--soft); padding-top: 3px; font-variant-numeric: tabular-nums; }
+.de-thumbn { width: 14px; flex: none; font-size: 11px; letter-spacing: 0.2px; color: var(--soft); padding-top: 3px; font-variant-numeric: tabular-nums; }
 .de-thumbbox {
   flex: 1; min-width: 0; position: relative; aspect-ratio: 16 / 9;
   container-type: size; overflow: hidden;
@@ -601,15 +600,15 @@ blockquote { border-left: 3px solid var(--a-500); margin: 0 0 .8em; padding: .2e
 .de-tools .tb-btn svg { width: 21px; height: 21px; }
 .de-tools .tb-key {
   position: absolute; right: 4px; bottom: 2px;
-  font-size: 8px; font-weight: 700; color: var(--n-300); pointer-events: none;
+  font-size: 11px; letter-spacing: 0.2px; font-weight: 700; color: var(--n-300); pointer-events: none;
 }
 .de-tools .tb-btn.on .tb-key { color: rgb(255 255 255 / .7); }
-.de-tools .tb-word { width: auto; padding: 0 11px; font-size: 12.5px; font-weight: 500; }
+.de-tools .tb-word { width: auto; padding: 0 11px; font-size: 13px; font-weight: 500; }
 .de-place {
   position: absolute; left: 50%; bottom: 68px; transform: translateX(-50%);
   z-index: 30; display: flex; align-items: center; gap: 10px;
   padding: 7px 8px 7px 14px; border-radius: 999px;
-  background: var(--ink); color: #fff; font-size: 12.5px;
+  background: var(--ink); color: #fff; font-size: 13px;
   box-shadow: var(--shadow-3);
 }
 .de-place[hidden] { display: none; }
@@ -624,7 +623,7 @@ blockquote { border-left: 3px solid var(--a-500); margin: 0 0 .8em; padding: .2e
 .de-props .bs-row > span:first-child { width: 74px; }
 .de-props select, .de-props input[type="number"] {
   flex: 1; min-width: 0; height: 30px; padding: 0 8px;
-  font: inherit; font-size: 12.5px; border: none; border-radius: var(--r-sm);
+  font: inherit; font-size: 13px; border: none; border-radius: var(--r-sm);
   background: var(--n-100); color: var(--ink); box-shadow: inset 0 0 0 1px var(--n-200);
 }
 .de-props select:focus, .de-props input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--select); }
@@ -643,7 +642,7 @@ blockquote { border-left: 3px solid var(--a-500); margin: 0 0 .8em; padding: .2e
 .de-rinkpick {
   text-align: left; padding: 7px 10px; border-radius: var(--r-sm);
   border: 1px solid var(--edge); background: var(--cloud);
-  font: inherit; font-size: 12.5px; color: var(--graphite); cursor: pointer;
+  font: inherit; font-size: 13px; color: var(--graphite); cursor: pointer;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .de-rinkpick:hover { background: var(--n-100); border-color: var(--n-300); color: var(--ink); }
@@ -662,8 +661,8 @@ blockquote { border-left: 3px solid var(--a-500); margin: 0 0 .8em; padding: .2e
   transition: box-shadow var(--dur) ease, border-color var(--dur) ease;
 }
 .deck-card:hover .deck-thumb { border-color: var(--n-300); box-shadow: var(--shadow-2); }
-.deck-name { font-size: 13.5px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.deck-meta { font-size: 11.5px; color: var(--soft); }
+.deck-name { font-size: 14px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.deck-meta { font-size: 12px; letter-spacing: 0.15px; color: var(--soft); }
 .deck-new {
   align-items: center; justify-content: center; aspect-ratio: 16 / 9;
   border: 1px dashed var(--n-300); border-radius: var(--r-md);

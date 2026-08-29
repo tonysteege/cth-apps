@@ -54,7 +54,7 @@
 
   --r-sm: 8px;
   --r-md: 10px;   /* BoardUI radius/2lg - medium buttons */
-  --r-lg: 14px;
+  --r-lg: 12px;   /* BoardUI radius/xl - 14 is not on the scale */
 
   /* BoardUI shadow recipes (6%/10%, softer than defaults) */
   --shadow-card: 0 1px 1px 0 rgb(0 0 0 / 0.05);
@@ -141,7 +141,9 @@ input:focus, select:focus, textarea:focus { outline: none; }
   background: var(--cloud);
   color: var(--n-700);
   font-weight: 500;
-  box-shadow: var(--shadow-card);
+  /* BoardUI puts shadow-xs on every button variant, not shadow-card:
+     0 1px 2px / .05, a 2px blur rather than 1px. shadow-card is for cards. */
+  box-shadow: var(--shadow-1);
   transition: border-color var(--dur) ease, color var(--dur) ease,
               background var(--dur) ease, box-shadow var(--dur) ease,
               transform 420ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -161,7 +163,6 @@ input:focus, select:focus, textarea:focus { outline: none; }
   background-image: var(--grad-primary);
   box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.12), 0 1px 2px 0 rgba(20, 71, 230, 0.25);
   font-weight: 600;
-  letter-spacing: 0.01em;
 }
 .btn-ink::before {
   content: '';
@@ -211,9 +212,8 @@ input:focus, select:focus, textarea:focus { outline: none; }
 .brand-logo { height: 30px; width: auto; }
 .brand-word h1 {
   margin: 0;
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 600;
-  letter-spacing: -0.02em;
   line-height: 1;
 }
 .lib-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -250,11 +250,9 @@ input:focus, select:focus, textarea:focus { outline: none; }
   box-shadow: var(--shadow-side);
 }
 .side-title {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--soft);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
   margin: 0 10px 8px;
 }
 .side-row {
@@ -284,7 +282,7 @@ input:focus, select:focus, textarea:focus { outline: none; }
 .side-row.on .side-ic { color: #fff; }
 .side-row.on .side-count { color: rgba(255, 255, 255, 0.72); }
 .side-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.side-count { color: var(--soft); font-size: 12px; font-variant-numeric: tabular-nums; }
+.side-count { color: var(--soft); font-size: 12px; letter-spacing: 0.15px; font-variant-numeric: tabular-nums; }
 .side-tools { display: none; gap: 2px; }
 .side-row:hover .side-tools { display: inline-flex; }
 .side-row:hover .side-count { display: none; }
@@ -368,22 +366,26 @@ input:focus, select:focus, textarea:focus { outline: none; }
 .card-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 13px 16px 4px; }
 .card-meta h3 {
   margin: 0;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
-  letter-spacing: -0.01em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.card-meta span { color: var(--soft); font-size: 12px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.card-meta span { color: var(--soft); font-size: 12px; letter-spacing: 0.15px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .card-tools { display: flex; gap: 6px; padding: 6px 12px 12px; }
+/* BoardUI's xs button: h-6 (24px), rounded-sm (4px), px-2, and
+   text-caption-1-SEMIBOLD - 12px at weight 600, not 500. This was an 8px
+   radius at weight 500, which is the small button's radius on the xs
+   button's type. */
 .mini {
   border: 1px solid transparent;
   background: none;
-  border-radius: 7px;
-  padding: 4px 9px;
-  font-size: 12px;
-  font-weight: 500;
+  border-radius: 4px;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px; letter-spacing: 0.15px;
+  font-weight: 600;
   color: var(--mist);
   transition: background var(--dur) ease, color var(--dur) ease;
 }
@@ -403,19 +405,19 @@ input:focus, select:focus, textarea:focus { outline: none; }
   height: 95px;
   margin: 0 auto 26px;
   border: 2px solid var(--n-300);
-  border-radius: 40px;
+  border-radius: 32px;
   background:
     linear-gradient(var(--n-300), var(--n-300)) 50% 0 / 2px 100% no-repeat,
     radial-gradient(circle at 50% 50%, var(--n-300) 0 5px, transparent 6px),
     var(--cloud);
 }
-.lib-empty h2 { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 10px; }
+.lib-empty h2 { font-size: 24px; font-weight: 600; margin: 0 0 10px; }
 .lib-empty p { color: var(--mist); line-height: 1.55; margin: 0 0 22px; }
 .lib-none { grid-column: 1 / -1; color: var(--mist); text-align: center; padding: 60px 0; }
 .lib-foot {
   padding: 18px clamp(20px, 4vw, 48px) 26px;
   color: var(--soft);
-  font-size: 12px;
+  font-size: 12px; letter-spacing: 0.15px;
   text-align: center;
   background: var(--page);
 }
@@ -437,9 +439,8 @@ input:focus, select:focus, textarea:focus { outline: none; }
   min-width: 140px;
   height: 36px;
   padding: 0 10px;
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 600;
-  letter-spacing: -0.01em;
   border: 1px solid transparent;
   border-radius: var(--r-sm);
   background: transparent;
@@ -449,7 +450,7 @@ input:focus, select:focus, textarea:focus { outline: none; }
 .ed-title::placeholder { font-weight: 400; color: var(--soft); }
 .ed-title:hover { border-color: var(--edge); }
 .ed-title:focus { border-color: transparent; background: var(--field); box-shadow: var(--field-ring-focus); }
-.ed-status { color: var(--soft); font-size: 12px; min-width: 52px; text-align: center; }
+.ed-status { color: var(--soft); font-size: 12px; letter-spacing: 0.15px; min-width: 52px; text-align: center; }
 .ed-head-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ed-sep { width: 1px; height: 20px; background: var(--edge); margin: 0 2px; }
 
@@ -549,7 +550,6 @@ input:focus, select:focus, textarea:focus { outline: none; }
   box-shadow: none;
   padding: 2px 6px 3px 4px;
   min-width: 240px;
-  letter-spacing: -0.01em;
 }
 .ed-flabelwrap { cursor: text; }
 .ed-flabelwrap:hover .ed-flabel { fill: var(--ink); }
@@ -635,11 +635,9 @@ input:focus, select:focus, textarea:focus { outline: none; }
 }
 .eside-new:hover { border-color: var(--n-400); color: var(--ink); }
 .eside-folder {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--soft);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
   margin: 12px 8px 4px;
 }
 /* A FILE ROW: no icon, tight, and as many on screen as will fit. 24px is
@@ -656,7 +654,7 @@ input:focus, select:focus, textarea:focus { outline: none; }
   padding: 3px 8px;
   min-height: 24px;
   color: var(--graphite);
-  font-size: 12.5px;
+  font-size: 13px;
   transition: background var(--dur) ease, color var(--dur) ease;
 }
 .eside-row:hover { background: var(--sunken); color: var(--ink); }
@@ -678,7 +676,7 @@ input:focus, select:focus, textarea:focus { outline: none; }
   border-left: 1px solid var(--n-200);
 }
 .eside-loose { margin-top: 2px; }
-.eside-empty { color: var(--soft); font-size: 11.5px; padding: 3px 8px; }
+.eside-empty { color: var(--soft); font-size: 12px; letter-spacing: 0.15px; padding: 3px 8px; }
 
 /* the cone art reads oversized next to the flat glyphs - pull it in */
 .tb-btn img.ic-cone { width: 19px; height: 19px; }
@@ -731,7 +729,7 @@ input:focus, select:focus, textarea:focus { outline: none; }
 }
 .ctx-item:hover { background: var(--sunken); }
 .ctx-label { flex: 1; }
-.ctx-hint { color: var(--soft); font-size: 11px; }
+.ctx-hint { color: var(--soft); font-size: 11px; letter-spacing: 0.2px; }
 .ctx-dot {
   width: 14px;
   height: 14px;
@@ -756,7 +754,7 @@ input:focus, select:focus, textarea:focus { outline: none; }
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border: 1px solid var(--edge);
-  border-radius: 14px;
+  border-radius: 12px;
   box-shadow: var(--shadow-3);
 }
 .pmenu::-webkit-scrollbar { display: none; }
@@ -784,7 +782,7 @@ input:focus, select:focus, textarea:focus { outline: none; }
   border: 1px solid var(--edge);
   background: var(--cloud);
   color: var(--mist);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
 }
 .pmenu-blank:hover { color: var(--ink); border-color: var(--n-300); box-shadow: none; }
@@ -797,7 +795,7 @@ input:focus, select:focus, textarea:focus { outline: none; }
 .lmenu-label {
   flex-shrink: 0;
   padding: 0 5px 0 2px;
-  font-size: 11px;
+  font-size: 11px; letter-spacing: 0.2px;
   font-weight: 500;
   color: var(--soft);
   white-space: nowrap;
@@ -828,7 +826,7 @@ input:focus, select:focus, textarea:focus { outline: none; }
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border: 1px solid var(--edge);
-  border-radius: 18px;
+  border-radius: 16px;
   box-shadow: var(--shadow-3), 0 0 1px 0 rgb(0 0 0 / 0.24);
   z-index: 20;
   scrollbar-width: none;
@@ -852,7 +850,7 @@ input:focus, select:focus, textarea:focus { outline: none; }
   align-items: center;
   justify-content: center;
   border: 1px solid transparent;
-  border-radius: 11px;
+  border-radius: 12px;
   background: transparent;
   color: var(--graphite);
   transition: background var(--dur) ease, color var(--dur) ease, border-color var(--dur) ease, box-shadow var(--dur) ease;
@@ -870,14 +868,14 @@ input:focus, select:focus, textarea:focus { outline: none; }
 }
 .tb-btn.on img { filter: invert(1) brightness(1.7); }
 .tb-btn:disabled { opacity: .35; cursor: default; background: transparent; }
-.tb-word { width: auto; padding: 0 12px; font-size: 12.5px; font-weight: 600; }
+.tb-word { width: auto; padding: 0 12px; font-size: 13px; font-weight: 600; }
 .tb-small svg { width: 18px; height: 18px; }
 
 .tb-key {
   position: absolute;
   right: 3px;
   bottom: 2px;
-  font-size: 8px;
+  font-size: 11px; letter-spacing: 0.2px;
   font-weight: 600;
   color: var(--soft);
   pointer-events: none;
@@ -963,13 +961,13 @@ input:focus, select:focus, textarea:focus { outline: none; }
 }
 .sheet {
   background: var(--cloud);
-  border-radius: 20px;
+  border-radius: 24px;
   box-shadow: 0 10px 10px -5px rgb(0 0 0 / 0.04), 0 20px 25px -5px rgb(0 0 0 / 0.10), 0 0 1px 0 rgb(0 0 0 / 0.24);
   padding: 24px 26px;
   width: min(420px, calc(100vw - 40px));
 }
 .sheet-wide { width: min(560px, calc(100vw - 40px)); }
-.sheet h3 { margin: 0 0 8px; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+.sheet h3 { margin: 0 0 8px; font-size: 18px; font-weight: 600; }
 .sheet p { margin: 0 0 4px; color: var(--mist); line-height: 1.5; }
 .sheet-row { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
 
@@ -980,16 +978,16 @@ input:focus, select:focus, textarea:focus { outline: none; }
   display: flex; align-items: center; gap: 10px;
   background: var(--sunken); border-radius: var(--r-sm); padding: 10px 12px; margin: 0 0 12px;
 }
-.ph-formula code { flex: 1; font-size: 12.5px; overflow-x: auto; white-space: nowrap; }
+.ph-formula code { flex: 1; font-size: 13px; overflow-x: auto; white-space: nowrap; }
 
 /* A SETTINGS FORM, shared (2026-08-27). These four were defined only in
    bots/css/app.css until Clips grew a settings sheet of its own; a rule
    two apps need belongs in the base both import. Per-app field sizing
    still lives with the app. */
 .bs-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; font-size: 13px; }
-.bs-row > span:first-child { flex: none; width: 128px; color: var(--mist); font-size: 12px; font-weight: 500; }
-.bs-note { margin: 8px 0 0; color: var(--soft); font-size: 12px; line-height: 1.5; }
-.bs-empty { margin: 0; padding: 8px 2px; color: var(--soft); font-size: 12.5px; }
+.bs-row > span:first-child { flex: none; width: 128px; color: var(--mist); font-size: 12px; letter-spacing: 0.15px; font-weight: 500; }
+.bs-note { margin: 8px 0 0; color: var(--soft); font-size: 12px; letter-spacing: 0.15px; line-height: 1.5; }
+.bs-empty { margin: 0; padding: 8px 2px; color: var(--soft); font-size: 13px; }
 .bs-styleadd { display: flex; gap: 8px; margin-top: 10px; }
 .bs-styleadd .mini:disabled { opacity: 0.4; cursor: default; }
 .keys-grid {
@@ -1000,7 +998,7 @@ input:focus, select:focus, textarea:focus { outline: none; }
   max-height: 55vh;
   overflow-y: auto;
 }
-.keys-k { font-size: 12px; font-weight: 600; color: var(--n-500); background: var(--n-200); border: none; border-radius: 6px; padding: 3px 8px; justify-self: start; white-space: nowrap; }
+.keys-k { font-size: 12px; letter-spacing: 0.15px; font-weight: 600; color: var(--n-500); background: var(--n-200); border: none; border-radius: 6px; padding: 3px 8px; justify-self: start; white-space: nowrap; }
 .keys-v { color: var(--mist); align-self: center; }
 
 .rink-list { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
@@ -1068,7 +1066,7 @@ input:focus, select:focus, textarea:focus { outline: none; }
     max-height: none;
     margin: 10px clamp(12px, 3vw, 24px) 0;
     padding: 8px;
-    border-radius: 18px;
+    border-radius: 16px;
     scrollbar-width: none;
   }
   .lib-side::-webkit-scrollbar { display: none; }
@@ -1086,7 +1084,7 @@ input:focus, select:focus, textarea:focus { outline: none; }
   .ed-sep { display: none; }
   #edFlip, #edPrint, #edCopy { display: none; } /* keep Undo / Redo reachable on touch; trim the rest */
   .ed-stagewrap { padding: 8px 8px 110px; }
-  .tb { gap: 3px; padding: 7px 8px; border-radius: 15px; }
+  .tb { gap: 3px; padding: 7px 8px; border-radius: 16px; }
 }
 
 /* ---------------------------------------------- home page (2026-08-25) */
@@ -1097,8 +1095,7 @@ input:focus, select:focus, textarea:focus { outline: none; }
      little larger than body, so a section reads as a heading. The markup
      already carried Title Case text - the caps were the css. Same values
      in clips, diagrams and slides; keep the three in step. */
-  font-size: 15px; font-weight: 700; text-transform: none;
-  letter-spacing: -0.01em; color: var(--ink); margin: 26px 4px 12px;
+  font-size: 14px; font-weight: 700; text-transform: none; color: var(--ink); margin: 26px 4px 12px;
 }
 .dlib-title:first-child { margin-top: 0; }
 .dlib-note { color: var(--mist); padding: 8px 6px; font-size: 13px; }
@@ -1112,7 +1109,7 @@ input:focus, select:focus, textarea:focus { outline: none; }
 }
 .dlib-card:hover { box-shadow: var(--shadow-2); border-color: var(--n-300); transform: translateY(-1px); }
 .dlib-card-thumb {
-  display: block; width: 100%; aspect-ratio: 2 / 1; border-radius: 7px;
+  display: block; width: 100%; aspect-ratio: 2 / 1; border-radius: 8px;
   background: var(--sunken); overflow: hidden; margin-bottom: 7px;
 }
 .dlib-card-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -1140,10 +1137,10 @@ input:focus, select:focus, textarea:focus { outline: none; }
   transition: background var(--dur) ease, color var(--dur) ease;
 }
 .dlib-row:hover { background: var(--sunken); color: var(--ink); }
-.dlib-thumb { width: 52px; height: 26px; flex-shrink: 0; border-radius: 5px; background: var(--sunken); overflow: hidden; }
+.dlib-thumb { width: 52px; height: 26px; flex-shrink: 0; border-radius: 4px; background: var(--sunken); overflow: hidden; }
 .dlib-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .dlib-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
-.dlib-date { color: var(--soft); font-size: 12px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.dlib-date { color: var(--soft); font-size: 12px; letter-spacing: 0.15px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
 
 /* The folder glyph, one drawing for the tree and the home page. */
 .fic { width: 15px; height: 15px; flex-shrink: 0; color: var(--soft); }
@@ -1159,7 +1156,7 @@ input:focus, select:focus, textarea:focus { outline: none; }
   cursor: pointer; user-select: none;
   border-radius: 6px; padding: 3px 8px 3px 3px;
   min-height: 24px;
-  font-size: 12.5px; font-weight: 500;
+  font-size: 13px; font-weight: 500;
   text-transform: none; letter-spacing: 0;
   color: var(--n-700);
   margin: 0;
@@ -1178,10 +1175,10 @@ input:focus, select:focus, textarea:focus { outline: none; }
 .eside-count {
   flex: none;
   padding: 0 5px;
-  border-radius: 5px;
+  border-radius: 4px;
   background: var(--n-200);
   color: var(--n-500);
-  font-weight: 500; font-size: 10.5px;
+  font-weight: 500; font-size: 11px; letter-spacing: 0.2px;
   font-variant-numeric: tabular-nums;
 }
 .eside-list { flex: 1; }
@@ -1245,7 +1242,7 @@ html, body { overflow-x: hidden; max-width: 100%; }
   max-height: calc(100dvh - 36px);
   padding: 16px;
   background: var(--cloud);
-  border-radius: 20px;
+  border-radius: 24px;
   box-shadow: 0 10px 10px -5px rgb(0 0 0 / 0.04), 0 20px 25px -5px rgb(0 0 0 / 0.10), 0 0 1px 0 rgb(0 0 0 / 0.24);
 }
 .anim-stage {
@@ -1254,7 +1251,7 @@ html, body { overflow-x: hidden; max-width: 100%; }
   min-height: 0;
   background: var(--n-100);
   border: 1px solid var(--edge);
-  border-radius: 14px;
+  border-radius: 12px;
   padding: 10px;
   height: min(58dvh, 560px);
 }
@@ -1281,18 +1278,18 @@ html, body { overflow-x: hidden; max-width: 100%; }
   box-shadow: 0 0 0 1px var(--a-500), inset 0 1px 0 0 rgba(255, 255, 255, 0.25), var(--shadow-1);
   cursor: grab;
 }
-.anim-clock { flex: none; min-width: 96px; text-align: right; font-size: 12px; color: var(--mist); font-variant-numeric: tabular-nums; }
+.anim-clock { flex: none; min-width: 96px; text-align: right; font-size: 12px; letter-spacing: 0.15px; color: var(--mist); font-variant-numeric: tabular-nums; }
 .anim-opts { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 0 2px; }
-.anim-opts label { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--mist); white-space: nowrap; }
+.anim-opts label { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; letter-spacing: 0.15px; color: var(--mist); white-space: nowrap; }
 .anim-opts select {
-  height: 30px; padding: 0 8px; font: inherit; font-size: 12.5px; color: var(--graphite);
+  height: 30px; padding: 0 8px; font: inherit; font-size: 13px; color: var(--graphite);
   border: 1px solid var(--edge); border-radius: var(--r-sm); background: var(--cloud);
   box-shadow: var(--shadow-card); cursor: pointer;
   transition: border-color var(--dur) ease, background var(--dur) ease;
 }
 .anim-opts select:hover { border-color: var(--n-300); background: var(--n-100); }
 .anim-flex { flex: 1; }
-.anim-status { font-size: 12px; color: var(--mist); font-variant-numeric: tabular-nums; }
+.anim-status { font-size: 12px; letter-spacing: 0.15px; color: var(--mist); font-variant-numeric: tabular-nums; }
 @media (max-width: 720px) {
   .anim-panel { padding: 12px; }
   .anim-stage { height: min(46dvh, 420px); }

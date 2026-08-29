@@ -699,6 +699,33 @@ after a live inspection of it. The two live side by side.
 
 ## Design system rules (suite-wide)
 
+- **THE SCALE IS BOARDUI'S, NOT OURS** (2026-08-27, full conformance pass
+  against the BoardUI MCP / `cth/ai/cth-boardui-pro/src/styles`). BoardUI is
+  Tailwind v4 with a handful of deliberate overrides, so its scales are the
+  only legal values. Anything off them is a defect, not a preference.
+  - TYPE, from `typography.css`: **11 · 12 · 13 · 14 · 16 · 18 · 20 · 24 · 32
+    · 40 · 48 · 56 · 64**. Named: Caption 2 11/15, Caption 1 12/16, Body 2
+    13/18, Body 14/20, Headline 16/22, Title 3 18/26, Title 2 20/26, Title 1
+    24/34. NOTHING FRACTIONAL, and no 15, 17, 22 or 26 - those were ours.
+  - TRACKING is **0 from Body (13) upward**, `0.15px` at Caption 1 (12) and
+    `0.2px` at Caption 2 (11). The old `-0.01em` house habit and the `.07em`
+    to `.09em` on all-caps labels are both wrong; BoardUI never tracks
+    negative and has no all-caps micro-label at all.
+  - RADII, Tailwind v4 plus BoardUI's one addition: **2 (xs) · 4 (sm) · 6
+    (md) · 8 (lg) · 10 (2lg) · 12 (xl) · 16 (2xl) · 24 (3xl) · 32 (4xl) ·
+    full**. `--r-lg` was 14, which is not on the scale, and is now 12.
+  - BUTTONS carry **shadow-xs** (`--shadow-1`, 0 1px 2px / .05), never
+    `--shadow-card` - that is a 1px blur and belongs to cards. Medium is
+    h-9 / radius 10 / Body Medium (14/500). The xs button is h-6 / radius 4 /
+    Caption 1 SEMIBOLD (12/600), which is what `.mini` now is; it used to be
+    26px at radius 8 and weight 500, mixing three sizes' specs.
+  - COLOUR was already correct: the `--n-*` and `--a-*` ramps match BoardUI's
+    overridden Tailwind primitives exactly (n-100 #f7f7f7, n-200 #ebebeb,
+    n-925 #121212, a-400 #3392ff). Do not "tidy" them toward stock Tailwind.
+  - Verified live at 0 violations across the hub, Bots, Clips, Diagrams and
+    Slides. Re-run the sweep in `~/.claude/skills/audit-ui` before claiming a
+    design change is clean.
+
 - **Component recipes are BoardUI's own** (2026-08-26, full-fidelity pass,
   taken from the cth-boardui-starter source, not eyeballed):
   - INPUTS ARE FILLED, never outlined: n-200 surface (`--field`), no
