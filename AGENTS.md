@@ -460,6 +460,17 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   because they are the two most common tags in a log - highlighting them lit
   up most of the list and the colour stopped meaning anything. A star is rare
   by definition, which is what makes it worth finding at a glance.
+- **A TAG IS CLIPPED, NEVER ELLIPSISED, AND ITS FIELD HAS NO ARROW**
+  (2026-08-29, Tony's call). An ellipsis is three more characters spent in the
+  column that is already out of room, and it reads as punctuation on a word
+  that has none - "#go..." looks like a tag whose name ends in dots. Cutting
+  the glyphs mid-word says the same thing and leaves three more characters to
+  say it in, so `.tag-btn-word` and `.log-tagline` are `text-overflow: clip`.
+  And the log's tag field carries `list=`, which makes Chrome paint its own
+  picker triangle INSIDE the input - a control glyph on every row of a narrow
+  column, pointing at a menu nobody opens that way. It is hidden with
+  `::-webkit-calendar-picker-indicator { display: none !important }`; typing
+  still autocompletes.
 - **THE HEADER ROW CARRIES NO COUNT** (2026-08-29): the log is the narrowest
   column in the app and the number is implied by the list under it.
 - **THE SORT INDICATOR IS BOARDUI'S `ChevronSortDown`** - the filled rounded

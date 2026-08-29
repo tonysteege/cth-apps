@@ -562,9 +562,16 @@
   font: inherit; font-size: 12px; letter-spacing: 0.15px; font-weight: 400;
   color: var(--soft);
   padding: 2px 4px; border-radius: 4px;
-  text-overflow: ellipsis;
+  text-overflow: clip;
   transition: background var(--dur) ease, color var(--dur) ease;
 }
+/* NO DROPDOWN ARROW (2026-08-29, Tony's call). A `list=` attribute makes
+   Chrome paint its own picker triangle inside the field, which put a control
+   glyph on every row of the log - twenty of them down a narrow column,
+   pointing at a menu nobody opens that way. The autocomplete still works when
+   you type; only the indicator is gone. */
+.log-tagline::-webkit-calendar-picker-indicator { display: none !important; opacity: 0; }
+.log-tagline::-webkit-list-button { display: none !important; }
 .log-tagline::placeholder { color: var(--n-300); }
 .log-row:hover .log-tagline { color: var(--mist); }
 .log-tagline:focus { background: var(--cloud); color: var(--ink); box-shadow: inset 0 0 0 1px var(--select); }
@@ -865,7 +872,7 @@
 .tag-btn:hover { border-color: var(--n-300); color: var(--ink); background: var(--n-100); }
 .tag-btn:active { transform: scale(0.98); border-color: var(--n-400); background: var(--n-200); cursor: grabbing; transition-duration: var(--dur), var(--dur), var(--dur), 220ms; }
 .tag-btn.drag-over { border-color: var(--select); box-shadow: inset 0 2.5px 0 0 var(--select), var(--shadow-card); }
-.tag-btn-word { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tag-btn-word { flex: 1; min-width: 0; overflow: hidden; text-overflow: clip; white-space: nowrap; }
 .tag-btn-tag { font-weight: 500; height: var(--h-tag, 28px); flex: 0 0 auto; }
 
 /* The BoardUI status dot: a 12px tinted halo with a 6px solid centre. The
