@@ -238,6 +238,17 @@
   box-shadow: 0 2px 10px rgb(0 0 0 / 0.28), 0 0 0 1px rgb(0 0 0 / 0.06);
   caret-color: currentColor;
 }
+/* A PLAYER'S TWO-LETTER LABEL, TYPED ON THE DISC (2026-08-29, Tony's call).
+   Transparent and centred so the field is the shape - there is no box, no
+   fill and no border, and what is typed lands where flat.js will commit it.
+   800 for the same reason .an-textinput is 800: it mirrors DIAGRAM CONTENT. */
+.an-poslabel {
+  position: absolute; z-index: 7;
+  padding: 0; border: none; outline: none; background: none;
+  font: inherit; font-weight: 800; text-align: center; text-transform: uppercase;
+  letter-spacing: 0; caret-color: currentColor;
+}
+
 /* The annotation toolbar prints its shortcuts. A key you cannot see is not
    a shortcut - the same rule the tag panel now follows. */
 .an-tb .tb-key {
@@ -320,18 +331,33 @@
 #vpLogSearch::placeholder { color: var(--soft); }
 #vpLogSearch:hover:not(:focus) { box-shadow: var(--field-ring-hover); }
 #vpLogSearch:focus { outline: none; box-shadow: var(--field-ring-focus); }
-.log-filters { flex: 1; min-width: 0; display: flex; gap: 4px; }
+.log-filters { flex: none; display: flex; gap: 4px; }
 .log-filters[hidden] { display: none; }
+/* ICON-ONLY (2026-08-29, Tony's call). As words these three were the widest
+   thing in the narrowest column, so dragging the log's grip in ate them
+   first. A 28px square stands level with every other control in the three
+   columns and the count moves to a badge on the corner - a filtered list
+   must never be able to look like an empty one. */
 .log-filter {
-  flex: 1; min-width: 0; height: 28px; padding: 0 6px;
-  font: inherit; font-size: 12px; letter-spacing: 0.15px; font-weight: 500;
+  position: relative;
+  flex: none; width: 28px; height: 28px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
   border: 1px solid var(--edge); border-radius: 6px;
   background: var(--cloud); color: var(--graphite); cursor: pointer;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   transition: background var(--dur) ease, border-color var(--dur) ease, color var(--dur) ease;
 }
+.log-filter svg { width: 15px; height: 15px; }
 .log-filter:hover { border-color: var(--n-300); color: var(--ink); }
 .log-filter.on { background-image: var(--grad-primary); border-color: transparent; color: #fff; box-shadow: var(--shadow-nav); }
+.log-fcount {
+  position: absolute; top: -4px; right: -4px;
+  min-width: 14px; height: 14px; padding: 0 3px;
+  border-radius: 999px; background: var(--select); color: #fff;
+  font-size: 9px; line-height: 14px; font-weight: 700; text-align: center;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 0 1.5px var(--sunken);
+}
+.log-filter.on .log-fcount { background: #fff; color: var(--select); }
 
 /* A multi-select filter menu with a count beside every option, so it also
    reads as a summary of what the game holds. */
@@ -420,9 +446,9 @@
    three dots that had a column to themselves. A bar down the leading edge
    plus a wash: readable at a glance down a long list, and it costs no width. */
 .log-row.rated { box-shadow: inset 3px 0 0 0 var(--rate); }
-.log-row.rated:not(.on) { background: color-mix(in oklab, var(--rate) 9%, var(--cloud)); }
-.log-row.rated:nth-child(even):not(.on) { background: color-mix(in oklab, var(--rate) 13%, var(--cloud)); }
-.log-row.rated:hover:not(.on) { background: color-mix(in oklab, var(--rate) 20%, var(--cloud)); }
+.log-row.rated:not(.on) { background: color-mix(in oklab, var(--rate) 14%, var(--cloud)); }
+.log-row.rated:nth-child(even):not(.on) { background: color-mix(in oklab, var(--rate) 18%, var(--cloud)); }
+.log-row.rated:hover:not(.on) { background: color-mix(in oklab, var(--rate) 26%, var(--cloud)); }
 .log-row.on.rated { box-shadow: inset 3px 0 0 0 var(--rate), inset 0 1px 0 0 rgba(255, 255, 255, 0.18); }
 .log-row.on { background-image: var(--grad-primary); color: #fff; box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.18); }
 
@@ -648,12 +674,14 @@
   /* 116, not 108: the Players button at the top is the longest label the
      column carries, and at 108 it ellipsised to "Play...". */
   width: 116px; flex-shrink: 0; overflow-y: auto;
+  /* The width above is only the default - `wireResize` writes an inline one
+     from settings.railW, the same way the log and the tag panel work. */
   display: flex; flex-direction: column; gap: 4px;
   padding: 8px 7px 12px;
   background: var(--sunken);
   border-right: 1px solid var(--edge);
 }
-.vp.rail-hidden #vpPRail { display: none; }
+.vp.rail-hidden #vpPRail, .vp.rail-hidden #vpGripRail { display: none; }
 .prail-head {
   font-size: 12px; letter-spacing: 0.15px; font-weight: 700; color: var(--ink);
   margin: 0 2px 3px;
@@ -693,6 +721,16 @@
 .vp-prail.arming { background: var(--select-soft); }
 .prail-empty { font-size: 11px; letter-spacing: 0.2px; color: var(--mist); line-height: 1.5; }
 .prail-empty .mini { margin-top: 6px; }
+/* Edit Players sits at the foot of the roster exactly as Edit Buttons sits at
+   the foot of the tag panel - same recipe, so the two columns read as one
+   pair of controls. */
+.prail-edit {
+  justify-content: center; margin-top: 7px;
+  color: var(--mist); font-size: 11px; font-weight: 600; letter-spacing: 0.2px;
+  /* The column is draggable down to 76px now, and a two-word label wrapping
+     inside a fixed-height button is the one thing that breaks its rhythm. */
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 
 /* Labels read as words, not as small caps (2026-08-27). */
 .side-label {
@@ -940,13 +978,14 @@
 
 /* One grid, shared by the column header and every row beneath it, so the
    headings sit over the fields they name. */
-.pe-head, .pe-list--clip .pe-row, .pe-list--tag .pe-row {
+.pe-head, .pe-list--clip .pe-row, .pe-list--tag .pe-row, .pe-list--roster .pe-row {
   display: grid;
   align-items: center;
   gap: 8px;
 }
-.pe-head--clip, .pe-list--clip .pe-row { grid-template-columns: 18px 34px minmax(0, 1fr) 46px 58px 58px 78px; }
-.pe-head--tag,  .pe-list--tag  .pe-row { grid-template-columns: 18px 34px minmax(0, 1fr) 46px 78px; }
+.pe-head--clip, .pe-list--clip .pe-row { grid-template-columns: 18px 24px minmax(0, 1fr) 46px 58px 58px 78px; }
+.pe-head--tag,  .pe-list--tag  .pe-row { grid-template-columns: 18px 24px minmax(0, 1fr) 46px 78px; }
+.pe-head--roster, .pe-list--roster .pe-row { grid-template-columns: 18px 52px minmax(0, 1fr) minmax(0, 1fr) 46px 78px; }
 .pe-head {
   padding: 0 10px 5px;
   font-size: 12px; font-weight: 500; letter-spacing: 0.15px; color: var(--soft);
@@ -982,19 +1021,30 @@
 .pe-grip:active { cursor: grabbing; }
 .pe-row:hover .pe-grip { color: var(--n-400); }
 
-/* The colour well: the button's own colour, drawn the way the button is. */
+/* THE WELL IS THE DOT (2026-08-29, Tony's call). It used to be a 34x26
+   gradient chip, which was a swatch - a different object from the thing it
+   sets. It now draws the exact `.tag-dot` recipe the button in the panel
+   wears (12px tinted halo, 6px solid centre), so the row shows a preview of
+   the button rather than a description of it. The hit target stays 24px
+   square; only the paint is 12. */
 .pe-well {
-  width: 34px; height: 26px; padding: 0;
-  border: 1px solid color-mix(in oklab, var(--c, #737373) 74%, #000);
-  border-radius: var(--r-sm);
-  background-image: linear-gradient(180deg,
-    color-mix(in oklab, var(--c, #737373) 93%, #fff) 0%,
-    color-mix(in oklab, var(--c, #737373) 87%, #000) 100%);
-  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.18), var(--shadow-card);
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; padding: 0;
+  border: none; border-radius: 50%; background: none; box-shadow: none;
   cursor: pointer;
-  transition: filter var(--dur) ease, box-shadow var(--dur) ease;
+  transition: background var(--dur) ease;
 }
-.pe-well:hover { filter: brightness(1.07); box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.22), var(--shadow-2); }
+.pe-well::before {
+  content: ''; width: 12px; height: 12px; border-radius: 50%;
+  background: color-mix(in oklab, var(--c, #737373) 18%, #fff);
+}
+.pe-well::after {
+  content: ''; position: absolute; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--c, #737373);
+}
+.pe-well:hover { background: var(--n-200); }
+.pe-well:focus-visible { outline: 2px solid var(--a-400); outline-offset: 1px; }
 
 .pe-label, .pe-key, .pe-num {
   height: 30px; min-width: 0; width: 100%;

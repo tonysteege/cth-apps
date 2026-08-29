@@ -414,6 +414,45 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
     resized from eight handles, with optional aspect locks. While the crop
     overlay is open THE PREVIEW IS UNCROPPED - cropping the picture under a
     crop tool would move the thing being aimed at.
+- **A TAG IS PRINTED WITH ITS `#`, AND THE `#` IS NEVER STORED** (2026-08-29,
+  Tony's call). Tag buttons and the Clip Log's tag line both draw a leading
+  hash; `normTag` has always stripped one on the way in, which is what makes
+  this safe in both directions - a tag typed as "#star" and one typed as
+  "star" are the same tag, so the log can print one and can never produce
+  "##star". CLIP BUTTONS DO NOT GET IT: a clip label names a moment, not a
+  tag, and Players is an action. A tag button truncates one character shorter
+  (`BTN_MAX - 1`) so the hash costs the column no width.
+- **THE LOG'S THREE FILTERS ARE ICON-ONLY** (2026-08-29, Tony's call): a film
+  strip for Clips, a tag for Tags, a queue for Playlist, each 28px square like
+  every other control in the three columns. As words they were the widest
+  thing in the narrowest column and the first casualty of dragging the log's
+  grip in. The count moved to a badge on the corner (`.log-fcount`) and must
+  stay: a filtered list that looks like an empty one is the thing this row
+  exists to prevent.
+- **CLIP COMES BEFORE TIME IN THE HEAD ROW** (2026-08-29, Tony's call), which
+  is the order the row beneath it reads in - the name takes the width and the
+  timecode rides on its end.
+- **THE ROSTER IS EDITED FROM THE PLAYERS COLUMN, NOT FROM SETTINGS**
+  (2026-08-29, Tony's call). `openRosterEditor()` opens from an Edit Players
+  button at the foot of the rail, exactly where Edit Buttons sits at the foot
+  of the tag panel, and it is the SAME dialogue shell as the panel editor -
+  `.sheet-pe`, one grid shared by a column header and its rows, a scrolling
+  body between a fixed title and a fixed footer, drag-by-handle reorder, Copy
+  and remove per row. Three things follow: the drag order here IS the order of
+  the Players column, Copy never carries the hotkey, and the Clips Settings
+  sheet no longer touches `players` at all - its save spreads the current
+  settings, so the roster carries through it untouched.
+- **THE COLOUR WELL IS THE DOT IT SETS** (2026-08-29, Tony's call). `.pe-well`
+  was a 34x26 gradient chip, which is a swatch - a different object from the
+  thing it controls. It now draws the exact `.tag-dot` recipe (12px tinted
+  halo, 6px solid centre) inside a 24px hit target, so an editor row shows a
+  preview of the button rather than a description of it. The popover's preset
+  swatches stay solid circles: they are a palette, and a 12px dot is not
+  legible as one.
+- **ALL THREE COLUMNS RESIZE AND COLLAPSE** (2026-08-29, Tony's call). The
+  roster gained `#vpGripRail` and `settings.railW` (default 116, floor 76,
+  ceiling 260) on the same `wireResize` the log and the tag panel use, and the
+  grip hides with the column.
 - **ONLY A STAR COLOURS A CLIP LOG ROW, AND IT IS YELLOW** (2026-08-29,
   Tony's call, twice). Three `.rate-dot`s used to sit in a column of their own
   on every row; the row now wears the rating as a bar down its leading edge
@@ -511,6 +550,25 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   from `diagrams/css/app.css`, which Clips already imports - ONE recipe, two
   apps, no copy. The 250ms close delay is what lets the pointer travel from
   the button to the menu.
+- **THE TOOLBAR'S PLAYER SLOTS ARE THE DIAGRAMS PRESETS** (2026-08-29, Tony's
+  call): black, the CTH cyan `#75d8ff` and grey `#d9d9d9`, replacing iOS
+  red/blue/black. A player dropped on film and a player drawn on a rink were
+  otherwise different objects wearing different colours.
+  - A PLAYER BUTTON ARMS THE IDLE BAR like every tool beside it. It was the
+    one control on the idle strip left disabled, so the row of circles that
+    most looks like a thing to press did nothing until a frame was already
+    frozen. The idle bar cannot arm an editor that does not exist yet, so the
+    colour and label chosen there are parked in `pendingPos`, which
+    `openAnnotator` reads ONCE and clears.
+  - THE DEFAULT PLAYER IS BLANK AND TYPEABLE. It used to be a hardcoded 'C',
+    so every unnamed marker claimed to be the centre. Placing a blank one
+    opens `.an-poslabel`, a transparent two-character field centred on the
+    disc and sized off the disc's radius through the same `r * 0.82 / 1.0`
+    ratio flat.js commits the label at - so what is typed sits exactly where
+    the label will land. The element's own label is BLANKED while the field is
+    open; live-syncing it would draw the glyphs twice, once on the canvas and
+    once in the field. Double-clicking a placed player reopens it, and the
+    position menu is still there for anyone who would rather pick.
 - **TELESTRATION TEXT IS ALWAYS INK** (2026-08-29, Tony's call). The text chip
   is a WHITE PILL with a dark border, so a coloured caption was the one mark
   in the app that had to be read rather than seen. The colour swatches still

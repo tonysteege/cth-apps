@@ -454,6 +454,7 @@ async function showPlayer(id) {
         <aside class="vp-side" id="vpSide"></aside>
         <div class="vp-grip" id="vpGripSide" title="Drag To Resize - Double-Click Resets"><span></span></div>
         <aside class="vp-prail" id="vpPRail"></aside>
+        <div class="vp-grip" id="vpGripRail" title="Drag To Resize - Double-Click Resets"><span></span></div>
         <div class="vp-stagecol">
           <div class="vp-stage" id="vpStage">
             <video id="vpVideo" playsinline crossorigin="anonymous"></video>
@@ -587,6 +588,12 @@ const SIDE_W_DEFAULT = 124;
 // 104px floor (2026-08-27, Tony's call). The buttons themselves still do
 // not resize with the column; see the css note on .vp-side.
 const SIDE_W_MIN = 68;
+// The roster column resizes and collapses exactly like the other two
+// (2026-08-29, Tony's call). 116 is where it has always drawn - the width of
+// the longest label it carries - and 76 is a number plus a short first name,
+// below which every name ellipsises.
+const RAIL_W_DEFAULT = 116;
+const RAIL_W_MIN = 76;
 
 function wireResize({ grip, panel, key, def, min, max }) {
   const h = $(grip);
@@ -637,6 +644,7 @@ function wireResize({ grip, panel, key, def, min, max }) {
 function wirePanels() {
   wireResize({ grip: '#vpGripLog', panel: '#vpLog', key: 'logW', def: LOG_W_DEFAULT, min: LOG_W_MIN, max: 560 });
   wireResize({ grip: '#vpGripSide', panel: '#vpSide', key: 'sideW', def: SIDE_W_DEFAULT, min: SIDE_W_MIN, max: 240 });
+  wireResize({ grip: '#vpGripRail', panel: '#vpPRail', key: 'railW', def: RAIL_W_DEFAULT, min: RAIL_W_MIN, max: 260 });
 }
 
 // ------------------------------------------------------------- upload
@@ -1250,12 +1258,6 @@ export async function openClipSettings(focus = null) {
       </div>
       <div class="pe-body">
         <section class="pe-section">
-          <div class="pe-title">Players${info('A player\'s FIRST name becomes the tag. The key is one character, pressed inside the Players dialogue.')}</div>
-          <div class="cs-players" data-players></div>
-          <div class="bs-styleadd"><button class="mini" data-addplayer>+ Player</button></div>
-          
-        </section>
-        <section class="pe-section">
           <div class="pe-title">Export</div>
           <label class="bs-row"><span>File Name${info(`Tokens: ${NAME_TOKENS.map(([t, w]) => `${t} is the ${w}`).join(', ')}. An empty token collapses without leaving the dash that joined it.`)}</span>
             <input type="text" data-k="naming" value="${esc(s.naming)}" spellcheck="false">
@@ -1328,33 +1330,10 @@ export async function openClipSettings(focus = null) {
     </div>`;
   document.body.appendChild(veil);
 
-  // ---- roster
-  const box = veil.querySelector('[data-players]');
-  let roster = (s.players || []).map((p) => ({ ...p }));
-  const paintRoster = () => {
-    box.innerHTML = roster.map((p) => `
-      <div class="cs-player" data-pid="${esc(p.id)}">
-        <input data-f="num" value="${esc(p.num || '')}" placeholder="#" maxlength="3" aria-label="Number">
-        <input data-f="first" value="${esc(p.first || '')}" placeholder="First" aria-label="First Name">
-        <input data-f="last" value="${esc(p.last || '')}" placeholder="Last" aria-label="Last Name">
-        <input data-f="key" value="${esc(p.key || '')}" placeholder="Key" maxlength="1" aria-label="Shortcut Key">
-        <button class="mini mini-danger" data-rm aria-label="Remove">&times;</button>
-      </div>`).join('') || '<p class="bs-empty">No players yet.</p>';
-    box.querySelectorAll('.cs-player').forEach((row) => {
-      const p = roster.find((x) => x.id === row.dataset.pid);
-      row.querySelectorAll('[data-f]').forEach((i) => {
-        i.oninput = () => { p[i.dataset.f] = i.dataset.f === 'key' ? i.value.toLowerCase() : i.value; };
-      });
-      row.querySelector('[data-rm]').onclick = () => { roster = roster.filter((x) => x.id !== p.id); paintRoster(); };
-    });
-  };
-  paintRoster();
-  veil.querySelector('[data-addplayer]').onclick = () => {
-    roster.push({ id: uid(), num: '', first: '', last: '', key: '' });
-    paintRoster();
-    box.querySelector('.cs-player:last-child [data-f="num"]')?.focus();
-  };
-  if (focus === 'players') box.scrollIntoView({ block: 'nearest' });
+  // THE ROSTER IS NOT EDITED HERE ANY MORE (2026-08-29, Tony's call): it
+  // moved to an Edit Players button at the foot of the Players column, beside
+  // the thing it edits. `next` spreads the current settings, so `players`
+  // carries through this sheet untouched.
 
   const close = () => { hideTip(); veil.remove(); };
   veil.addEventListener('mousedown', (e) => { if (e.target === veil) close(); });
@@ -1394,7 +1373,6 @@ export async function openClipSettings(focus = null) {
     });
     // A player with no first name is nothing to tag with.
     Object.assign(next, segVals);
-    next.players = roster.filter((p) => (p.first || '').trim());
     // The position chips arrive as one comma-separated field; store the list
     // and drop the scratch key so it never lands in the record.
     if (next.positionsCsv != null) {

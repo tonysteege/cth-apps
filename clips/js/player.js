@@ -48,6 +48,14 @@ export const fmtHMS = (t) => {
 export const BTN_MAX = 7;
 export const btnLabel = (s) => (s || '').slice(0, BTN_MAX);
 
+// A TAG READS AS A TAG (2026-08-29, Tony's call): a leading # on the buttons
+// and in the Clip Log. It is DISPLAY ONLY and never stored - `normTag` strips
+// any leading # on the way in, so a tag typed as "#star" and one typed as
+// "star" are the same tag, and the log can print one without ever producing
+// "##star". Clip buttons do NOT get it: a clip label names a moment, not a
+// tag, and the Players button is an action.
+export const hashTag = (s) => `#${s || ''}`;
+
 // A tag button is a SOLID button in its own colour (2026-08-26, Tony's
 // call, replacing the white chip with a colour dot). The label therefore
 // sits on an arbitrary user-picked colour, so the text colour has to be
@@ -885,7 +893,7 @@ export function paintPRail() {
   const c = selClip();
   if (!roster.length) {
     rail.innerHTML = '<div class="prail-empty">No players yet.<br><button class="mini" data-act="roster">Add Roster</button></div>';
-    rail.querySelector('[data-act="roster"]').onclick = () => hooks.onSettings?.('players');
+    rail.querySelector('[data-act="roster"]').onclick = () => openRosterEditor();
     return;
   }
   // While armed, a player whose number cannot still be reached by the next
@@ -902,7 +910,9 @@ export function paintPRail() {
       <button class="prail-btn${(c?.tags || []).includes(normTag(p.first)) ? ' on' : ''}${live(p) ? '' : ' dim'}" data-pid="${esc(p.id)}" title="Tag ${esc(p.first)}${p.num ? ` (#${esc(String(p.num))})` : ''}">
         <span class="prail-num">${esc(String(p.num ?? ''))}</span>
         <span class="prail-name">${esc(p.first)}</span>
-      </button>`).join('')}`;
+      </button>`).join('')}
+    <button class="prail-btn prail-edit" data-act="editRoster" title="Edit The Roster - Numbers, Names And Keys">Edit Players</button>`;
+  rail.querySelector('[data-act="editRoster"]').onclick = () => openRosterEditor();
   rail.querySelectorAll('[data-act="players"]').forEach((b) => { b.onclick = () => openPlayers(); });
   rail.querySelectorAll('[data-pid]').forEach((b) => {
     b.onclick = () => {
@@ -971,7 +981,7 @@ export function paintBar() {
       ${dot}<span class="tag-btn-word">${esc(btnLabel(b.label))}</span>${keyBadge(b.key)}
     </button>` : `
     <button class="tag-btn tag-btn-tag${c?.tags.includes(b.label) ? ' on' : ''}" draggable="true" data-drag="${b.id}" data-tagbtn="${b.id}" style="--c:${b.color}" title="Toggle #${esc(b.label)} On The Selected Clip. Drag To Reorder">
-      ${dot}<span class="tag-btn-word">${esc(btnLabel(b.label))}</span>${keyBadge(b.key)}
+      ${dot}<span class="tag-btn-word">${esc(hashTag((b.label || '').slice(0, BTN_MAX - 1)))}</span>${keyBadge(b.key)}
     </button>`;
   };
   bar.innerHTML = `
@@ -1164,7 +1174,7 @@ export function openPlayers() {
     document.removeEventListener('keydown', onPlayerKey, true);
     veil.remove();
     paintBar();
-    if (openSettings) { if (hooks.onSettings) hooks.onSettings('players'); return; }
+    if (openSettings) { openRosterEditor(); return; }
     if (wasPlaying) v.play().catch(() => {});
   };
   function onPlayerKey(e) {
@@ -1387,14 +1397,26 @@ const RATINGS = [
 // colour stopped meaning anything. A star is rare by definition, which is
 // what makes it worth finding at a glance. The yellow matches the star
 // button's own dot in DEFAULT_PANEL.
-const STAR_COLOR = '#eab308';
+// THE LOG'S THREE FILTERS ARE ICON-ONLY (2026-08-29, Tony's call). The log is
+// the narrowest column in the app and Clips/Tags/Playlist as words were the
+// widest thing in its head row - the first casualty of dragging the grip in.
+// A count is still shown, as a badge on the corner, because a filtered list
+// that looks like an empty one is the thing this row exists to prevent.
+const FILTER_ICONS = {
+  label: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 4v16M16 4v16M3 12h18"/></svg>',
+  tag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11.5V4.5a1.5 1.5 0 0 1 1.5-1.5h7l9 9a1.5 1.5 0 0 1 0 2.1l-6.9 6.9a1.5 1.5 0 0 1-2.1 0z"/><circle cx="7.6" cy="7.6" r="1.3"/></svg>',
+  playlist: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h12M3 12h9M3 18h7"/><path d="m16 12 6 4-6 4z" fill="currentColor" stroke="none"/></svg>',
+};
+const fCount = (n) => (n ? `<span class="log-fcount">${n}</span>` : '');
+
+const STAR_COLOR = '#ffcc00';
 const rateOf = (c) => ((c.tags || []).includes('star') ? STAR_COLOR : '');
 
 // A clip's tags as ONE editable line rather than a row of pills: pills ate
 // the width the log has least of. Typing commits on Enter or blur, and the
 // whole set is replaced by what is in the field, so removing a tag is
 // deleting its word.
-const tagLine = (c) => (c.tags || []).join(' ');
+const tagLine = (c) => (c.tags || []).map(hashTag).join(' ');
 
 export const selection = new Set();   // clip ids ticked for a bulk action
 
@@ -1431,15 +1453,15 @@ export function paintLog() {
       <button class="log-iconbtn${view.search ? ' on' : ''}" id="vpLogSearchBtn" title="Search Clips" aria-label="Search Clips">${SEARCH_ICON}</button>
       <input id="vpLogSearch" type="search" placeholder="Search Clips…" value="${esc(view.search)}" autocomplete="off"${view.searchOpen || view.search ? '' : ' hidden'}>
       <div class="log-filters"${view.searchOpen ? ' hidden' : ''}>
-        <button class="log-filter${view.labels.length ? ' on' : ''}" data-menu="label">Clips${view.labels.length ? ` (${view.labels.length})` : ''}</button>
-        <button class="log-filter${view.tags.length ? ' on' : ''}" data-menu="tag">Tags${view.tags.length ? ` (${view.tags.length})` : ''}</button>
-        <button class="log-filter${view.playlist ? ' on' : ''}" id="vpPlaylist" title="Play Every Clip Below, Back To Back">Playlist</button>
+        <button class="log-filter${view.labels.length ? ' on' : ''}" data-menu="label" title="Filter By Clip Button" aria-label="Filter By Clip Button">${FILTER_ICONS.label}${fCount(view.labels.length)}</button>
+        <button class="log-filter${view.tags.length ? ' on' : ''}" data-menu="tag" title="Filter By Tag" aria-label="Filter By Tag">${FILTER_ICONS.tag}${fCount(view.tags.length)}</button>
+        <button class="log-filter${view.playlist ? ' on' : ''}" id="vpPlaylist" title="Playlist - Play Every Clip Below, Back To Back" aria-label="Playlist">${FILTER_ICONS.playlist}</button>
       </div>
     </div>
     <div class="log-cols">
       <span class="c-check"><input type="checkbox" id="vpAllCheck" title="Select Every Clip Below"${ticked && ticked === list.length ? ' checked' : ''}></span>
-      <button class="c-sort${view.sortBy === 'time' ? ' on' : ''}" data-sort="time">Time${arrow('time')}</button>
       <button class="c-sort c-grow${view.sortBy === 'name' ? ' on' : ''}" data-sort="name">Clip${arrow('name')}</button>
+      <button class="c-sort${view.sortBy === 'time' ? ' on' : ''}" data-sort="time">Time${arrow('time')}</button>
       <button class="log-colbtn${view.hideTime ? '' : ' on'}" id="vpLogTime" title="${view.hideTime ? 'Show' : 'Hide'} The Timecode" aria-label="${view.hideTime ? 'Show' : 'Hide'} The Timecode">${CLOCK_ICON}</button>
     </div>
     ${ticked ? `<div class="log-bulk">
@@ -1451,7 +1473,7 @@ export function paintLog() {
       <button class="mini mini-danger" data-bulk="del">Delete</button>
       <button class="mini" data-bulk="none">Clear</button>
     </div>` : ''}
-    <datalist id="vpTagOpts">${tagOpts.map((t) => `<option value="${esc(t)}">`).join('')}</datalist>
+    <datalist id="vpTagOpts">${tagOpts.map((t) => `<option value="${esc(hashTag(t))}">`).join('')}</datalist>
     <div class="log-list">
       ${list.map((c) => `
         <div class="log-row${c.id === cur.sel ? ' on' : ''}${selection.has(c.id) ? ' picked' : ''}${rateOf(c) ? ' rated' : ''}" data-id="${c.id}"${rateOf(c) ? ` style="--rate:${rateOf(c)}"` : ''}>
@@ -1559,6 +1581,116 @@ const PRESET_COLORS = [
   ['#0ea5e9', 'Sky'], ['#eab308', 'Yellow'], ['#f97316', 'Orange'],
   ['#7c3aed', 'Violet'], ['#d946ef', 'Magenta'], ['#6366f1', 'Indigo'],
 ];
+
+// THE ROSTER IS EDITED FROM THE PLAYERS COLUMN, NOT FROM SETTINGS
+// (2026-08-29, Tony's call). It used to be the first section of the Clips
+// Settings sheet, which put the roster three clicks and a scroll away from
+// the column that shows it, and next to export patterns and drawing widths
+// it had nothing to do with. It is now an Edit Players button at the foot of
+// the rail, exactly where Edit Buttons sits at the foot of the tag panel, and
+// it opens the SAME dialogue shape: one grid shared by a column header and
+// its rows, a scrolling body between a fixed title and a fixed footer, rows
+// that drag to reorder by their handle, and Copy / remove on each row.
+// The rail draws players in roster order, so the drag here IS the order of
+// the column.
+function openRosterEditor() {
+  document.querySelector('.sheet-veil')?.remove();
+  const wrap = document.createElement('div');
+  wrap.className = 'sheet-veil';
+  const GRIP = '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><circle cx="6" cy="3.5" r="1.25"/><circle cx="10" cy="3.5" r="1.25"/><circle cx="6" cy="8" r="1.25"/><circle cx="10" cy="8" r="1.25"/><circle cx="6" cy="12.5" r="1.25"/><circle cx="10" cy="12.5" r="1.25"/></svg>';
+  const row = (p) => `
+    <div class="pe-row" data-id="${p.id}" draggable="true">
+      <span class="pe-grip" title="Drag To Reorder">${GRIP}</span>
+      <input class="pe-num pl-f" data-f="num" value="${esc(p.num || '')}" placeholder="#" maxlength="3" aria-label="Number">
+      <input class="pe-label pl-f" data-f="first" value="${esc(p.first || '')}" placeholder="First" aria-label="First Name">
+      <input class="pe-label pl-f" data-f="last" value="${esc(p.last || '')}" placeholder="Last" aria-label="Last Name">
+      <input class="pe-key pl-f" data-f="key" value="${esc(p.key || '')}" maxlength="1" placeholder="-" aria-label="Hotkey">
+      <span class="pe-acts">
+        <button class="mini" data-dup title="Duplicate This Player">Copy</button>
+        <button class="mini mini-danger" data-del title="Remove This Player" aria-label="Remove This Player">&times;</button>
+      </span>
+    </div>`;
+  wrap.innerHTML = `
+    <div class="sheet sheet-pe" role="dialog" aria-modal="true" aria-labelledby="plTitle">
+      <div class="pe-top">
+        <h3 id="plTitle">Players</h3>
+        <p>A player's FIRST name becomes the tag, so two players sharing a first name share a tag - give one of them a nickname. The key is one character and a capital means Shift plus that letter, the same as the tag panel. Drag a row by its handle to set the order of the Players column.</p>
+      </div>
+      <div class="pe-body">
+        <section class="pe-section">
+          <div class="pe-title">Roster</div>
+          <div class="pe-head pe-head--roster">
+            <span></span><span>#</span><span>First</span><span>Last</span><span>Key</span><span></span>
+          </div>
+          <div id="plList" class="pe-list pe-list--roster">${(cur.settings.players || []).map(row).join('')}</div>
+          <div class="pe-adds"><button class="mini" id="plAdd">+ Player</button></div>
+        </section>
+      </div>
+      <div class="sheet-row pe-foot">
+        <button class="btn" data-x="cancel">Cancel</button>
+        <button class="btn btn-ink" data-x="save">Save Players</button>
+      </div>
+    </div>`;
+  document.body.appendChild(wrap);
+  const list = wrap.querySelector('#plList');
+
+  const wireRow = (r) => {
+    r.addEventListener('dragstart', (e) => {
+      // A drag that starts inside a field would steal the caret, so only the
+      // handle drags - the same guard the panel editor uses.
+      if (e.target.closest('input')) { e.preventDefault(); return; }
+      r.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', r.dataset.id);
+    });
+    r.addEventListener('dragend', () => r.classList.remove('dragging'));
+    r.addEventListener('dragover', (e) => { e.preventDefault(); });
+    r.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const src = list.querySelector('.pe-row.dragging');
+      if (src && src !== r) list.insertBefore(src, r);
+    });
+    r.querySelector('[data-del]').onclick = () => r.remove();
+    r.querySelector('[data-dup]').onclick = () => {
+      const copy = r.cloneNode(true);
+      copy.dataset.id = uid();
+      // Never copy the hotkey: two rows on one key is the bug the panel
+      // editor spends three layers preventing.
+      copy.querySelector('[data-f="key"]').value = '';
+      r.after(copy);
+      wireRow(copy);
+    };
+  };
+  list.querySelectorAll('.pe-row').forEach(wireRow);
+  list.addEventListener('dragover', (e) => e.preventDefault());
+  list.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const src = list.querySelector('.pe-row.dragging');
+    if (src && !e.target.closest('.pe-row')) list.appendChild(src);
+  });
+  wrap.querySelector('#plAdd').onclick = () => {
+    list.insertAdjacentHTML('beforeend', row({ id: uid(), num: '', first: '', last: '', key: '' }));
+    const r = list.lastElementChild;
+    wireRow(r);
+    r.querySelector('[data-f="num"]').focus();
+  };
+
+  const close = () => wrap.remove();
+  wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) close(); });
+  wrap.querySelector('[data-x="cancel"]').onclick = close;
+  wrap.querySelector('[data-x="save"]').onclick = async () => {
+    const val = (r, f) => r.querySelector(`[data-f="${f}"]`).value.trim();
+    // A player with no first name is nothing to tag with.
+    cur.settings.players = [...list.querySelectorAll('.pe-row')]
+      .map((r) => ({ id: r.dataset.id, num: val(r, 'num'), first: val(r, 'first'), last: val(r, 'last'), key: val(r, 'key').slice(0, 1) }))
+      .filter((p) => p.first);
+    await putSettings(cur.settings);
+    close();
+    paintPRail();
+    paintLog();
+    toast('Players Saved');
+  };
+}
 
 function openPanelEditor() {
   document.querySelector('.sheet-veil')?.remove();

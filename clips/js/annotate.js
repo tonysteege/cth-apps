@@ -57,7 +57,12 @@ const TOOLS = [
 // `freearrow` keeps its entry so an older saved key does not dangle.
 // The three player slots: home, away and neutral. A marker's colour is still
 // changeable after the fact with the colour swatches, like every other mark.
-const PLAYER_SLOTS = ['#ff3b30', '#0a84ff', '#1e1e1e'];
+// THE THREE SLOTS ARE THE DIAGRAMS TOOLBAR PRESETS (2026-08-29, Tony's
+// call): black, the CTH cyan and grey, in that order. They were iOS red /
+// blue / black, which meant a player dropped on film and the same player
+// drawn on a rink were different objects wearing different colours. One
+// vocabulary, two apps.
+const PLAYER_SLOTS = ['#1e1e1e', '#75d8ff', '#d9d9d9'];
 // The same list the rink editor offers, so a coach learns one vocabulary.
 const PLAYER_LABELS = ['1', '2', '3', '4', '5', 'C', 'D1', 'D2', 'F1', 'F2', 'F3', 'G', 'LD', 'LW', 'O', 'RD', 'RW', 'X'];
 
@@ -114,7 +119,21 @@ export function paintIdleBar(onPick) {
   for (const b of bar.querySelectorAll('[data-idle]')) {
     b.onclick = () => onPick?.(b.dataset.idle);
   }
+  // A PLAYER BUTTON ARMS THE BAR TOO (2026-08-29, Tony's call). It used to be
+  // the one control on the idle strip that was disabled, so the row of
+  // circles that most looks like a thing to press did nothing until you had
+  // already frozen a frame some other way.
+  for (const b of bar.querySelectorAll('[data-idleslot]')) {
+    const slot = Number(b.dataset.idleslot);
+    b.onpointerenter = () => showPlayerMenu(slot, b, onPick);
+    b.onpointerleave = () => hidePlayerMenu(true);
+    b.onclick = () => { pendingPos = { color: PLAYER_SLOTS[slot], label: '' }; hidePlayerMenu(); onPick?.('pos'); };
+  }
 }
+
+// The choice made on the idle bar, held across the freeze. `openAnnotator`
+// reads it once and clears it.
+let pendingPos = null;
 
 // Diagnostic tap, the Film Room idiom: only meaningful to someone who went
 // looking for it, and free at runtime.
@@ -386,7 +405,7 @@ function onDown(e) {
   if (an.tool === 'pos') {
     const x = {
       id: uid(), type: 'player', x: p.x, y: p.y,
-      r: 26 * s, color: an.posColor || PLAYER_SLOTS[0], label: an.posLabel ?? 'C',
+      r: 26 * s, color: an.posColor || PLAYER_SLOTS[0], label: an.posLabel ?? '',
     };
     an.els.push(x);
     an.sel = new Set([x.id]);
@@ -394,6 +413,11 @@ function onDown(e) {
     an.onDraw?.();
     if (an.autoSelect) setTool('select');
     redraw();
+    // A BLANK PLAYER OPENS ITS OWN LABEL FIELD (2026-08-29, Tony's call). The
+    // default used to be a hardcoded 'C', which meant every unnamed marker on
+    // a clip claimed to be the centre. Blank plus a two-character field drawn
+    // ON the disc is the same gesture as typing into the shape.
+    if (!x.label) openPlayerLabelInput(x);
     return;
   }
   if (an.tool === 'pen' || an.tool === 'freearrow') {
@@ -629,6 +653,60 @@ function openTextInput(p, existing = null) {
   setTimeout(() => input.focus(), 0);
 }
 
+// A PLAYER'S LABEL IS TYPED ON THE DISC. The field is transparent, centred
+// and sized off the disc's own radius through the same `r * 0.82 / 1.0`
+// ratio flat.js draws the label at, so what is typed sits exactly where the
+// committed label will. The element's own label is NOT updated as you type -
+// the canvas would draw it under the field and every glyph would double.
+function openPlayerLabelInput(x) {
+  const root = el('anRoot');
+  root.querySelector('.an-poslabel')?.remove();
+  const v = viewBox();
+  const rootR = root.getBoundingClientRect();
+  const scale = v.scale;
+  const d = x.r * 2 * scale;
+  const input = document.createElement('input');
+  input.className = 'an-poslabel';
+  input.maxLength = 2;
+  input.value = x.label || '';
+  input.style.left = `${v.left - rootR.left + x.x * scale - d / 2}px`;
+  input.style.top = `${v.top - rootR.top + x.y * scale - d / 2}px`;
+  input.style.width = `${d}px`;
+  input.style.height = `${d}px`;
+  input.style.lineHeight = `${d}px`;
+  input.style.color = labelInkOn(x.color);
+  const size = () => {
+    const n = input.value.trim().length;
+    input.style.fontSize = `${Math.max(9, x.r * (n > 1 ? 0.82 : 1.0) * scale)}px`;
+  };
+  size();
+  // Hide the committed label while the field is open, so the disc under it
+  // is blank and only one set of glyphs is ever on screen.
+  const was = x.label;
+  x.label = '';
+  root.appendChild(input);
+  redraw();
+
+  let done = false;
+  const finish = (keep) => {
+    if (done) return;
+    done = true;
+    const val = keep ? input.value.trim().toUpperCase().slice(0, 2) : was;
+    input.remove();
+    x.label = val;
+    if (val !== was) markDirty();
+    redraw();
+  };
+  input.oninput = size;
+  input.onkeydown = (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+    if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  };
+  input.onblur = () => finish(true);
+  setTimeout(() => { input.focus(); input.select(); }, 0);
+}
+
 // ------------------------------------------------------------- keys
 
 function onKey(e) {
@@ -727,7 +805,7 @@ function barHtml(live) {
       <button class="an-segbtn${live && an.shapeStyle === 'outline' ? ' on' : ''}" data-shape="outline" title="Boxes And Circles As A Solid Outline"${dis}>Outline</button>
     </span>
     <span class="tb-sep"></span>
-    ${PLAYER_SLOTS.map((c, i) => `<button class="tb-player${live && an.tool === 'pos' && an.posColor === c ? ' on' : ''}" data-slot="${i}" style="--c:${c}" title="Place A Player - Hover For Positions" aria-label="Player ${i + 1}"${dis}></button>`).join('')}
+    ${PLAYER_SLOTS.map((c, i) => `<button class="tb-player${live && an.tool === 'pos' && an.posColor === c ? ' on' : ''}" ${live ? `data-slot="${i}"` : `data-idleslot="${i}"`} style="--c:${c}" title="${live ? 'Place A Player - Hover For A Position' : 'Place A Player - Freezes This Frame And Starts Drawing. Hover For A Position'}" aria-label="Player ${i + 1}"></button>`).join('')}
     <span class="tb-sep"></span>
     <label class="an-hold" title="How Long The Exported Clip Holds On This Frame - Seconds"><input id="anHold" type="number" min="0" max="30" value="${live ? (an.freeze.hold ?? 3) : 3}"${dis}>s</label>
     <span class="tb-sep"></span>
@@ -749,7 +827,7 @@ function hidePlayerMenu(soon = false) {
   pmenuEl?.remove();
   pmenuEl = null;
 }
-function showPlayerMenu(slot, btn) {
+function showPlayerMenu(slot, btn, onPick = null) {
   clearTimeout(pmenuTimer);
   if (pmenuEl?.dataset.slot === String(slot)) return;
   hidePlayerMenu();
@@ -770,11 +848,17 @@ function showPlayerMenu(slot, btn) {
   pmenuEl.addEventListener('pointerleave', () => hidePlayerMenu(true));
   for (const b of pmenuEl.querySelectorAll('[data-label]')) {
     b.onclick = () => {
+      hidePlayerMenu();
+      if (onPick) {
+        // Idle: there is no editor to arm yet, so park the choice and freeze.
+        pendingPos = { color: c, label: b.dataset.label };
+        onPick('pos');
+        return;
+      }
       an.posLabel = b.dataset.label;
       an.posColor = c;
       setTool('pos');
-      hidePlayerMenu();
-      toast(b.dataset.label ? `Placing A "${b.dataset.label}" Player - Click The Picture` : 'Placing A Blank Player - Click The Picture');
+      toast(b.dataset.label ? `Placing A "${b.dataset.label}" Player - Click The Picture` : 'Placing A Blank Player - Type Two Letters On It');
     };
   }
 }
@@ -921,13 +1005,13 @@ export function openAnnotate(freeze, frameCanvas, { onDone, onExport, keys, actK
     shapeStyle: 'fill',
     style: { ...DEFAULT_STYLE, ...(style || {}) },
     positions: positions || ['D1', 'D2', 'C', 'W1', 'W2', 'F1', 'F2', 'F3'],
-    posLabel: 'D1',
+    posLabel: pendingPos?.label ?? '',
     colorSet: false,
     autoSelect,
     onDraw,
     colorPresets: (colorPresets && colorPresets.length === 3) ? colorPresets : DEFAULT_COLORS,
     textSize: textSize || TEXT_SIZE,
-    posColor: PLAYER_SLOTS[0],
+    posColor: pendingPos?.color || PLAYER_SLOTS[0],
     keys: { ...DEFAULT_KEYS, ...(keys || {}) },
     actKeys: { ...ACT_KEYS, ...(actKeys || {}) },
     onKeys,
@@ -937,6 +1021,9 @@ export function openAnnotate(freeze, frameCanvas, { onDone, onExport, keys, actK
     onDone,
     onExport,
   };
+  // Read once: a parked choice belongs to the freeze it opened, not to the
+  // next one.
+  pendingPos = null;
   const c = canvas();
   c.width = an.vw; c.height = an.vh;
   const f = el('anFrame');
@@ -950,6 +1037,7 @@ export function openAnnotate(freeze, frameCanvas, { onDone, onExport, keys, actK
       if (!an) return;
       const x = hitAt(pt(e));
       if (x?.type === 'text') openTextInput({ x: x.x, y: x.y }, x);
+      else if (x?.type === 'player') openPlayerLabelInput(x);
     });
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
