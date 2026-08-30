@@ -519,19 +519,33 @@
   /* check | name | time | tags. The name is `auto` so it fits the longest
      clip name, and `minmax(0, auto)` so it can still give way before the tag
      column is squeezed to nothing in a narrow log. */
-  grid-template-columns: 16px minmax(0, auto) auto minmax(40px, 1fr);
+  /* THE GUTTERS AND THE ROW INSET ARE CELL PADDING, NOT `gap` AND NOT ROW
+     PADDING (2026-08-29). A subgrid's tracks are the PARENT's, so padding on
+     the row does not move them - it just overlaps them - and a `gap` declared
+     on the row eats into tracks the parent already sized. Between the two,
+     the clip name landed 3px INSIDE the checkbox. Every gutter is now padding
+     on the cell that owns it, the parent's `column-gap` is 0, and the row
+     keeps no padding at all, which is also what lets the stripe and the star
+     bar run to the log's edges.
+     The first track is 30, not 16: 10 of row inset, 13 of checkbox, 7 of
+     gutter. The head row reaches the same 10px inset through its own
+     padding-left, so the two boxes still sit in one column. */
+  grid-template-columns: 30px minmax(0, auto) auto minmax(40px, 1fr);
+  column-gap: 0;
   align-content: start;
 }
 /* With the timecode hidden its track would still hold a gap, so the template
    loses the column rather than emptying it. */
-.log-list--notime { grid-template-columns: 16px minmax(0, auto) minmax(40px, 1fr); }
+.log-list--notime { grid-template-columns: 30px minmax(0, auto) minmax(40px, 1fr); }
 .log-empty { grid-column: 1 / -1; }
 /* The select-all box lives in the head row now; a clip row's own box uses the
    same 16px column, so the two line up down the whole log. */
-/* `flex: none` is for the head row, `width: 16px` matches the list grid's
-   first track - the two together are what keep the select-all box sitting
-   exactly over the column of ticks below it. */
+/* `flex: none` and `width: 16px` are for the HEAD ROW, which is flex. In the
+   list the cell owns the row's 10px inset as well, so it is wider there. Both
+   put the box itself at 10px from the log's left edge, which is what keeps
+   the select-all tick sitting exactly over the column below it. */
 .c-check { flex: none; width: 16px; display: inline-flex; align-items: center; }
+.log-list .c-check { width: 30px; box-sizing: border-box; padding-left: 10px; }
 .c-check input { width: 13px; height: 13px; margin: 0; cursor: pointer; accent-color: var(--select); }
 .log-count { flex: none; color: var(--soft); font-size: 11px; letter-spacing: 0.2px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 /* BoardUI's ChevronSortDown, the filled rounded triangle its own sortable
@@ -565,8 +579,8 @@
    track a timecode across to its name in a long list. */
 .log-row {
   display: grid; grid-column: 1 / -1; grid-template-columns: subgrid;
-  align-items: center; gap: 8px;
-  padding: 0 10px; min-height: 26px; cursor: pointer;
+  align-items: center;
+  min-height: 26px; cursor: pointer;
   border-bottom: 1px solid transparent;
   font-size: 12px; letter-spacing: 0.15px; color: var(--graphite);
 }
@@ -625,6 +639,7 @@
   font-style: normal; font-weight: 400;
   font-size: 11px; letter-spacing: 0.2px; white-space: nowrap;
   color: var(--soft); font-variant-numeric: tabular-nums;
+  padding-right: 8px;   /* the gutter before the tags */
 }
 .log-row.on .log-when { color: var(--mist); }
 /* THREE DOTS, ONE MEANING EACH: good, bad, star. Grey until the tag is on
@@ -633,6 +648,7 @@
 .log-name {
   min-width: 0; font-weight: 600;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding-right: 8px;   /* the gutter before the timecode */
 }
 /* Tags as ONE editable line, not pills: pills ate the width this column
    has least of. Lighter and quieter than the clip name beside it, so the
@@ -642,7 +658,8 @@
   border: none; background: none; outline: none;
   font: inherit; font-size: 12px; letter-spacing: 0.15px; font-weight: 400;
   color: var(--soft);
-  padding: 2px 4px; border-radius: 4px;
+  padding: 2px 10px 2px 4px;   /* the row's right inset lives here */
+  border-radius: 4px;
   text-overflow: clip;
   transition: background var(--dur) ease, color var(--dur) ease;
 }

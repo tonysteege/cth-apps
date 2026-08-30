@@ -512,6 +512,14 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
     box: no striping, no hover, no selection fill, no `--rate` inset. A
     subgrid row stays a real element that paints all of that AND contributes
     its cells to the parent's tracks, which is what makes the columns fit.
+  - **THE GUTTERS AND THE ROW INSET ARE CELL PADDING, NOT `gap` AND NOT ROW
+    PADDING.** A subgrid's tracks are the PARENT's, so padding on the row does
+    not move them, it overlaps them - and a `gap` declared on the row eats into
+    tracks the parent already sized. Between the two, the clip name landed 3px
+    INSIDE the checkbox. Every gutter is padding on the cell that owns it, the
+    parent's `column-gap` is 0, and the row carries no padding at all, which is
+    also what lets the stripe and the star bar reach the log's edges. The first
+    track is 30px: 10 of row inset, 13 of checkbox, 7 of gutter.
   - The name track is `minmax(0, auto)` so it fits the longest clip name but
     can still give way before the tag column is squeezed to nothing.
     `settings.hideTime` drops the COLUMN from the template rather than
@@ -1123,6 +1131,17 @@ after a live inspection of it. The two live side by side.
   loose in `slides/` are gone.
 
 ## Design system rules (suite-wide)
+
+**shadcn is the design system for new work** (2026-08-30, Tony's call,
+replacing BoardUI). Build anything new from the shadcn registry via the
+`shadcnio` MCP, ported to plain CSS: this repo has no npm and no build step,
+so registry TSX can never be installed, only read and ported. The token layer
+and recipes already in `diagrams/css/app.css` were derived from BoardUI and
+STAY AS THEY ARE until a migration is asked for on purpose. Everything below
+this paragraph still describes those live values and is still binding.
+Note: the old `cth/ai/cth-boardui-pro/` and `cth-boardui-starter/` source
+checkouts referenced below no longer exist on disk; read the registry instead.
+
 
 - **THE ACCENT IS BLACK** (2026-08-29, Tony's call, replacing the BoardUI blue
   ramp). Every `--a-*` value is lifted straight off the neutral ramp rather
