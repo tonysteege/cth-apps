@@ -1124,6 +1124,28 @@ after a live inspection of it. The two live side by side.
 
 ## Design system rules (suite-wide)
 
+- **THE ACCENT IS BLACK** (2026-08-29, Tony's call, replacing the BoardUI blue
+  ramp). Every `--a-*` value is lifted straight off the neutral ramp rather
+  than invented, so the suite still runs on two ramps and nothing is off
+  BoardUI's scales: 50-300 are n-50 to n-300, 400 is n-700, 500 is n-900, 600
+  is n-950, and 700/800 are pure black - the one addition, because a black
+  ramp has to end somewhere and 600 is already n-950. The ramp is defined ONCE
+  in `diagrams/css/app.css` and copied inline in `index.html` and
+  `clips/embed.html`; keep the three in step by hand.
+  - **`--marquee` IS THE ONE PLACE THE ACCENT IS NOT BLACK.** `--select` sits
+    on neutral surfaces - buttons, pills, table rows, focus rings - where
+    black reads perfectly. `--marquee` (still the BoardUI blue) is for chrome
+    drawn OVER CONTENT WHOSE COLOUR WE DO NOT CONTROL: the rink editor's
+    selection box, grips, anchors, band and rotate handle; the video editor's
+    crop overlay; and the ring around a colour swatch or a player button. A
+    black marquee around a black player is invisible, and black is now the
+    default colour of both. Pointing any of those at `--select` is a
+    regression, not a tidy-up.
+  - STATUS COLOURS ARE NOT THE ACCENT AND DID NOT MOVE: `--danger` stays red.
+    The toast's INFO disc did follow the accent to neutral, because it read as
+    accent chrome rather than as a warning.
+  - Telestration and diagram CONTENT is untouched - the colour presets, the
+    player slots, the star yellow. The accent is chrome.
 - **THE SCALE IS BOARDUI'S, NOT OURS** (2026-08-27, full conformance pass
   against the BoardUI MCP / `cth/ai/cth-boardui-pro/src/styles`). BoardUI is
   Tailwind v4 with a handful of deliberate overrides, so its scales are the

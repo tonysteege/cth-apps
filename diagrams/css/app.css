@@ -22,16 +22,23 @@
   --n-925: #121212;
   --n-950: #0a0a0a;
 
-  /* BoardUI accent ramp (blue; 400 is BoardUI's own #3392ff) */
-  --a-50:  #eff6ff;
-  --a-100: #dbeafe;
-  --a-200: #bedbff;
-  --a-300: #8ec5ff;
-  --a-400: #3392ff;
-  --a-500: #2b7fff;
-  --a-600: #155dfc;
-  --a-700: #1447e6;
-  --a-800: #193cb8;
+  /* THE ACCENT IS BLACK (2026-08-29, Tony's call, replacing the BoardUI blue
+     ramp). Every value is lifted straight off the neutral ramp above rather
+     than invented, so the suite still runs on two ramps and nothing is off
+     BoardUI's scales. 500 and 600 are the gradient a primary button wears;
+     400 is lighter so hover still reads as lifting; 700 is the one addition,
+     pure black, because a black ramp has to end somewhere and 600 is already
+     n-950. The tints below 400 stay neutral, which is what they always were
+     in effect - a 12% wash of blue on white is barely blue. */
+  --a-50:  #fafafa;   /* = n-50  */
+  --a-100: #f7f7f7;   /* = n-100 */
+  --a-200: #ebebeb;   /* = n-200 */
+  --a-300: #d4d4d4;   /* = n-300 */
+  --a-400: #404040;   /* = n-700 */
+  --a-500: #171717;   /* = n-900 */
+  --a-600: #0a0a0a;   /* = n-950 */
+  --a-700: #000000;
+  --a-800: #000000;
 
   /* Legacy semantic names - every downstream rule keeps working */
   --ink: var(--n-950);
@@ -47,8 +54,18 @@
   --page: var(--n-100);
   --danger: #e7000b;
   --danger-soft: rgba(231, 0, 11, 0.07);
-  --select: var(--a-500);           /* selection chrome */
-  --select-soft: rgba(43, 127, 255, 0.12);
+  --select: var(--a-500);           /* selected state, on a neutral surface */
+  --select-soft: rgba(23, 23, 23, 0.10);
+  /* THE ONE PLACE THE ACCENT IS NOT BLACK. `--select` sits on neutral
+     surfaces - buttons, pills, table rows, focus rings - where black reads
+     perfectly. `--marquee` is for chrome drawn OVER CONTENT WHOSE COLOUR WE
+     DO NOT CONTROL: the rink editor's selection box and grips, the video
+     editor's crop overlay, and the ring around a colour swatch or player
+     button. A black marquee around a black player is invisible, and black is
+     now the default colour of both. Keep these two separate: pointing canvas
+     chrome at `--select` is a regression, not a tidy-up. */
+  --marquee: #2b7fff;
+  --marquee-soft: rgba(43, 127, 255, 0.14);
 
   --font: 'Inter', -apple-system, 'Helvetica Neue', sans-serif;
 
@@ -481,11 +498,11 @@ input:focus, select:focus, textarea:focus { outline: none; }
 .ed-rinkchip { cursor: text; }
 
 /* selection chrome inside the SVG */
-.ed-selbox { fill: none; stroke: var(--select); stroke-width: 2px; stroke-dasharray: 6 4; }
-.ed-grip { fill: #ffffff; stroke: var(--select); stroke-width: 2px; cursor: nwse-resize; }
-.ed-anchor { fill: #ffffff; stroke: var(--select); stroke-width: 2px; cursor: grab; }
-.ed-anchor.mid { fill: var(--select); }
-.ed-band { fill: var(--select-soft); stroke: var(--select); stroke-width: 1.5px; stroke-dasharray: 5 4; }
+.ed-selbox { fill: none; stroke: var(--marquee); stroke-width: 2px; stroke-dasharray: 6 4; }
+.ed-grip { fill: #ffffff; stroke: var(--marquee); stroke-width: 2px; cursor: nwse-resize; }
+.ed-anchor { fill: #ffffff; stroke: var(--marquee); stroke-width: 2px; cursor: grab; }
+.ed-anchor.mid { fill: var(--marquee); }
+.ed-band { fill: var(--marquee-soft); stroke: var(--marquee); stroke-width: 1.5px; stroke-dasharray: 5 4; }
 .ed-guide { stroke: #ff2d55; stroke-width: 1px; stroke-dasharray: 6 4; }
 
 /* On-ice text fields mirror committed DIAGRAM CONTENT (weight 800) - do not
@@ -520,8 +537,8 @@ input:focus, select:focus, textarea:focus { outline: none; }
 }
 
 /* Rotation chrome */
-.ed-rot { fill: #ffffff; stroke: var(--select); stroke-width: 2px; cursor: grab; }
-.ed-rotstem { stroke: var(--select); stroke-width: 1.5px; }
+.ed-rot { fill: #ffffff; stroke: var(--marquee); stroke-width: 2px; cursor: grab; }
+.ed-rotstem { stroke: var(--marquee); stroke-width: 1.5px; }
 
 /* Frame strips: the label and ghost controls in the space above each rink
    of a sequence - minimal, Figma-style, never on the ice. */
@@ -774,7 +791,7 @@ input:focus, select:focus, textarea:focus { outline: none; }
   align-items: center;
   justify-content: center;
 }
-.pmenu-chip:hover { box-shadow: 0 0 0 3px var(--select-soft), 0 0 0 1.5px var(--select); }
+.pmenu-chip:hover { box-shadow: 0 0 0 3px var(--marquee-soft), 0 0 0 1.5px var(--marquee); }
 .pmenu-blank {
   flex-shrink: 0;
   width: auto;
@@ -893,7 +910,7 @@ input:focus, select:focus, textarea:focus { outline: none; }
   background: var(--c);
   border: 2.5px solid #1e1e1e;
 }
-.tb-player.on, .tb-player:hover { box-shadow: 0 0 0 3px var(--select-soft), 0 0 0 1.5px var(--select); }
+.tb-player.on, .tb-player:hover { box-shadow: 0 0 0 3px var(--marquee-soft), 0 0 0 1.5px var(--marquee); }
 
 .tb-swatch {
   border-radius: 50%;
@@ -903,7 +920,7 @@ input:focus, select:focus, textarea:focus { outline: none; }
   background: var(--c);
   border: 1px solid rgba(10, 10, 10, .25);
 }
-.tb-swatch.on { box-shadow: 0 0 0 3px var(--select-soft), 0 0 0 1.5px var(--select); }
+.tb-swatch.on { box-shadow: 0 0 0 3px var(--marquee-soft), 0 0 0 1.5px var(--marquee); }
 
 /* ---------------------------------------------------------- overlays */
 /* The toast is BoardUI's notification card (2026-08-26, Pro pass): white
@@ -940,8 +957,10 @@ input:focus, select:focus, textarea:focus { outline: none; }
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background-color: #dbeafe;
-  background-image: url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23155dfc%22 stroke-width=%222.2%22 stroke-linecap=%22round%22%3E%3Cpath d=%22M12 11v6%22/%3E%3Ccircle cx=%2212%22 cy=%227.2%22 r=%22.4%22 fill=%22%23155dfc%22/%3E%3C/svg%3E');
+  /* The INFO disc follows the accent, so it is neutral now; the ERROR pair
+     below stays red, because red is a status colour and not the accent. */
+  background-color: #ebebeb;
+  background-image: url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23171717%22 stroke-width=%222.2%22 stroke-linecap=%22round%22%3E%3Cpath d=%22M12 11v6%22/%3E%3Ccircle cx=%2212%22 cy=%227.2%22 r=%22.4%22 fill=%22%23171717%22/%3E%3C/svg%3E');
   background-position: center;
   background-size: 18px 18px;
   background-repeat: no-repeat;

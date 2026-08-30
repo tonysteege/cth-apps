@@ -229,7 +229,7 @@
   width: 20px; height: 20px; margin: 0 1px;
   border-radius: var(--r-sm); border: 1px solid rgb(0 0 0 / 0.22);
 }
-.an-tb .tb-swatch.on { box-shadow: 0 0 0 2px var(--cloud), 0 0 0 3.5px var(--select); }
+.an-tb .tb-swatch.on { box-shadow: 0 0 0 2px var(--cloud), 0 0 0 3.5px var(--marquee); }
 .an-idle { font-size: 12px; letter-spacing: 0.15px; color: var(--mist); padding: 0 6px; align-self: center; }
 /* The per-tool style table in Settings: label, colour, thickness, dash. */
 .cs-toolhead, .cs-toolrow {
@@ -1295,7 +1295,7 @@
   transition: transform var(--dur) ease, box-shadow var(--dur) ease;
 }
 .pe-sw:hover { transform: scale(1.08); }
-.pe-sw.on { box-shadow: 0 0 0 2px var(--cloud), 0 0 0 3.5px var(--a-500); }
+.pe-sw.on { box-shadow: 0 0 0 2px var(--cloud), 0 0 0 3.5px var(--marquee); }
 .pe-pop-custom {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--edge);
@@ -1548,7 +1548,7 @@ button.crumb:hover { color: var(--mist); background: var(--n-100); }
 .ve-patches { position: absolute; inset: 0; }
 .ve-patch {
   position: absolute; cursor: grab;
-  background: #000; border: 1.5px dashed var(--select);
+  background: #000; border: 1.5px dashed var(--marquee);
 }
 .ve-patch.blur { background: rgba(255, 255, 255, 0.35); backdrop-filter: blur(8px); }
 .ve-patch:active { cursor: grabbing; }
@@ -1604,7 +1604,7 @@ button.crumb:hover { color: var(--mist); background: var(--n-100); }
    shadow - that gives a real hole rather than four positioned panels. */
 .ve-cropbox {
   position: absolute;
-  outline: 1.5px dashed var(--select);
+  outline: 1.5px dashed var(--marquee);
   box-shadow: 0 0 0 100vmax rgb(0 0 0 / 0.45);
   cursor: move;
 }
@@ -1617,7 +1617,7 @@ button.crumb:hover { color: var(--mist); background: var(--n-100); }
 .ve-cropbox::after { border-width: 1px 0; top: 33.33%; bottom: 33.33%; }
 .ve-h {
   position: absolute; width: 11px; height: 11px;
-  background: var(--cloud); border: 2px solid var(--select);
+  background: var(--cloud); border: 2px solid var(--marquee);
   border-radius: 2px; box-sizing: border-box;
 }
 .ve-h--nw { left: -6px; top: -6px; cursor: nwse-resize; }
