@@ -707,7 +707,7 @@ const ICON = {
   arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M3 12h13.6"/><path d="m16.6 8.4 3.7 3.6-3.7 3.6"/></svg>',
   dasharrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M3 12h13.6" stroke-dasharray="3.1 2.9"/><path d="m16.6 8.4 3.7 3.6-3.7 3.6"/></svg>',
   skatepuck: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M3 12q2.3-3.6 4.6 0t4.6 0 4.6 0"/><path d="m16.6 8.4 3.7 3.6-3.7 3.6"/></svg>',
-  skateback: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M3 13.7a2.3 2.3 0 0 1 4.6 0 2.3 2.3 0 0 1 4.6 0 2.3 2.3 0 0 1 4.6 0"/><path d="m16.6 8.4 3.7 3.6-3.7 3.6"/></svg>',
+  skateback: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M2.8 12.4a3 3 0 1 1 6 0a3 3 0 1 1 6 0"/><path d="m16.6 8.4 3.7 3.6-3.7 3.6"/></svg>',
   shoot: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M3 9.8h13.4M3 14.2h13.4"/><path d="m16.6 8.4 3.7 3.6-3.7 3.6"/></svg>',
   box: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4.25" y="5.25" width="15.5" height="13.5" rx="2.75"/></svg>',
   circle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="7.75"/></svg>',
@@ -733,6 +733,35 @@ const HEADS = [
 // draw, the way icehockeysystems does it. `motion` is still what gets
 // stored on the element, so the drawing and the animator are unchanged -
 // the tool just decides which value to stamp.
+// THE TOOL ROW DRAGS TO REARRANGE (2026-08-30, Tony's call), the same way the
+// Clips toolbar does. The order lives in `cthd.settings.v1` under `toolOrder`;
+// a tool added after an order was saved is spliced in beside its neighbour
+// rather than appended, so a new tool can never end up stranded at the end of
+// the row. Only the DRAWING tools reorder - the player buttons, the rink
+// items and the swatches are their own groups with their own meaning in the
+// order they sit in.
+function orderedTools() {
+  const known = TOOLS.map(([t]) => t);
+  const saved = settings().toolOrder;
+  const seen = new Set();
+  const out = [];
+  for (const t of Array.isArray(saved) ? saved : []) {
+    if (known.includes(t) && !seen.has(t)) { seen.add(t); out.push(t); }
+  }
+  for (let i = 0; i < known.length; i++) {
+    const t = known[i];
+    if (seen.has(t)) continue;
+    let at = 0;
+    for (let j = i - 1; j >= 0; j--) {
+      const prev = out.indexOf(known[j]);
+      if (prev >= 0) { at = prev + 1; break; }
+    }
+    out.splice(at, 0, t);
+    seen.add(t);
+  }
+  return out.map((t) => TOOLS.find((x) => x[0] === t));
+}
+
 const TOOLS = [
   ['select', 'Select & Move'],
   ['arrow', 'Skate'],
@@ -1079,7 +1108,7 @@ function paintTools() {
   const hexes = paletteHexes();
 
   bar.innerHTML = `
-    ${TOOLS.map(([t, label]) => `<button class="tb-btn${cur.tool === t ? ' on' : ''}" data-tool="${t}" aria-label="${label}">${ICON[t]}${keyBadge(t)}</button>`).join('')}
+    ${orderedTools().map(([t, label]) => `<button class="tb-btn${cur.tool === t ? ' on' : ''}" data-tool="${t}" data-toolid="${t}" draggable="true" aria-label="${label}" title="${label} - Drag To Reorder">${ICON[t]}${keyBadge(t)}</button>`).join('')}
     ${sep}
     ${PLAYER_SLOTS.map((i) => `<button class="tb-player${cur.tool === `p-${i}` ? ' on' : ''}" data-tool="p-${i}" data-slot-menu="${i}" aria-label="Player ${i + 1}" style="--c:${colorOf(slotColor(i))}"></button>`).join('')}
     <button class="tb-btn tb-word" data-act="faceoff" aria-label="5v5 Faceoff">5v5${keyBadge('faceoff')}</button>
@@ -1131,6 +1160,7 @@ function paintTools() {
     b.ondblclick = customize;
     b.oncontextmenu = customize;
   });
+  wireToolDrag(bar);
   const act = (name, fn) => { const b = bar.querySelector(`[data-act="${name}"]`); if (b) b.onclick = fn; };
   act('faceoff', () => placeFaceoff());
   // The "+ Add Rink" bar sits under the bottom rink, not in the toolbar.
@@ -1141,6 +1171,36 @@ function paintTools() {
   if (db2) { db2.hidden = !canAdd; db2.onclick = () => void addRink(true); }
   sizeStage();
   if (hooks.onFrames) hooks.onFrames(frameInfo());
+}
+
+// Drag a tool onto another to insert it before that one. `toolsSig` is
+// cleared first so the repaint is not skipped by the render-signature check
+// that exists to stop the popups closing under the pointer.
+function wireToolDrag(bar) {
+  let from = null;
+  for (const b of bar.querySelectorAll('[data-toolid]')) {
+    b.addEventListener('dragstart', (e) => {
+      from = b.dataset.toolid;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', from);
+      b.classList.add('tb-dragging');
+    });
+    b.addEventListener('dragend', () => b.classList.remove('tb-dragging'));
+    b.addEventListener('dragover', (e) => { e.preventDefault(); b.classList.add('tb-over'); });
+    b.addEventListener('dragleave', () => b.classList.remove('tb-over'));
+    b.addEventListener('drop', (e) => {
+      e.preventDefault();
+      b.classList.remove('tb-over');
+      const to = b.dataset.toolid;
+      if (!from || from === to) return;
+      const next = orderedTools().map(([t]) => t).filter((t) => t !== from);
+      next.splice(next.indexOf(to), 0, from);
+      saveSettings({ toolOrder: next });
+      from = null;
+      toolsSig = '';
+      paintTools();
+    });
+  }
 }
 
 function chooseSlot(i) {
@@ -1432,7 +1492,11 @@ function placeItem(kind, p, e) {
   if (kind.startsWith('p-')) {
     const hit = hitAt(p);
     if (hit && hit.type === 'player' && Math.hypot(p.x - hit.x, p.y - hit.y) <= hit.r) {
-      setTool('select');
+      // Clicking a player already on the ice SELECTS it rather than stacking a
+      // second one on top - but it no longer disarms the tool (2026-08-30,
+      // Tony's call). An armed tool stays armed until Escape, Return, or
+      // another tool; dropping five players in a row should not need the
+      // button pressing again between each.
       setSel([hit.id]);
       render();
       return;
@@ -1452,7 +1516,13 @@ function placeItem(kind, p, e) {
     else cur.elements.push({ id, type: 'stamp', name: it.file, flip: false, x: snapped.x - w / 2, y: snapped.y - h / 2, w, h });
   }
   setSel([id]);
-  if (!e?.metaKey && !e?.ctrlKey) { cur.tool = 'select'; cur.pendingLabel = null; }
+  // THE TOOL STAYS ARMED (2026-08-30, Tony's call, reversing the revert-on-
+  // draw behaviour). Every one of these four sites used to drop back to
+  // Select the moment something landed, with Cmd as a "keep it" modifier
+  // nobody should have to hold to place five players in a row. Escape and
+  // Return both step out in one key, and picking another tool still switches.
+  // The new element is still SELECTED, so it can be nudged or restyled
+  // without re-arming anything.
   markDirty();
   render();
 }
@@ -1771,19 +1841,16 @@ function onUp(e) {
     cur.undo.pop();
   } else if (drag.kind === 'newArrow' && x) {
     setSel([x.id]);
-    cur.tool = 'select';
     markDirty();
   } else if (drag.kind === 'newBox' && x && (!drag.moved || x.w < 12 * scaleF() || x.h < 12 * scaleF())) {
     cur.elements = cur.elements.filter((z) => z.id !== x.id);
     cur.undo.pop();
   } else if (drag.kind === 'newBox' && x) {
     setSel([x.id]);
-    cur.tool = 'select';
     markDirty();
   } else if ((drag.kind === 'move' || drag.kind.startsWith('h:')) && !drag.moved) {
     cur.undo.pop();
   } else {
-    if (drag.kind === 'pen' && !e?.metaKey && !e?.ctrlKey) cur.tool = 'select';
     markDirty();
   }
   drag = null;
@@ -1966,9 +2033,10 @@ function onKey(e) {
     if (k === 's') { stop(); void saveNow(); return; }
     return;
   }
-  if (e.key === 'Escape') {
+  // RETURN AND ESCAPE BOTH STEP OUT (2026-08-30, Tony's call), innermost
+  // thing first: an open popup, then the armed tool, then the selection.
+  if (e.key === 'Escape' || e.key === 'Enter') {
     e.preventDefault();
-    // An open popup is the innermost thing Escape should close.
     if (lmenuEl || pmenuEl) { hideLineMenu(); hidePlayerMenu(); return; }
     if (cur.tool !== 'select') { setTool('select'); return; }
     if (cur.sel) { setSel([]); render(); return; }

@@ -63,9 +63,12 @@
      editor's crop overlay, and the ring around a colour swatch or player
      button. A black marquee around a black player is invisible, and black is
      now the default colour of both. Keep these two separate: pointing canvas
-     chrome at `--select` is a regression, not a tidy-up. */
-  --marquee: #2b7fff;
-  --marquee-soft: rgba(43, 127, 255, 0.14);
+     chrome at `--select` is a regression, not a tidy-up.
+     IT IS THE DIAGRAMS CYAN (2026-08-30, Tony's call), the same `#75d8ff` the
+     freeze editor's own selection chrome uses in annotate.js, so a selection
+     looks identical whether the thing selected is on a rink or on film. */
+  --marquee: #75d8ff;
+  --marquee-soft: rgba(117, 216, 255, 0.20);
 
   --font: 'Inter', -apple-system, 'Helvetica Neue', sans-serif;
 
@@ -911,6 +914,10 @@ input:focus, select:focus, textarea:focus { outline: none; }
   border: 2.5px solid #1e1e1e;
 }
 .tb-player.on, .tb-player:hover { box-shadow: 0 0 0 3px var(--marquee-soft), 0 0 0 1.5px var(--marquee); }
+
+/* Drag feedback for the tool row, matching the Clips toolbar. */
+.tb-btn.tb-dragging { opacity: 0.4; }
+.tb-btn.tb-over { box-shadow: inset 2px 0 0 0 var(--marquee); }
 
 .tb-swatch {
   border-radius: 50%;

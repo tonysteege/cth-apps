@@ -1314,8 +1314,8 @@ export async function openClipSettings(focus = null) {
           ${seg('arrowHead', 'Arrowhead', [['triangle', 'Solid'], ['open', 'Open'], ['none', 'None']], s.arrowHead || 'triangle',
             'The head every arrow tool draws. Solid is the filled triangle a rink diagram uses; None makes an arrow behave like the Line tool.')}
           ${num('textSize', 'Caption Size', s.textSize ?? 34, 14, 90, 'Telestration text size, measured on a 1280-wide frame so it looks the same on any clip.')}
-          <label class="bs-row"><span>Colour Presets${info('The three swatches on the annotation toolbar. Any of them can be any colour, here or by right-clicking the swatch itself.')}</span>
-            <span class="cs-swatches">${(s.colorPresets || ['#1e1e1e', '#75d8ff', '#d9d9d9']).map((hex, i) =>
+          <label class="bs-row"><span>Colour Presets${info('The four swatches on the annotation toolbar - the same palette the Diagrams toolbar carries. Any of them can be any colour, here or by right-clicking the swatch itself.')}</span>
+            <span class="cs-swatches">${(s.colorPresets || ['#1e1e1e', '#75d8ff', '#d9d9d9', '#16a34a']).map((hex, i) =>
               `<input type="color" data-k="colorPresets.${i}" value="${esc(hex)}" aria-label="Colour ${i + 1}">`).join('')}</span>
           </label>
         </section>
@@ -1395,7 +1395,7 @@ export async function openClipSettings(focus = null) {
       // An array index must not turn its array into an object, which the
       // generic `{ ...node[k] }` spread below would do.
       if (path[0] === 'colorPresets') {
-        next.colorPresets = [...(next.colorPresets || ['#ff3b30', '#ffd60a', '#0a84ff'])];
+        next.colorPresets = [...(next.colorPresets || ['#1e1e1e', '#75d8ff', '#d9d9d9', '#16a34a'])];
         next.colorPresets[Number(path[1])] = raw;
         return;
       }

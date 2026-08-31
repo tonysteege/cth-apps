@@ -35,13 +35,14 @@ const CYAN = '#75d8ff';
 
 // Telestration colours: high chroma so they hold up over both white ice and
 // dark boards. Red leads because it is the default (Tony's call).
-// THREE PRESETS, EACH CUSTOMISABLE (2026-08-29, Tony's call). Five swatches
-// were four more decisions than a coach makes mid-period; three covers home,
-// away and a highlight. The values live in `settings.colorPresets` and are
-// edited in Settings, so any of them can be any colour.
+// FOUR PRESETS, EACH CUSTOMISABLE (2026-08-30, Tony's call, up from three).
+// Four is what the Diagrams toolbar has always carried, and the two rows now
+// hold the same palette in the same order. The values live in
+// `settings.colorPresets` and are edited in Settings or by right-clicking the
+// swatch, so any of them can be any colour.
 // They default to the SAME three the player buttons wear (2026-08-29, Tony's
 // call): black, the CTH cyan, grey. Right-click any swatch to change it.
-const DEFAULT_COLORS = ['#1e1e1e', '#75d8ff', '#d9d9d9'];
+const DEFAULT_COLORS = ['#1e1e1e', '#75d8ff', '#d9d9d9', '#16a34a'];
 const colorsOf = () => prefs.colors;
 
 const TOOLS = [
@@ -54,7 +55,7 @@ const TOOLS = [
   // a rink must not have to learn it again over film.
   ['arrow', 'Skate', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M3 12h13.6"/><path d="m16.6 8.4 3.7 3.6-3.7 3.6"/></svg>'],
   ['skatepuck', 'Skate With Puck', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M3 12q2.3-3.6 4.6 0t4.6 0 4.6 0"/><path d="m16.6 8.4 3.7 3.6-3.7 3.6"/></svg>'],
-  ['skateback', 'Skate Backwards', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M3 13.7a2.3 2.3 0 0 1 4.6 0 2.3 2.3 0 0 1 4.6 0 2.3 2.3 0 0 1 4.6 0"/><path d="m16.6 8.4 3.7 3.6-3.7 3.6"/></svg>'],
+  ['skateback', 'Skate Backwards', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M2.8 12.4a3 3 0 1 1 6 0a3 3 0 1 1 6 0"/><path d="m16.6 8.4 3.7 3.6-3.7 3.6"/></svg>'],
   ['shoot', 'Shoot', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M3 9.8h13.4M3 14.2h13.4"/><path d="m16.6 8.4 3.7 3.6-3.7 3.6"/></svg>'],
   ['dasharrow', 'Pass', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M3 12h13.6" stroke-dasharray="3.1 2.9"/><path d="m16.6 8.4 3.7 3.6-3.7 3.6"/></svg>'],
   ['box', 'Box', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4.25" y="5.25" width="15.5" height="13.5" rx="2.75"/></svg>'],
@@ -175,7 +176,7 @@ function orderList(list) {
 export function setToolPrefs(p = {}) {
   if (p.toolKeys) prefs.keys = { ...DEFAULT_KEYS, ...p.toolKeys };
   if (p.toolStyle) prefs.style = { ...DEFAULT_STYLE, ...p.toolStyle };
-  if (p.colorPresets && p.colorPresets.length === 3) prefs.colors = p.colorPresets;
+  if (p.colorPresets && p.colorPresets.length === 4) prefs.colors = p.colorPresets;
   if (p.toolOrder) prefs.order = orderList(p.toolOrder);
   if (p.shapeStyle) prefs.shapeStyle = p.shapeStyle;
   if (p.shapeAlpha != null) prefs.shapeAlpha = Math.max(0.05, Math.min(1, Number(p.shapeAlpha) || 0.3));

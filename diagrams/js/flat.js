@@ -162,7 +162,12 @@ export function motionPolys(a, trim) {
   // roughly a dozen points per cycle, capped so a very long route cannot
   // turn one arrow into a thousand-point polyline.
   const len = arrowLength(a);
-  const n = Math.max(96, Math.min(760, Math.round(len / 5)));
+  // Backwards needs far more samples than the other two: a closed loop has
+  // to be resolved all the way round, where a wave only has to be resolved
+  // across its crest. About 30 samples a cycle; below roughly 20 the loops
+  // come out as creased teardrops.
+  const per = m === 'backward' ? 2.5 : 5;
+  const n = Math.max(96, Math.min(2000, Math.round(len / per)));
   const pts = arrowPathPoints(a, trim, n);
   const withNormals = pts.map((p, i) => {
     const q = pts[Math.min(i + 1, pts.length - 1)];
@@ -200,27 +205,43 @@ export function motionPolys(a, trim) {
     })];
   }
   if (m === 'backward') {
-    // BACKWARDS: one CONTINUOUS scalloped line - a run of arches all on
-    // the SAME side of the route with a cusp between each, which is the
-    // c-cut notation. Two things separate it from the puck wave above and
-    // both are deliberate: the arches are one-sided where the wave is
-    // symmetrical, and each one is much WIDER than it is tall (the IHS
-    // scallop is a flattened arc, not a half-circle). Never let this
-    // become detached letter shapes again - that reads as text on ice.
-    // Measured against the reference: the arch is about a third as tall
-    // as it is wide, and its total swing must exceed the puck wave's -
-    // a scallop that swings LESS than the wave reads as the same mark.
-    const r = Math.max(w * 4.2, 32);
-    const gap = Math.max(w * 13, 100);
+    // BACKWARDS IS A CHAIN OF CLOSED LOOPS (2026-08-30, Tony's call, from an
+    // Ice Hockey Systems reference), replacing the one-sided scallop of
+    // 2026-08-27. The scallop was a readable c-cut but it is not the notation
+    // Tony's players and coaches already know, and next to Skate With Puck it
+    // was still a squiggle beside a squiggle - a loop is unmistakably a
+    // different mark.
+    //
+    // THE CURVE IS A PROLATE CYCLOID: the path a point traces when it sits
+    // OUTSIDE the radius of a circle rolling along the line. That is what
+    // closes each cycle into a loop rather than leaving an arch - the point
+    // runs backwards relative to the line near the bottom of every turn, and
+    // the stroke crosses itself. It falls out of two terms added to each
+    // sample, one along the tangent and one along the normal, both driven by
+    // the same angle; there is no special case and no seam between cycles.
+    //
+    //   loops require r > gap / (2*PI). Measured off the reference, the loop
+    //   is about 0.38 of the pitch in radius - roughly two and a half times
+    //   the threshold, which is a firm round loop rather than a pinched one.
+    // Measured against the reference on a 3200-wide rink: the pitch is about
+    // 2.1% of the rink's width and the loop stands about 1.6% tall, which is
+    // this pitch at this ratio. The floor is what binds at the default 6.8
+    // stroke, so it is the number that actually sets the density.
+    const gap = Math.max(w * 10, 66);
+    const r = gap * 0.39;
     let dist = 0;
     return [withNormals.map((p, i) => {
       if (i) dist += Math.hypot(p.x - withNormals[i - 1].x, p.y - withNormals[i - 1].y);
-      const fade = Math.min(1, dist / (gap * 0.5)) * Math.min(1, (total - dist) / (gap * 0.6));
-      // A half-circle profile per gap, all bulging the same side: the
-      // scallop of a c-cut, drawn as one unbroken stroke.
-      const phase = (dist % gap) / gap;
-      const off = Math.sin(phase * Math.PI) * r * Math.max(0, fade);
-      return [p.x + p.nx * off, p.y + p.ny * off];
+      const t = (dist / gap) * Math.PI * 2;
+      // The loops run at FULL SIZE end to end, with no fade. A fade shrinks
+      // the first and last loops into commas, and the reference does not do
+      // it - the pattern simply runs into the arrowhead.
+      const along = -r * Math.sin(t);
+      const across = -r * Math.cos(t);
+      return [
+        p.x + Math.cos(p.ang) * along + p.nx * across,
+        p.y + Math.sin(p.ang) * along + p.ny * across,
+      ];
     })];
   }
   return null;

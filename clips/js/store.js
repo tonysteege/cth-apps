@@ -162,7 +162,7 @@ const DEFAULT_SETTINGS = () => ({
   // set in Settings or by right-clicking the swatch on the toolbar. They
   // default to the three the player buttons wear, so the toolbar carries one
   // palette rather than two (2026-08-29, Tony's call).
-  colorPresets: ['#1e1e1e', '#75d8ff', '#d9d9d9'],
+  colorPresets: ['#1e1e1e', '#75d8ff', '#d9d9d9', '#16a34a'],
   // The annotation toolbar's tool order, dragged on the bar itself. Absent
   // means the built-in order, and a tool added after this was saved is
   // appended rather than dropped.
@@ -225,11 +225,20 @@ function withPlayers(panel) {
 // the OLD defaults was sitting in front of the new ones. This renames only
 // where the saved triple is still exactly the old default - a colour Tony
 // picked is his, and is left alone. Same rule as the Bots style migration.
-const OLD_PRESETS = ['#ff3b30', '#ffd60a', '#0a84ff'];
+// Two generations of defaults now. A stored triple that still matches either
+// one exactly is replaced; a colour Tony picked is his and is left alone,
+// which is why this compares rather than just overwriting.
+const OLD_PRESETS = [
+  ['#ff3b30', '#ffd60a', '#0a84ff'],
+  ['#1e1e1e', '#75d8ff', '#d9d9d9'],
+];
 function migratePresets(list) {
-  if (!list || list.length !== 3) return null;
-  const same = list.every((c, i) => String(c).toLowerCase() === OLD_PRESETS[i]);
-  return same ? null : list;
+  if (!Array.isArray(list) || !list.length) return null;
+  // A saved THREE that is still a stock triple becomes the new four.
+  if (list.length === 3 && OLD_PRESETS.some((set) => list.every((c, i) => String(c).toLowerCase() === set[i]))) return null;
+  // A customised three keeps its colours and gains the new fourth.
+  if (list.length === 3) return [...list, '#16a34a'];
+  return list.length === 4 ? list : null;
 }
 
 export async function getSettings() {
