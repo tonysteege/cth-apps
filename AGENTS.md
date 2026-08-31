@@ -165,9 +165,9 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   tool IS the type. P became Pass, so the PEN MOVED TO `E` and the pucks
   stamp moved off S to `U`; any key Tony has customized still wins.
   An arrow may carry an optional ADDITIVE `motion` property: 'puck'
-  (a smooth open wave, about one cycle per 130 units), 'backward' (ONE
-  CONTINUOUS scalloped line of half-circles - it must never go back to
-  detached letter shapes, which read as text on the ice), 'shoot' (a
+  (a smooth open wave, about one cycle per 130 units), 'backward' (A CHAIN
+  OF CLOSED LOOPS - see the rule below; it must never go back to detached
+  letter shapes, which read as text on the ice), 'shoot' (a
   doubled line). Absent means plain skating; a pass stays `dash: true`. Old consumers (Film
   Room) draw a plain arrow - additive contract preserved. The decoration
   geometry lives ONCE in flat.js (`motionPolys`, `arrowPathPoints`,
@@ -177,6 +177,48 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   IS the dashed tool, a pen stroke is a drawing); the chosen type persists
   in `cthd.settings.v1` as `arrowMotion` and retypes selected solid arrows
   like head and weight do.
+- **SKATE BACKWARDS IS A CHAIN OF CLOSED LOOPS** (2026-08-30, Tony's call,
+  from an Ice Hockey Systems reference; replaces the one-sided scallop of
+  2026-08-27). The scallop was a readable c-cut but it is not the notation
+  Tony's players already know, and beside Skate With Puck it was a squiggle
+  next to a squiggle.
+  - THE CURVE IS A PROLATE CYCLOID: the path a point traces when it sits
+    OUTSIDE the radius of a circle rolling along the line. That is what closes
+    each cycle into a loop instead of leaving an arch - near the bottom of
+    every turn the point runs backwards relative to the line and the stroke
+    crosses itself. It is two terms added to each sample, one along the
+    tangent and one along the normal, driven by the same angle: no special
+    case, no seam between cycles. Loops require `r > gap / (2 * PI)`.
+  - MEASURED AGAINST THE REFERENCE on a 3200-wide rink: pitch about 2.1% of
+    the rink's width, loop about 1.6% tall, so `r` is 0.39 of the pitch. At
+    the default 6.8 stroke the FLOOR binds, so 66 is the number that actually
+    sets the density.
+  - IT NEEDS TWICE THE SAMPLES the other motions do (`per = 2.5`): a closed
+    loop has to be resolved all the way round where a wave only has to be
+    resolved across its crest. Below about 20 samples a cycle the loops come
+    out as creased teardrops.
+  - No fade at the ends. A fade shrinks the first and last loops into commas;
+    the reference runs at full size straight into the arrowhead.
+  - `motionPolys` lives ONCE in flat.js and both renderers consume it, so this
+    changed Diagrams and Clips together - and both toolbar icons were redrawn
+    to the same loop chain.
+- **AN ARMED TOOL STAYS ARMED** (2026-08-30, Tony's call, reversing the
+  revert-on-draw behaviour). Four sites used to drop back to Select the moment
+  something landed - placing an item or player, finishing an arrow, a box, or
+  a pen stroke - with Cmd as a "keep it" modifier nobody should have to hold
+  to place five players in a row. ESCAPE AND RETURN BOTH STEP OUT, innermost
+  thing first: an open popup, then the tool, then the selection. Clicking a
+  player already on the ice still SELECTS it rather than stacking a second one
+  on top, but it no longer disarms. ONE EXCEPTION LEFT ON PURPOSE: closing the
+  inline text editor still returns to Select, because a click elsewhere is how
+  that editor is dismissed and an armed text tool would open a second caption
+  at the click point.
+- **THE DIAGRAMS TOOL ROW DRAGS TO REARRANGE** (`toolOrder` in
+  `cthd.settings.v1`, 2026-08-30, Tony's call), the same as the Clips toolbar
+  and with the same rule: a tool added after an order was saved is spliced in
+  beside its neighbour rather than appended. Only the DRAWING tools reorder -
+  the player buttons, the rink items and the swatches are their own groups
+  whose order carries meaning.
 - **THE DRILL ANIMATOR** (`js/anim.js`, 2026-08-27). The Animate button in
   the editor header turns the drawn diagram into a smooth animation with
   no extra authoring: each rink of a sequence is a phase; every arrow
@@ -770,6 +812,13 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   buttons it is thirty grey boxes, and the boxes read louder than the words
   beside them. Weight and size are unchanged; only the chip is gone. The
   annotation toolbar's `.tb-key` was never a chip and is unaffected.
+- **FOUR COLOUR PRESETS IN CLIPS, MATCHING DIAGRAMS** (2026-08-30, Tony's
+  call, up from three): black, the CTH cyan, grey and the green, so both
+  toolbars carry the same palette in the same order. `migratePresets` in
+  store.js knows BOTH previous default triples - a stored triple that still
+  matches either one exactly is replaced with the new four, and a triple Tony
+  customised keeps its colours and simply gains the green, because a colour he
+  picked is his.
 - **THREE COLOUR PRESETS, EACH CUSTOMISABLE** (`settings.colorPresets`,
   2026-08-29): five swatches were four more decisions than a coach makes
   mid-period. Any of the three can be any colour, edited in Settings. Saving
