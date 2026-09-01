@@ -121,3 +121,80 @@ export function normalizeDeck(d) {
 
 // Present order skips skipped slides but keeps every slide in the file.
 export const presentable = (deck) => deck.slides.filter((s) => !s.skip);
+
+// ------------------------------------------------------------- the board
+//
+// THE BOARD IS THE DOCUMENT (2026-09-01, Tony's call): a whiteboard like a
+// Figma file, and a slide deck is one kind of object on it, beside sticky
+// notes, text, shapes, pen strokes, connectors, sections and media.
+//
+//   board { v:2, id, name, created, updated, settings, items:[item] }
+//   item  { id, kind, x, y, w, h, locked?, rot? } plus per-kind fields
+//     deck      { theme, slides }            (the whole deck model above)
+//     sticky    { text, color }
+//     text      { text, size, color, align }
+//     shape     { shape, fill, alpha, radius, text }
+//     pen       { points:[[x,y]...], color, width }  points relative to x,y
+//     connector { from, to, color, head }     item ids; no x/y/w/h of its own
+//     section   { title, color }
+//     image | video { asset }   diagram { drill, animate }
+//
+// Board coordinates are canvas px at zoom 1. Slides inside a deck keep
+// their own 1600x900 slide space. A v1 record (a bare deck) is migrated
+// ADDITIVELY: its `theme` and `slides` stay where they were and a deck
+// item carrying a copy is added to `items`.
+
+export const DECK_FRAME_W = 960;
+export const DECK_FRAME_H = 540;
+export const DECK_GAP = 60;
+export const DECK_HEAD = 44;
+
+export const STICKY_COLORS = ['#fef08a', '#fdba74', '#f9a8d4', '#bfdbfe', '#bbf7d0', '#e9d5ff', '#e5e7eb', '#ffffff'];
+
+export const DEFAULT_SETTINGS = { grid: 'dots', gridSize: 40, snap: true, bg: '#f5f5f4', stickyColor: '#fef08a', penColor: '#0a0a0a', penWidth: 4 };
+
+export const deckWidth = (deck) => Math.max(1, deck.slides.length) * DECK_FRAME_W + (Math.max(1, deck.slides.length) - 1) * DECK_GAP;
+export const deckHeight = () => DECK_FRAME_H + DECK_HEAD;
+
+export const newDeckItem = (deck, over = {}) => ({
+  id: uid(), kind: 'deck', x: 120, y: 120, w: deckWidth(deck), h: deckHeight(),
+  name: deck.name || 'Untitled Deck', theme: deck.theme, slides: deck.slides, ...over,
+});
+export const newSticky = (over = {}) => ({ id: uid(), kind: 'sticky', x: 0, y: 0, w: 220, h: 220, text: '', color: DEFAULT_SETTINGS.stickyColor, ...over });
+export const newBoardText = (over = {}) => ({ id: uid(), kind: 'text', x: 0, y: 0, w: 320, h: 48, text: 'Text', size: 24, color: '#0a0a0a', align: 'left', ...over });
+export const newBoardShape = (shape = 'rect', over = {}) => ({ id: uid(), kind: 'shape', shape, x: 0, y: 0, w: 240, h: 160, fill: '#ffffff', stroke: '#0a0a0a', alpha: 1, radius: 12, text: '', ...over });
+export const newPen = (over = {}) => ({ id: uid(), kind: 'pen', x: 0, y: 0, w: 1, h: 1, points: [], color: DEFAULT_SETTINGS.penColor, width: DEFAULT_SETTINGS.penWidth, ...over });
+export const newConnector = (from, to, over = {}) => ({ id: uid(), kind: 'connector', from, to, color: '#0a0a0a', head: true, ...over });
+export const newSection = (over = {}) => ({ id: uid(), kind: 'section', x: 0, y: 0, w: 1400, h: 900, title: 'Section', color: '#e0f2fe', ...over });
+export const newBoardImage = (asset, over = {}) => ({ id: uid(), kind: 'image', asset, x: 0, y: 0, w: 480, h: 300, ...over });
+export const newBoardVideo = (asset, over = {}) => ({ id: uid(), kind: 'video', asset, x: 0, y: 0, w: 640, h: 360, ...over });
+export const newBoardDiagram = (drill, over = {}) => ({ id: uid(), kind: 'diagram', drill, x: 0, y: 0, w: 640, h: 320, animate: true, ...over });
+
+export const newBoard = (name = 'Untitled Board') => {
+  const deck = newDeck(name);
+  return {
+    v: 2, id: uid(), name, created: Date.now(), updated: Date.now(),
+    settings: { ...DEFAULT_SETTINGS },
+    items: [newDeckItem(deck, { x: 120, y: 120 })],
+  };
+};
+
+export function normalizeBoard(b) {
+  if (!b) return b;
+  b.settings = { ...DEFAULT_SETTINGS, ...(b.settings || {}) };
+  if (!b.items) {
+    // A v1 deck. Keep its fields; add the deck item beside them.
+    const deck = normalizeDeck({ theme: b.theme, slides: b.slides, name: b.name });
+    b.items = [newDeckItem(deck, { x: 120, y: 120 })];
+  }
+  for (const it of b.items) {
+    if (it.kind === 'deck') {
+      normalizeDeck(it);
+      it.w = deckWidth(it); it.h = deckHeight();
+    }
+  }
+  return b;
+}
+
+export const boardDecks = (b) => b.items.filter((i) => i.kind === 'deck');
+export const isBox = (it) => it.kind !== 'connector';

@@ -338,3 +338,87 @@ img[data-asset]:not([src]) { visibility: hidden; }
   .dk-panel { display: none; }
   .dk-rail { width: 130px; }
 }
+
+/* ------------------------------------------------ the whiteboard */
+
+.wb-board { position: absolute; inset: 0; overflow: hidden; cursor: default; touch-action: none; }
+.dk-stagewrap:has(.wb-board), .dk-center:has(.wb-board) { padding: 0; overflow: hidden; position: relative; }
+.wb-board.is-hand, .wb-board.is-panning { cursor: grab; }
+.wb-board.is-panning { cursor: grabbing; }
+.wb-board.is-draw { cursor: crosshair; }
+.wb-canvas { position: absolute; left: 0; top: 0; transform-origin: 0 0; --inv: 1; }
+.wb-conns { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
+.wb-conns path[data-connhit] { pointer-events: stroke; cursor: pointer; }
+.wb-conns path.on { stroke: #3392ff; }
+.wb-marquee { position: absolute; border: 1px solid #3392ff; background: rgb(51 146 255 / 0.08); pointer-events: none; z-index: 5; }
+
+.wb-item { position: absolute; user-select: none; }
+.wb-item.wb-locked { opacity: 0.92; }
+.wb-item [contenteditable] { user-select: text; outline: none; }
+
+/* Sticky notes: a paper square, slight lift, ink text. */
+.wb-sticky { padding: 18px; border-radius: 4px; box-shadow: 0 1px 2px rgb(0 0 0 / 0.08), 0 8px 24px -12px rgb(0 0 0 / 0.25); color: #1c1917; font: 500 20px/1.35 Inter, system-ui, sans-serif; overflow: hidden; }
+.wb-sticky-text { min-height: 1em; overflow-wrap: anywhere; }
+.wb-sticky-text:empty::before { content: 'Type…'; color: rgb(0 0 0 / 0.35); }
+.wb-text { line-height: 1.3; font-weight: 500; overflow: hidden; }
+.wb-text-body { min-height: 1em; overflow-wrap: anywhere; }
+.wb-text-body:empty::before { content: 'Text'; color: var(--muted-foreground); }
+
+.wb-shape-body { position: absolute; inset: 0; }
+.wb-shape-line { top: 50%; bottom: auto; height: 3px; transform: translateY(-50%); }
+.wb-shape-label { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 8px; font: 500 18px/1.3 Inter, system-ui, sans-serif; color: #0a0a0a; overflow: hidden; }
+
+.wb-pen svg { display: block; overflow: visible; }
+
+/* Sections sit behind everything: a tinted region with a title tab. */
+.wb-section { border-radius: 12px; border: 1px solid rgb(0 0 0 / 0.06); }
+.wb-section-title { position: absolute; left: 0; top: calc(-34px * var(--inv)); font-size: calc(13px * var(--inv)); font-weight: 600; color: var(--foreground); background: inherit; padding: calc(4px * var(--inv)) calc(12px * var(--inv)); border-radius: calc(8px * var(--inv)) calc(8px * var(--inv)) 0 0; }
+
+.wb-image img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 6px; }
+.wb-video video { width: 100%; height: 100%; object-fit: contain; display: block; background: #000; border-radius: 6px; }
+.wb-diagram canvas { width: 100%; height: 100%; object-fit: contain; display: block; }
+
+/* A deck on the board: header + row of live frames. */
+.wb-deck { border-radius: 10px; }
+.wb-deck-head { position: absolute; left: 0; top: 0; height: 44px; width: 100%; display: flex; align-items: center; gap: 10px; padding: 0 12px; background: var(--background); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-xs); cursor: grab; font-size: 13px; }
+.wb-deck-head:active { cursor: grabbing; }
+.wb-deck-grip { width: 14px; height: 14px; flex: none; background: radial-gradient(circle, var(--muted-foreground) 1.2px, transparent 1.4px) 0 0 / 5px 5px; opacity: 0.7; }
+.wb-deck-name { font-weight: 600; color: var(--foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wb-deck-name[contenteditable] { outline: 1px dashed var(--ring); padding: 0 4px; border-radius: 4px; }
+.wb-deck-count { color: var(--muted-foreground); flex: 1; white-space: nowrap; }
+.wb-deck-btn { height: 28px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--background); font-size: 12px; font-weight: 500; }
+.wb-deck-btn:hover { background: var(--accent); }
+.wb-deck-present { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+.wb-deck-present:hover { background: color-mix(in srgb, var(--primary) 90%, transparent); }
+.wb-deck .dk-frame > .dk-stage { border: 1px solid var(--border); background-clip: padding-box; }
+.wb-deck .dk-frame.skip > .dk-stage { opacity: 0.5; }
+.wb-deck .dk-fnum { top: calc(-26px * var(--inv)); }
+
+/* Board selection chrome. */
+.wb-selbox { position: absolute; border: calc(1.5px * var(--inv, 1)) solid #3392ff; pointer-events: auto; cursor: move; }
+.wb-selbox.multi { pointer-events: none; }
+.wb-selunion { position: absolute; border: calc(1px * var(--inv, 1)) dashed #3392ff; pointer-events: auto; cursor: move; }
+.wb-chrome { position: absolute; left: 0; top: 0; pointer-events: none; }
+.wb-chrome .dk-grip { pointer-events: auto; }
+
+/* Zoom controls, bottom right. */
+.wb-zoom { position: absolute; right: 16px; bottom: 16px; display: flex; align-items: center; gap: 2px; padding: 3px; background: var(--background); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-sm); }
+.wb-zbtn { display: grid; place-items: center; width: 28px; height: 28px; border-radius: var(--r-sm); color: var(--foreground); }
+.wb-zbtn svg { width: 14px; height: 14px; }
+.wb-zbtn:hover, .wb-zpct:hover { background: var(--accent); }
+.wb-zpct { min-width: 52px; height: 28px; border-radius: var(--r-sm); font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.wb-zbtn:focus-visible, .wb-zpct:focus-visible, .wb-deck-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 50%, transparent); }
+
+/* Panel extras. */
+.dk-btnrow { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 12px; }
+.dk-btngrid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin: 0 0 12px; }
+.dk-btngrid .btn { padding: 0 6px; font-size: 12px; }
+.dk-sub { font-size: 12px; font-weight: 600; color: var(--muted-foreground); margin: 8px 0 6px; }
+.dk-keys { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; font-size: 12px; }
+.dk-keys dt { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--foreground); white-space: nowrap; }
+.dk-keys dd { margin: 0; color: var(--muted-foreground); }
+.dk-rail-head { margin-bottom: 4px; }
+.dk-rail-head select { width: 100%; height: 32px; padding: 0 8px; border: 1px solid var(--input); border-radius: var(--r-md); background: var(--background); font: inherit; font-size: 13px; font-weight: 600; }
+.dk-card-blank { aspect-ratio: 16/9; background: repeating-linear-gradient(45deg, var(--muted) 0 8px, transparent 8px 16px); }
+.dk-toolbar { z-index: 6; }
+.dk-placebar { z-index: 6; }

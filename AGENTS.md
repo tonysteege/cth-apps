@@ -1181,58 +1181,90 @@ after a live inspection of it. The two live side by side.
 
 ## Decks (/decks/) rules
 
-Decks (2026-08-31, Tony's ask) is a Figma-Slides-shaped deck editor built
-from a live teardown of Figma Slides, plus the two things Figma cannot do:
-Clips-grade video on a slide and live rink diagrams. It is the first app
-built ON THE SHADCN DESIGN SYSTEM (see the design rules below): its
-`css/app.css` carries the shadcn neutral tokens (primary is near-black,
-which is also the suite accent) and shadcn component recipes (button,
-input, card, tabs, dropdown menu, dialog) ported to plain CSS. The
-selection marquee stays the suite's `#3392ff` blue - chrome over content
-whose colour we do not control.
+Decks (2026-08-31, Tony's ask; rebuilt as a whiteboard 2026-09-01, Tony's
+call) is a Figma-file-style WHITEBOARD for coaching: an infinite canvas
+holding slide decks, sticky notes, text, shapes, pen strokes, connectors,
+sections and media. A deck is ONE KIND OF OBJECT on the board and its slides
+are live stages that edit in place. It is the first app built ON THE SHADCN
+DESIGN SYSTEM (see the design rules below): `css/app.css` carries the shadcn
+neutral tokens (primary near-black, which is also the suite accent) and
+shadcn component recipes ported to plain CSS. The selection marquee stays
+the suite's `#3392ff` blue - chrome over content whose colour we do not
+control.
 
-- STORAGE: IndexedDB `cth-decks`, stores `decks` (keyPath id) and `assets`
-  (media Blobs by id). Additive-only. Deck shape:
-  `{ v:1, id, name, created, updated, theme, slides:[slide] }`;
-  `theme { styles:{role:{size,weight,color,line}}, colors:[hex], bg }`;
-  `slide { id, bg, notes, skip?, transition?, els:[el] }`;
-  `el { id, type, x, y, w, h, anim? }` plus per-type fields. Media is a
-  BLOB IN THE `assets` STORE referenced by id, never base64 on the record;
-  object URLs are rebuilt on open (the Slides rehydrate rule).
-- EVERY COORDINATE IS IN SLIDE SPACE (1600x900); text is sized in cqw
-  against the stage container. One renderer (`js/render.js` slideHtml)
-  draws the editor stage, the board frames, filmstrip thumbs, home cards
-  and the projector - never write a second layout.
-- THE TYPE RAMP IS THE MEASURED SLIDES RAMP, copied verbatim from
-  slides/js/decks.js TEXT_ROLES. Do not tidy it to round numbers.
-- THE BOARD IS THE EDITOR AND THE DEFAULT VIEW: a whiteboard where frames
-  sit at fixed lefts and only the canvas transforms; pan on two-finger
-  swipe, zoom about the pointer on ctrl+wheel with the Clips per-event
-  clamp (0.8-1.25); chrome scales back out by --inv; every pointer
-  resolves against the stage it landed on (setCurrent), so a selection
-  can never straddle two slides. Double-click the empty board to refit.
-- IT SAVES ITSELF (700ms debounce, flush on pagehide/visibilitychange).
-  There is no Save button and there must never be one.
-- A MEDIA TOOL ASKS FOR ITS FILE FIRST, then a click places it. Arming a
-  placement DROPS THE SELECTION first - the selection box sits above the
-  stage and would swallow the placement click (shipped bug, fixed).
-- DIAGRAM ELEMENTS are read-only references into `cth-diagrammer/drills`
-  and render through /diagrams/js/flat.js renderStateFlat (after
-  loadAssets('/diagrams/assets')), so a rink on a slide is pixel-identical
-  to the exported PNG. In present, `animate: true` plays the drill through
-  /diagrams/js/anim.js buildTimeline + makePainter; the duration is
-  `tl.total` (a play segment's own `len` is null by design).
-- VIDEO SCRUB IMPORTS THE CLIPS CURVE (`scrubDeltaSeconds`,
+- STORAGE: IndexedDB `cth-decks`, stores `decks` (keyPath id; the store name
+  is frozen even though the records are boards now) and `assets` (media
+  Blobs by id). Additive-only. Board shape:
+  `{ v:2, id, name, created, updated, settings, items:[item] }`;
+  `settings { grid:'dots'|'lines'|'none', gridSize, snap, bg, stickyColor,
+  penColor, penWidth }`; `item { id, kind, x, y, w, h, locked? }` plus
+  per-kind fields - `deck { name, theme, slides }` (the whole deck model),
+  `sticky { text, color }`, `text { text, size, color, align }`,
+  `shape { shape, fill, stroke, alpha, radius, text }`, `pen { points,
+  color, width }` (points relative to x,y), `connector { from, to, color,
+  head }` (no box of its own), `section { title, color }`, `image | video
+  { asset }`, `diagram { drill, animate }`. A deck's `theme`/`slides`/`slide`
+  /`el` shapes are unchanged from the 2026-08-31 build.
+  A V1 RECORD (a bare deck) MIGRATES ADDITIVELY in `normalizeBoard`: its
+  `theme` and `slides` stay where they were and an `items` array is added
+  holding one deck item that copies them. Never strip the old fields.
+- BOARD COORDINATES ARE CANVAS PX AT ZOOM 1. Frames sit at fixed lefts
+  inside a deck (960 wide, 60 gap, 44px header) and only the canvas
+  transforms; chrome scales back out by --inv. Slides inside a deck keep
+  their own 1600x900 slide space; text is sized in cqw. One renderer
+  (`js/render.js`: slideHtml, itemHtml, deckHtml) draws the board, the
+  slide-view stage, filmstrip thumbs, home cards and the projector.
+- THE TYPE RAMP IS THE MEASURED SLIDES RAMP (slides/js/decks.js
+  TEXT_ROLES), copied verbatim. Do not tidy it to round numbers.
+- EVERY POINTER RESOLVES AGAINST WHAT IT LANDED ON. A click on a stage
+  selects that deck+slide (`selectSlide`), and a slide element inside it;
+  a click on a deck header selects and drags the deck; anything else is a
+  board item or a marquee. A selection can never straddle two slides. A
+  deck whose slide is being edited shows the frame outline only, never a
+  second box around the whole deck.
+- UNDO/REDO IS A SNAPSHOT STACK of `items` (100 deep): every committed
+  change goes through `commit()` (drag end, edit, create, delete, reorder,
+  panel change). Autosave is 700ms debounced with flush on
+  pagehide/visibilitychange; there is no Save button and there must never
+  be one.
+- TOOLS: V select, H hand (Space also pans, middle button too), S sticky,
+  T text, R shapes (rect/ellipse/diamond/line/arrow), P pen, C connector
+  (drag from one item onto another; the line follows both), F section
+  (dragging a section carries the items inside it), D new deck, plus image,
+  video and rink diagram. Sticky/text/section/shape/deck CLICK to place at
+  default size or DRAG to size. Media asks for its file first, then a click
+  places it ON A SLIDE if the click lands on one, otherwise on the board.
+  Arming any tool or placement drops the selection first - the selection
+  chrome would swallow the click. Sections are inserted at the BACK of
+  `items`; everything else at the front. `[` / `]` reorder; Cmd+A, Cmd+C/V,
+  Cmd+D, Cmd+0 fit, Cmd+/- zoom, double-click empty board fits.
+- ZOOM about the pointer with the Clips per-event clamp (0.8-1.25),
+  clamped 5%-400%. `fitToContent` NEVER fits against a 0x0 board rect (a
+  hidden tab, or pre-layout) - it keeps the default and retries once.
+- MULTI-SELECT (marquee, shift-click, Cmd+A) gets align (6 ways) and
+  distribute (2 axes) in the panel; locked items are skipped by drags,
+  resizes and alignment.
+- SETTINGS SHEET: grid style/size, snap, background live on the board
+  record; default sticky colour, pen colour and width are the user's own
+  and live in localStorage `cthk.prefs`.
+- SLIDE VIEW is a focus mode on ONE deck (the "Edit" button on a deck
+  header, or the view toggle): filmstrip with a deck picker, single stage,
+  notes tray. The board stays the default and the primary editor.
+- DIAGRAM OBJECTS (on the board or on a slide) are read-only references
+  into `cth-diagrammer/drills`, rendered through /diagrams/js/flat.js
+  renderStateFlat after loadAssets('/diagrams/assets'). On a slide in
+  present, `animate: true` plays the drill through /diagrams/js/anim.js
+  buildTimeline + makePainter; the duration is `tl.total`.
+- VIDEO SCRUB IN PRESENT IMPORTS THE CLIPS CURVE (`scrubDeltaSeconds`,
   `scrubMotionStep` from /clips/js/player.js) - never reimplement it. One
-  seek in flight released by the video's own `seeked` event with the 250ms
-  safety timeout; precise seeks under 1.5s, fastSeek only above; negative
-  deltaX means forward. Every rAF loop here (scrub pump, drill tick)
-  carries a SETTIMEOUT BACKSTOP armed at schedule time, because rAF stops
-  in a hidden window and a backstop armed only inside the loop never runs.
-- PRESENT (#/present/<id>) renders through the same slideHtml. Builds are
-  the distinct `anim.order` values ascending; `io:'in'` elements start
-  hidden (going backward shows everything); transitions are CSS classes
-  (dissolve/slide/push) on the incoming and outgoing .dk-projslide.
+  seek in flight released by `seeked` with the 250ms safety timeout;
+  precise seeks under 1.5s, fastSeek only above; negative deltaX means
+  forward. Every rAF loop (scrub pump, drill tick) carries a setTimeout
+  backstop ARMED AT SCHEDULE TIME.
+- PRESENT is per deck: `#/present/<boardId>/<deckItemId>`; the old
+  `#/present/<id>` still resolves to the board's first deck. Builds are the
+  distinct `anim.order` values ascending; `io:'in'` elements start hidden;
+  transitions are CSS classes on the incoming/outgoing .dk-projslide.
   Skipped slides stay in the file and out of playback.
 - Cross-app imports in use: /diagrams/js/flat.js, /diagrams/js/rink.js,
   /diagrams/js/anim.js, /clips/js/player.js, /clips/js/tip.js. Keep them

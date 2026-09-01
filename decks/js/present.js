@@ -9,7 +9,7 @@
 // - DRILL ANIMATIONS play through diagrams/js/anim.js (buildTimeline +
 //   makePainter), so the moving drill is pixel-identical to the PNG.
 
-import { presentable, normalizeDeck, SLIDE_W } from './model.js';
+import { presentable, normalizeBoard, boardDecks } from './model.js';
 import { slideHtml, hydrate } from './render.js';
 import { getDeck, getDrill } from './store.js';
 import { scrubDeltaSeconds, scrubMotionStep } from '/clips/js/player.js';
@@ -22,12 +22,17 @@ const $$ = (sel, root) => [...(root || document).querySelectorAll(sel)];
 
 export const presenting = () => !!pr;
 
-export async function openPresent(id) {
-  const deck = normalizeDeck(await getDeck(id));
-  if (!deck) { location.hash = '#/'; return; }
+// Presents one deck ON a board: #/present/<boardId>/<deckItemId>. The
+// old #/present/<id> form still works and presents the board's first deck.
+export async function openPresent(boardId, deckId) {
+  const board = normalizeBoard(await getDeck(boardId));
+  if (!board) { location.hash = '#/'; return; }
+  const decks = boardDecks(board);
+  const deck = decks.find((d) => d.id === deckId) || decks[0];
+  if (!deck) { location.hash = `#/d/${boardId}`; return; }
   const slides = presentable(deck);
-  if (!slides.length) { location.hash = `#/d/${id}`; return; }
-  pr = { deck, slides, i: 0, step: 0, un: [], anims: new Map(), notes: false };
+  if (!slides.length) { location.hash = `#/d/${boardId}`; return; }
+  pr = { board, deck, slides, i: 0, step: 0, un: [], anims: new Map(), notes: false };
   // The rink art is served from the Diagrams app; load it once so a drill
   // animation never paints on a blank rink.
   loadAssets('/diagrams/assets').catch(() => {});
@@ -62,7 +67,7 @@ export function closePresent() {
   pr = null;
 }
 
-function exit() { const id = pr.deck.id; closePresent(); location.hash = `#/d/${id}`; }
+function exit() { const id = pr.board.id; closePresent(); location.hash = `#/d/${id}`; }
 
 function toggleNotes() {
   pr.notes = !pr.notes;
