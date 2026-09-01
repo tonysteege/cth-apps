@@ -1179,6 +1179,65 @@ after a live inspection of it. The two live side by side.
   renderer point at these; the two older one-off copies that used to sit
   loose in `slides/` are gone.
 
+## Decks (/decks/) rules
+
+Decks (2026-08-31, Tony's ask) is a Figma-Slides-shaped deck editor built
+from a live teardown of Figma Slides, plus the two things Figma cannot do:
+Clips-grade video on a slide and live rink diagrams. It is the first app
+built ON THE SHADCN DESIGN SYSTEM (see the design rules below): its
+`css/app.css` carries the shadcn neutral tokens (primary is near-black,
+which is also the suite accent) and shadcn component recipes (button,
+input, card, tabs, dropdown menu, dialog) ported to plain CSS. The
+selection marquee stays the suite's `#3392ff` blue - chrome over content
+whose colour we do not control.
+
+- STORAGE: IndexedDB `cth-decks`, stores `decks` (keyPath id) and `assets`
+  (media Blobs by id). Additive-only. Deck shape:
+  `{ v:1, id, name, created, updated, theme, slides:[slide] }`;
+  `theme { styles:{role:{size,weight,color,line}}, colors:[hex], bg }`;
+  `slide { id, bg, notes, skip?, transition?, els:[el] }`;
+  `el { id, type, x, y, w, h, anim? }` plus per-type fields. Media is a
+  BLOB IN THE `assets` STORE referenced by id, never base64 on the record;
+  object URLs are rebuilt on open (the Slides rehydrate rule).
+- EVERY COORDINATE IS IN SLIDE SPACE (1600x900); text is sized in cqw
+  against the stage container. One renderer (`js/render.js` slideHtml)
+  draws the editor stage, the board frames, filmstrip thumbs, home cards
+  and the projector - never write a second layout.
+- THE TYPE RAMP IS THE MEASURED SLIDES RAMP, copied verbatim from
+  slides/js/decks.js TEXT_ROLES. Do not tidy it to round numbers.
+- THE BOARD IS THE EDITOR AND THE DEFAULT VIEW: a whiteboard where frames
+  sit at fixed lefts and only the canvas transforms; pan on two-finger
+  swipe, zoom about the pointer on ctrl+wheel with the Clips per-event
+  clamp (0.8-1.25); chrome scales back out by --inv; every pointer
+  resolves against the stage it landed on (setCurrent), so a selection
+  can never straddle two slides. Double-click the empty board to refit.
+- IT SAVES ITSELF (700ms debounce, flush on pagehide/visibilitychange).
+  There is no Save button and there must never be one.
+- A MEDIA TOOL ASKS FOR ITS FILE FIRST, then a click places it. Arming a
+  placement DROPS THE SELECTION first - the selection box sits above the
+  stage and would swallow the placement click (shipped bug, fixed).
+- DIAGRAM ELEMENTS are read-only references into `cth-diagrammer/drills`
+  and render through /diagrams/js/flat.js renderStateFlat (after
+  loadAssets('/diagrams/assets')), so a rink on a slide is pixel-identical
+  to the exported PNG. In present, `animate: true` plays the drill through
+  /diagrams/js/anim.js buildTimeline + makePainter; the duration is
+  `tl.total` (a play segment's own `len` is null by design).
+- VIDEO SCRUB IMPORTS THE CLIPS CURVE (`scrubDeltaSeconds`,
+  `scrubMotionStep` from /clips/js/player.js) - never reimplement it. One
+  seek in flight released by the video's own `seeked` event with the 250ms
+  safety timeout; precise seeks under 1.5s, fastSeek only above; negative
+  deltaX means forward. Every rAF loop here (scrub pump, drill tick)
+  carries a SETTIMEOUT BACKSTOP armed at schedule time, because rAF stops
+  in a hidden window and a backstop armed only inside the loop never runs.
+- PRESENT (#/present/<id>) renders through the same slideHtml. Builds are
+  the distinct `anim.order` values ascending; `io:'in'` elements start
+  hidden (going backward shows everything); transitions are CSS classes
+  (dissolve/slide/push) on the incoming and outgoing .dk-projslide.
+  Skipped slides stay in the file and out of playback.
+- Cross-app imports in use: /diagrams/js/flat.js, /diagrams/js/rink.js,
+  /diagrams/js/anim.js, /clips/js/player.js, /clips/js/tip.js. Keep them
+  working from /decks/.
+
 ## Design system rules (suite-wide)
 
 **shadcn is the design system for new work** (2026-08-30, Tony's call,
