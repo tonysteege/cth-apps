@@ -31,7 +31,7 @@ async function showHome() {
         <a class="btn btn-ghost btn-icon" href="/" data-tip="Back to the hub" aria-label="Hub">${I.back}</a>
         <h1>Decks</h1>
         <div class="dk-head-r">
-          <input class="input dk-search" id="dkSearch" type="search" placeholder="Search decks">
+          <input class="input dk-search" id="dkSearch" type="search" name="q" placeholder="Search decks…" autocomplete="off" spellcheck="false">
           <button class="btn btn-primary" id="dkNew">${I.plus} New Deck</button>
         </div>
       </header>
@@ -44,18 +44,21 @@ async function showHome() {
   const paint = (list) => {
     const host = $('#dkCards');
     if (!host) return;
+    if (!list.length) { host.innerHTML = '<p class="dk-nores">No decks match that search.</p>'; return; }
     host.innerHTML = list.map((d) => {
       const dd = normalizeDeck(d);
       return `
       <div class="card dk-card" data-id="${esc(d.id)}">
-        <div class="dk-card-thumb"><div class="dk-thumb-box">${slideHtml(dd.slides[0], dd.theme)}</div></div>
-        <div class="dk-card-meta">
-          <span class="dk-card-name">${esc(d.name)}</span>
-          <span class="dk-card-sub">${dd.slides.length} slide${dd.slides.length === 1 ? '' : 's'} - ${new Date(d.updated || d.created).toLocaleDateString()}</span>
-        </div>
+        <a class="dk-card-link" href="#/d/${esc(d.id)}" aria-label="Open ${esc(d.name)}">
+          <div class="dk-card-thumb"><div class="dk-thumb-box">${slideHtml(dd.slides[0], dd.theme)}</div></div>
+          <div class="dk-card-meta">
+            <span class="dk-card-name">${esc(d.name)}</span>
+            <span class="dk-card-sub">${dd.slides.length} slide${dd.slides.length === 1 ? '' : 's'} - ${new Date(d.updated || d.created).toLocaleDateString()}</span>
+          </div>
+        </a>
         <div class="dk-card-acts">
-          <button class="btn btn-ghost btn-icon btn-sm" data-act="dup" data-tip="Duplicate">${I.copy}</button>
-          <button class="btn btn-ghost btn-icon btn-sm" data-act="del" data-tip="Delete">${I.trash}</button>
+          <button class="btn btn-ghost btn-icon btn-sm" data-act="dup" data-tip="Duplicate" aria-label="Duplicate ${esc(d.name)}">${I.copy}</button>
+          <button class="btn btn-ghost btn-icon btn-sm" data-act="del" data-tip="Delete" aria-label="Delete ${esc(d.name)}">${I.trash}</button>
         </div>
       </div>`;
     }).join('');
@@ -63,8 +66,8 @@ async function showHome() {
     $$('.dk-card', host).forEach((c) => {
       c.onclick = (e) => {
         const act = e.target.closest('[data-act]');
+        if (!act) return;
         const d = decks.find((x) => x.id === c.dataset.id);
-        if (!act) { location.hash = `#/d/${c.dataset.id}`; return; }
         if (act.dataset.act === 'dup') {
           const copy = JSON.parse(JSON.stringify(d));
           copy.id = uid(); copy.name = `${d.name} Copy`; copy.created = copy.updated = Date.now();

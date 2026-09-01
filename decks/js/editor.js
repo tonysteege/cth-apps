@@ -97,8 +97,8 @@ function shellHtml(deck) {
       <span class="dk-status" id="dkStatus">Saved</span>
       <div class="dk-head-r">
         <div class="seg" role="tablist" aria-label="View">
-          <button class="seg-btn on" id="dkViewBoard" data-tip="Board view">${I.grid}</button>
-          <button class="seg-btn" id="dkViewSlide" data-tip="Slide view">${I.film}</button>
+          <button class="seg-btn on" id="dkViewBoard" data-tip="Board view" aria-label="Board view">${I.grid}</button>
+          <button class="seg-btn" id="dkViewSlide" data-tip="Slide view" aria-label="Slide view">${I.film}</button>
         </div>
         <button class="btn btn-outline" id="dkTheme">${I.palette} Theme</button>
         <button class="btn btn-primary" id="dkPresent">${I.play} Present</button>
@@ -108,7 +108,7 @@ function shellHtml(deck) {
       <aside class="dk-rail" id="dkRail"></aside>
       <div class="dk-center">
         <div class="dk-stagewrap" id="dkStageWrap"></div>
-        <div class="dk-notes"><textarea id="dkNotes" placeholder="Add presenter notes for this slide" rows="2"></textarea></div>
+        <div class="dk-notes"><textarea id="dkNotes" placeholder="Add presenter notes for this slide…" aria-label="Presenter notes" rows="2"></textarea></div>
         <div class="dk-toolbar" id="dkTools"></div>
         <div class="dk-placebar" id="dkPlace" hidden></div>
       </div>
@@ -154,15 +154,16 @@ function paintNotes() { const n = $('#dkNotes'); if (n) n.value = slide().notes 
 function paintRail() {
   const rail = $('#dkRail');
   rail.innerHTML = ed.deck.slides.map((s, i) => `
-    <div class="dk-thumb ${i === ed.i ? 'on' : ''} ${s.skip ? 'skip' : ''}" data-i="${i}">
+    <div class="dk-thumb ${i === ed.i ? 'on' : ''} ${s.skip ? 'skip' : ''}" data-i="${i}" role="button" tabindex="0" aria-label="Slide ${i + 1}${s.skip ? ', skipped' : ''}" aria-current="${i === ed.i ? 'true' : 'false'}">
       <span class="dk-thumb-n">${i + 1}</span>
       <div class="dk-thumb-box">${slideHtml(s, ed.deck.theme)}</div>
       ${s.skip ? `<span class="dk-thumb-skip" data-tip="Skipped in present">${I.eyeOff}</span>` : ''}
     </div>`).join('') + `
-    <button class="btn btn-outline dk-add" id="dkAddSlide">${I.plus} New slide</button>`;
+    <button class="btn btn-outline dk-add" id="dkAddSlide">${I.plus} New Slide</button>`;
   hydrate(rail);
   $$('.dk-thumb', rail).forEach((t) => {
     t.onclick = () => { ed.i = +t.dataset.i; ed.sel = null; paintAll(); };
+    t.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ed.i = +t.dataset.i; ed.sel = null; paintAll(); } };
     t.oncontextmenu = (e) => { e.preventDefault(); slideMenu(e, +t.dataset.i); };
     t.onpointerdown = (e) => startThumbDrag(e, t);
   });
@@ -181,7 +182,7 @@ function paintStage() {
     const b = ed.bd;
     wrap.innerHTML = `<div class="dk-board" id="dkBoard"><div class="dk-canvas" id="dkCanvas">${ed.deck.slides.map((s, i) => `
       <div class="dk-frame ${i === ed.i ? 'on' : ''}" data-i="${i}" style="left:${i * (FRAME_W + FRAME_GAP)}px;top:0;width:${FRAME_W}px">
-        <button class="dk-fnum" data-tip="Slide ${i + 1}">${i + 1}</button>
+        <button class="dk-fnum" data-tip="Slide ${i + 1}" aria-label="Select slide ${i + 1}">${i + 1}</button>
         ${slideHtml(s, ed.deck.theme)}
         <div class="dk-chrome" data-chrome="${i}"></div>
       </div>`).join('')}</div></div>`;
@@ -280,7 +281,7 @@ const TOOLS = [
 
 function paintTools() {
   const bar = $('#dkTools');
-  bar.innerHTML = TOOLS.map((t) => `<button class="dk-tool ${ed.tool === t.id ? 'on' : ''}" data-tool="${t.id}" data-tip="${t.tip}">${t.icon()}</button>`).join('');
+  bar.innerHTML = TOOLS.map((t) => `<button class="dk-tool ${ed.tool === t.id ? 'on' : ''}" data-tool="${t.id}" data-tip="${t.tip}" aria-label="${t.tip}" aria-pressed="${ed.tool === t.id}">${t.icon()}</button>`).join('');
   $$('.dk-tool', bar).forEach((b) => {
     const t = TOOLS.find((x) => x.id === b.dataset.tool);
     b.onclick = (e) => {
@@ -350,7 +351,7 @@ function slideMenu(e, i) {
     { label: 'Duplicate', run: () => { const c = JSON.parse(JSON.stringify(s)); c.id = uid(); c.els.forEach((x) => { x.id = uid(); }); ed.deck.slides.splice(i + 1, 0, c); markDirty(); paintAll(); } },
     { label: s.skip ? 'Include in present' : 'Skip slide', run: () => { s.skip = !s.skip; markDirty(); paintRail(); } },
     '-',
-    { label: 'Delete', run: () => { if (ed.deck.slides.length <= 1) return; ed.deck.slides.splice(i, 1); ed.i = Math.min(ed.i, ed.deck.slides.length - 1); ed.sel = null; markDirty(); paintAll(); } },
+    { label: 'Delete', run: () => { if (ed.deck.slides.length <= 1) return; if (!confirm(`Delete slide ${i + 1}? This cannot be undone.`)) return; ed.deck.slides.splice(i, 1); ed.i = Math.min(ed.i, ed.deck.slides.length - 1); ed.sel = null; markDirty(); paintAll(); } },
   ]);
 }
 
@@ -379,7 +380,7 @@ async function openDrillPicker() {
     host.innerHTML = sheetHtml('Rink Diagrams', '<p class="dk-empty">No saved diagrams yet. Draw one in the Diagrams app and it will appear here.</p>');
   } else {
     host.innerHTML = sheetHtml('Rink Diagrams', `<div class="dk-drills">${drills.map((d) => `
-      <button class="dk-drill" data-id="${esc(d.id)}"><img src="${esc(d.thumb || '')}" alt=""><span>${esc(d.name || 'Untitled')}</span></button>`).join('')}</div>`);
+      <button class="dk-drill" data-id="${esc(d.id)}">${d.thumb ? `<img src="${esc(d.thumb)}" alt="" decoding="async">` : '<span class="dk-drill-blank" aria-hidden="true"></span>'}<span>${esc(d.name || 'Untitled')}</span></button>`).join('')}</div>`);
     $$('.dk-drill', host).forEach((b) => {
       b.onclick = () => { closeSheet(); armTool('diagram', { kind: 'diagram', drill: b.dataset.id, hint: 'Click the slide to place the diagram' }); };
     });
@@ -523,6 +524,11 @@ function onKeyDown(e) {
     markDirty(); paintStage(); paintPanel();
     e.preventDefault(); return;
   }
+  if (!el && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+    const to = ed.i + (e.key === 'ArrowRight' ? 1 : -1);
+    if (to >= 0 && to < ed.deck.slides.length) { ed.i = to; ed.sel = null; paintAll(); }
+    e.preventDefault(); return;
+  }
   if (el && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
     const step = e.shiftKey ? 10 : 1;
     if (e.key === 'ArrowUp') el.y -= step;
@@ -568,7 +574,7 @@ function elPanelHtml(el) {
     return `<div class="dk-sect"><h3>Text</h3>
       ${field('Style', `<select id="dkRole">${Object.entries(ed.deck.theme.styles).map(([r, s]) => `<option value="${r}" ${r === el.role ? 'selected' : ''}>${esc(s.label || r)}</option>`).join('')}</select>`)}
       ${field('Size', `<input type="number" id="dkSize" value="${el.size || st.size}" min="8" max="400">`)}
-      ${field('Align', `<div class="seg" id="dkAlign">${['left', 'center', 'right'].map((a) => `<button class="seg-btn ${(el.align || 'left') === a ? 'on' : ''}" data-a="${a}">${I[a]}</button>`).join('')}</div>`)}
+      ${field('Align', `<div class="seg" id="dkAlign">${['left', 'center', 'right'].map((a) => `<button class="seg-btn ${(el.align || 'left') === a ? 'on' : ''}" data-a="${a}" aria-label="Align ${a}">${I[a]}</button>`).join('')}</div>`)}
       ${field('Color', colorRow('color', el.color || st.color))}
     </div>`;
   }
@@ -626,10 +632,10 @@ function paintAnimate(host) {
     <div class="dk-sect"><h3>Slide transition</h3>
       ${field('Style', `<select id="dkTrStyle">${TRANSITIONS.map((t) => `<option value="${t}" ${t === tr.style ? 'selected' : ''}>${t[0].toUpperCase() + t.slice(1)}</option>`).join('')}</select>`)}
       ${field('Duration ms', `<input type="number" id="dkTrDur" value="${tr.durMs || 300}" min="100" max="2000" step="50">`)}
-      <button class="btn btn-outline btn-sm" id="dkTrAll">Apply to all slides</button>
+      <button class="btn btn-outline btn-sm" id="dkTrAll">Apply to All Slides</button>
     </div>
     <div class="dk-sect"><h3>Object animations</h3>
-      ${el ? (el.anim ? animEditorHtml(el) : `<button class="btn btn-outline btn-sm" id="dkAnimAdd">${I.plus} Animate selected object</button>`) : '<p class="dk-hint">Select an object on the slide to animate it.</p>'}
+      ${el ? (el.anim ? animEditorHtml(el) : `<button class="btn btn-outline btn-sm" id="dkAnimAdd">${I.plus} Animate Selected Object</button>`) : '<p class="dk-hint">Select an object on the slide to animate it.</p>'}
       ${animated.length ? `<div class="dk-animlist">${animated.map((x, n) => `
         <button class="dk-animrow ${x.id === ed.sel ? 'on' : ''}" data-el="${x.id}">
           <span class="dk-animn">${n + 1}</span><span>${animLabel(x)}</span><span class="dk-animx" data-x="${x.id}">${I.x}</span>
@@ -658,7 +664,7 @@ function animEditorHtml(el) {
     ${field('Animate', `<div class="seg" id="dkAIO"><button class="seg-btn ${a.io === 'in' ? 'on' : ''}" data-io="in">In</button><button class="seg-btn ${a.io === 'out' ? 'on' : ''}" data-io="out">Out</button></div>`)}
     ${field('Duration ms', `<input type="number" id="dkADur" value="${a.durMs}" min="100" max="3000" step="50">`)}
     ${field('Order', `<input type="number" id="dkAOrder" value="${a.order || 1}" min="1" max="99">`)}
-    <button class="btn btn-outline btn-sm" id="dkARemove">Remove animation</button>
+    <button class="btn btn-outline btn-sm" id="dkARemove">Remove Animation</button>
   </div>`;
 }
 
