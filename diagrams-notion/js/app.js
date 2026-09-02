@@ -124,7 +124,17 @@ async function newDiagram() {
 
 function copyLink(id) {
   const url = embedUrl(id);
-  navigator.clipboard?.writeText(url).then(() => toast('Embed link copied - paste it into a Notion /embed block'), () => prompt('Embed link', url));
+  const show = () => {
+    $('.dn-keyform')?.remove();
+    const f = document.createElement('div'); f.className = 'dn-keyform';
+    f.innerHTML = `<label>Embed link<input type="text" readonly value="${esc(url)}"></label><div class="dn-keyform-acts"><button type="button" class="btn" data-cancel>Close</button></div><p class="dn-keyform-err">Select the link and copy it.</p>`;
+    document.body.appendChild(f);
+    const inp = f.querySelector('input'); inp.focus(); inp.select();
+    f.querySelector('[data-cancel]').onclick = () => f.remove();
+  };
+  const c = navigator.clipboard;
+  if (!c || !c.writeText) { show(); return; }
+  c.writeText(url).then(() => toast('Embed link copied - paste it into a Notion /embed block'), show);
 }
 
 // ------------------------------------------------------------- embed
