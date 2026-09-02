@@ -1417,6 +1417,11 @@ for both.
   `{ id, name, state, updated }`, capped at 2 MB; nothing is logged. This is
   the third Worker destination and met the bar in hard rule 5: Tony's ask,
   the locked origin list, no prompts, no accounts.
+- NO DIALOGS IN THE EMBED: Chrome blocks `prompt()` / `alert()` / `confirm()`
+  inside a cross-site iframe, so the key glyph opens an IN-PAGE form
+  (`keyForm`, `.dn-keyform`) - the first build used prompt() and the glyph
+  did nothing in Notion (Tony's recording, 2026-09-01). Anything else this
+  app ever asks must be a real element too.
 - THE EDIT KEY NEVER RIDES IN A URL (the embed URL is on a page players
   can see). It is entered once per browser: on the home page, or through the
   quiet key glyph in the corner of a static embed, and kept in localStorage

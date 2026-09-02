@@ -92,13 +92,28 @@ async function showHome() {
   }
 }
 
-async function signIn() {
-  const k = prompt('Edit key (from your CTH Diagrams Notion setup)');
-  if (!k) return;
-  setKey(k.trim());
-  try { await api('/dg/'); } catch (e) { setKey(''); toast(e.status === 401 ? 'That edit key was refused' : e.message, true); return; }
-  route();
+// Chrome blocks prompt() inside a cross-site iframe (a Notion embed), so
+// the key is asked for with a real in-page form, never a dialog.
+function keyForm(anchor, onDone) {
+  $('.dn-keyform')?.remove();
+  const f = document.createElement('form');
+  f.className = 'dn-keyform';
+  f.innerHTML = '<label>Edit key<input type="password" name="key" autocomplete="current-password" spellcheck="false" placeholder="Paste your edit key"></label><div class="dn-keyform-acts"><button type="button" class="btn" data-cancel>Cancel</button><button type="submit" class="btn btn-ink">Unlock</button></div><p class="dn-keyform-err" hidden></p>';
+  (anchor || document.body).appendChild(f);
+  const inp = f.querySelector('input'); const err = f.querySelector('.dn-keyform-err');
+  inp.focus();
+  f.querySelector('[data-cancel]').onclick = () => f.remove();
+  f.onsubmit = async (e) => {
+    e.preventDefault();
+    const k = inp.value.trim(); if (!k) return;
+    setKey(k);
+    try { await api('/dg/'); }
+    catch (ex) { setKey(''); err.hidden = false; err.textContent = ex.status === 401 ? 'That edit key was refused.' : ex.message; return; }
+    f.remove(); onDone();
+  };
+  f.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Escape') f.remove(); });
 }
+function signIn() { keyForm($('.dn-signin') || null, route); }
 
 async function newDiagram() {
   const id = uid();
@@ -148,13 +163,7 @@ async function showStatic(doc) {
   $('#dnLock').onclick = unlock;
 }
 
-async function unlock() {
-  const k = prompt('Edit key');
-  if (!k) return;
-  setKey(k.trim());
-  try { await api('/dg/'); } catch (e) { setKey(''); toast(e.status === 401 ? 'That edit key was refused' : e.message, true); return; }
-  route();
-}
+function unlock() { if ($('.dn-keyform')) { $('.dn-keyform').remove(); return; } keyForm(null, route); }
 
 // Tony's view: the Diagrams editor itself, publishing to the Worker as he
 // draws. The editor's own autosave still writes its local copy (harmless);
