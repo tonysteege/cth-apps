@@ -225,6 +225,9 @@ export const newBoard = (name = 'Untitled Board') => {
 export function normalizeBoard(b) {
   if (!b) return b;
   b.settings = { ...DEFAULT_SETTINGS, ...(b.settings || {}) };
+  // The dot grid is gone (2026-09-01, Tony's call): a board saved with it
+  // reads as no grid. Lines remain an opt-in setting.
+  if (b.settings.grid === 'dots') b.settings.grid = 'none';
   if (!b.items) {
     // A v1 deck. Keep its fields; add the deck item beside them.
     const deck = normalizeDeck({ theme: b.theme, slides: b.slides, name: b.name });

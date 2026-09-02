@@ -347,12 +347,10 @@ function applyTransform() {
   c.style.setProperty('--inv', String(1 / z));
   const s = settings();
   b.style.background = s.bg;
-  if (s.grid === 'none') b.style.backgroundImage = 'none';
+  if (s.grid !== 'lines') b.style.backgroundImage = 'none';
   else {
     const g = s.gridSize * z;
-    b.style.backgroundImage = s.grid === 'lines'
-      ? 'linear-gradient(to right, rgb(0 0 0 / 0.06) 1px, transparent 1px), linear-gradient(to bottom, rgb(0 0 0 / 0.06) 1px, transparent 1px)'
-      : 'radial-gradient(circle, rgb(0 0 0 / 0.14) 1px, transparent 1.2px)';
+    b.style.backgroundImage = 'linear-gradient(to right, rgb(0 0 0 / 0.06) 1px, transparent 1px), linear-gradient(to bottom, rgb(0 0 0 / 0.06) 1px, transparent 1px)';
     b.style.backgroundSize = `${g}px ${g}px`; b.style.backgroundPosition = `${x}px ${y}px`;
   }
   const pct = $('#dkZoomPct'); if (pct) pct.textContent = `${Math.round(z * 100)}%`;
@@ -1312,7 +1310,7 @@ function openSettingsSheet() {
     <label class="fld-check"><input type="checkbox" id="dkSSnapObj" ${s.snapObjects !== false ? 'checked' : ''}> Snap to objects and slide edges</label>
     <label class="fld-check"><input type="checkbox" id="dkSSnap" ${s.snap ? 'checked' : ''}> Snap to grid</label>
     ${field('Grid size', `<input type="number" id="dkSGridSize" value="${s.gridSize}" min="8" max="200" step="4">`)}
-    ${field('Show grid', `<div class="seg" id="dkSGrid">${[['none', 'Off'], ['dots', 'Dots'], ['lines', 'Lines']].map(([k, l]) => `<button class="seg-btn ${s.grid === k ? 'on' : ''}" data-g="${k}">${l}</button>`).join('')}</div>`)}
+    ${field('Show grid', `<div class="seg" id="dkSGrid">${[['none', 'Off'], ['lines', 'Lines']].map(([k, l]) => `<button class="seg-btn ${s.grid === k ? 'on' : ''}" data-g="${k}">${l}</button>`).join('')}</div>`)}
     <h4>Canvas</h4>
     ${field('Background', swatches(['#f5f5f4', '#ffffff', '#fafaf9', '#e7e5e4', '#f0f9ff', '#1c1917'], s.bg))}
     <h4>Defaults</h4>

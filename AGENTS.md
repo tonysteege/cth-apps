@@ -1279,8 +1279,9 @@ control.
     on) snaps board objects to other objects' edges and centres and slide
     elements to sibling elements and the slide's edges/centre, with red
     guides drawn in the chrome layer while a drag runs; `settings.snap`
-    (grid) is off by default; the grid display is `settings.grid` (default
-    'none').
+    (grid) is off by default; the grid display is `settings.grid` - 'none' or
+    'lines' only. THE DOT GRID IS GONE: `normalizeBoard` reads a saved
+    'dots' as 'none'.
   - SMOOTH TRACKPAD NAVIGATION: wheel deltas ACCUMULATE into `ed.pend` and
     apply ONCE PER ANIMATION FRAME (`scheduleTransform`), with a setTimeout
     backstop armed at schedule time; the pinch factor is clamped per frame,
