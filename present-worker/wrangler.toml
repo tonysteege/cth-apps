@@ -11,3 +11,9 @@ routes = [
 # this Cloudflare account, which is why the bots need no secret at all.
 [ai]
 binding = "AI"
+
+# CTH Diagrams Notion keeps its embeddable diagrams here: public reads,
+# writes gated by the DG_EDIT_KEY secret (Tony's edit key).
+[[kv_namespaces]]
+binding = "DG"
+id = "ac2eee393d714cebbfcc6e560166d87f"

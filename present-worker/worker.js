@@ -30,10 +30,13 @@ const MAX_DEPTH = 3;
 
 function cors(req) {
   const o = req.headers.get('Origin') || '';
+  // Any localhost port is a dev preview of this same site (the preview
+  // server picks a fresh port to dodge the module cache).
+  const ok = ALLOWED_ORIGINS.includes(o) || /^http:\/\/localhost:\d+$/.test(o);
   return {
-    'Access-Control-Allow-Origin': ALLOWED_ORIGINS.includes(o) ? o : ALLOWED_ORIGINS[0],
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Origin': ok ? o : ALLOWED_ORIGINS[0],
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, X-DG-Key',
     Vary: 'Origin',
   };
 }
@@ -324,11 +327,59 @@ async function handleAi(request, env, path) {
   return json(request, { error: 'not_found' }, 404);
 }
 
+// ---- CTH Diagrams Notion: embeddable diagrams in KV ---------------------
+//
+// A diagram is { id, name, state, updated } - `state` is the Diagrams app's
+// own drill state (the Film Room interchange format, unchanged). Reads are
+// public (a Notion page shared with players loads them); writes need the
+// DG_EDIT_KEY secret in the X-DG-Key header. The index key lists them for
+// the app's home page (also key-gated). Nothing is logged.
+const DG_MAX = 2_000_000;
+async function handleDg(request, env, url) {
+  if (!env.DG) return json(request, { error: 'setup', message: 'The DG KV namespace is not bound on this Worker.' }, 503);
+  const key = request.headers.get('X-DG-Key') || '';
+  const authed = !!env.DG_EDIT_KEY && key === env.DG_EDIT_KEY;
+  const m = url.pathname.match(/^\/dg\/([A-Za-z0-9_-]{4,64})$/);
+  if (!m) {
+    if (request.method !== 'GET') return json(request, { error: 'not_found' }, 404);
+    if (!authed) return json(request, { error: 'auth', message: 'The edit key is wrong or missing.' }, 401);
+    const idx = (await env.DG.get('index', 'json')) || [];
+    return json(request, { diagrams: idx });
+  }
+  const id = m[1];
+  if (request.method === 'GET') {
+    const doc = await env.DG.get(`d:${id}`, 'json');
+    if (!doc) return json(request, { error: 'not_found', message: 'That diagram does not exist.' }, 404);
+    return json(request, doc, 200, { 'Cache-Control': 'no-store' });
+  }
+  if (!authed) return json(request, { error: 'auth', message: 'The edit key is wrong or missing.' }, 401);
+  if (request.method === 'DELETE') {
+    await env.DG.delete(`d:${id}`);
+    const idx = ((await env.DG.get('index', 'json')) || []).filter((x) => x.id !== id);
+    await env.DG.put('index', JSON.stringify(idx));
+    return json(request, { ok: true });
+  }
+  if (request.method === 'PUT' || request.method === 'POST') {
+    let body;
+    try { body = await request.json(); } catch (_) { return json(request, { error: 'bad_json', message: 'The body must be JSON.' }, 400); }
+    const doc = { id, name: String(body.name || '').slice(0, 200), state: body.state || null, updated: Date.now() };
+    const text = JSON.stringify(doc);
+    if (text.length > DG_MAX) return json(request, { error: 'too_big', message: 'That diagram is over 2 MB - drop the photo background.' }, 413);
+    await env.DG.put(`d:${id}`, text);
+    const idx = ((await env.DG.get('index', 'json')) || []).filter((x) => x.id !== id);
+    idx.unshift({ id, name: doc.name, updated: doc.updated, seq: doc.state?.seq || 1 });
+    await env.DG.put('index', JSON.stringify(idx.slice(0, 500)));
+    return json(request, { ok: true, updated: doc.updated });
+  }
+  return json(request, { error: 'not_found' }, 404);
+}
+
 export default {
   async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') return new Response(null, { headers: cors(request) });
     const url = new URL(request.url);
     if (url.pathname.startsWith('/ai/')) return handleAi(request, env, url.pathname);
+    if (url.pathname.startsWith('/dg/') || url.pathname === '/dg') return handleDg(request, env, url);
     const m = url.pathname.match(/^\/notion\/page\/([0-9a-f]{32})$/);
     if (!m) return json(request, { error: 'not_found' }, 404);
     if (!env.NOTION_TOKEN) return json(request, { error: 'setup', message: 'NOTION_TOKEN secret is not set on this Worker.' }, 503);

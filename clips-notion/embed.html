@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CTH Clips Notion</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%230a0a0a%22%20stroke-width%3D%221.8%22%3E%3Crect%20x%3D%222.75%22%20y%3D%225%22%20width%3D%2218.5%22%20height%3D%2214%22%20rx%3D%223%22%2F%3E%3Cpath%20d%3D%22m10%209.2%205%202.8-5%202.8z%22%20fill%3D%22currentColor%22%20stroke%3D%22none%22%2F%3E%3Cpath%20d%3D%22M6%2022h12%22%2F%3E%3C%2Fsvg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div class="cn" id="cn"><div style="color:#888;padding:16px;font-size:13px">Loading…</div></div>
+  <script type="module">
+    import { mountPlayer } from './js/player.js';
+    import { mountAnnotate, mountViewer } from './js/annotate.js';
+    // Public URL format: #src=<video url>&t=<seconds>&mode=edit|view
+    const p = new URLSearchParams(location.hash.replace(/^#/, ''));
+    const src = p.get('src') || p.get('v') || '';
+    const mode = p.get('mode') === 'edit' ? 'edit' : 'view';
+    const start = Number(p.get('t')) || 0;
+    const root = document.getElementById('cn');
+    if (!src) { root.innerHTML = '<div style="color:#bbb;padding:24px;font-size:14px">No video. Build a link at <a style="color:#75d8ff" href="/clips-notion/">CTH Clips Notion</a>.</div>'; }
+    else {
+      root.innerHTML = '';
+      const player = mountPlayer(root, { src, start, hooks: { armed: () => window.__cnArmed?.() } });
+      if (mode === 'edit') { const bar = document.createElement('div'); bar.className = 'cn-tools'; root.appendChild(bar); const a = mountAnnotate(bar, player, { src }); window.__cnArmed = a.armed; }
+      else mountViewer(player, { src });
+      document.title = `CTH Clips Notion - ${mode === 'edit' ? 'Present' : 'Watch'}`;
+    }
+  </script>
+</body>
+</html>

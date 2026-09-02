@@ -1355,6 +1355,90 @@ control.
   /diagrams/js/anim.js, /clips/js/player.js, /clips/js/tip.js. Keep them
   working from /decks/.
 
+## Clips Notion (/clips-notion/) rules
+
+Clips Notion (2026-09-01, Tony's ask) is a Notion-embeddable video player
+built from Clips' two proven pieces and nothing else: the SCRUB FEEL and
+the TELESTRATION renderer. No tagging, no library, no folder.
+
+- TWO PAGES. `index.html` is the link builder: a direct video URL (and an
+  optional start time) in, two links out. `embed.html` is the player Notion
+  loads in an iframe. PUBLIC URL FORMAT, never break it:
+  `embed.html#src=<encoded video url>&t=<seconds>&mode=edit|view`.
+  `mode=edit` (the "Present" link) shows the annotation toolbar; `mode=view`
+  (the "Public" link) plays without it and is what Tony shares with players.
+- A VIDEO NEEDS A URL. Files in the CTH folder have no web address (the
+  standing localfs rule), so the player takes a direct .mp4/.webm link from
+  any host. The builder says so on the page rather than pretending.
+- THE SCRUB IS THE CLIPS CURVE: `scrubDeltaSeconds` and `scrubMotionStep`
+  are imported from /clips/js/player.js, never reimplemented. One seek in
+  flight released by 'seeked' with the 250ms safety timeout; precise seeks
+  under 1.5s, fastSeek above; negative deltaX means forward; the pump has a
+  setTimeout backstop armed at schedule time. The timeline drag rides the
+  same spring. Keys: Space/K play-pause, arrows step a frame (Shift: a
+  second), J/L five seconds, F fullscreen. Speed cycles 1/0.5/0.25/2.
+- TELESTRATION IS THE DIAGRAMS RENDERER: marks are flat.js elements (pen,
+  arrow with dash/motion, box, circle, text, player) in 1280-wide VIDEO
+  UNITS mapped onto the LETTERBOXED picture (`viewBox()` - object-fit:
+  contain means the element box is not the picture). Drawing pauses the
+  video. Tools mirror the Clips/Diagrams row with the same keys (V E A S Z
+  X P B C T, players 1-3), four colour presets, undo, clear. MARKS PERSIST
+  PER VIDEO URL in localStorage `cthcn.marks.v1`, so a Notion reload during
+  a presentation keeps them, and the view-mode player draws the same marks
+  read-only on THIS Mac (localStorage is per browser - a player's device
+  shows none). Clear wipes them.
+- No network calls of its own, no storage beyond localStorage, no
+  tooltips. Icons come from /boards/js/icons.js (vendored Lucide); the
+  toolbar is the Boards dock recipe.
+
+## Diagrams Notion (/diagrams-notion/) rules
+
+CTH Diagrams Notion (2026-09-01, Tony's ask) is the Diagrams editor made for
+NOTION EMBEDS: one diagram, or a vertical sequence of rinks with captions,
+that Tony edits inside his Notion page (toolbar live during a Notion
+presentation) and that players see STATIC on a shared page. Same embed URL
+for both.
+
+- IT IMPORTS THE DIAGRAMS EDITOR, never copies it: `/diagrams/js/editor.js`
+  (`openEditor`, `editorActions`, `currentState`, `isDirty`, `closeEditor`),
+  `/diagrams/js/flat.js` (`renderStateFlat`, `sliceFrames`),
+  `/diagrams/js/rink.js` (`loadAssets('/diagrams/assets')`) and the Diagrams
+  stylesheet. The editor shell markup is the one `showEditor` in
+  diagrams/js/app.js builds (edStageWrap / edZoom / edStage / edSvg /
+  edBgG / edEls / edUi / edAddBar / edDupBar / edBar / edStatus); no
+  sidebar, no Animate. A drill state is the Film Room interchange format,
+  unchanged; captions are `state.rinkNames`.
+- STORAGE IS THE CTH WORKER, not IndexedDB: an embed loaded by a player's
+  browser has to read it from somewhere public. `present-worker` gained the
+  KV namespace `DG` (binding `DG`, id ac2eee393d714cebbfcc6e560166d87f) and
+  routes `GET /dg/<id>` (public, no-store), `PUT|DELETE /dg/<id>` and
+  `GET /dg/` (the index) - the writes and the list need the `X-DG-Key`
+  header equal to the `DG_EDIT_KEY` Worker secret. Records are
+  `{ id, name, state, updated }`, capped at 2 MB; nothing is logged. This is
+  the third Worker destination and met the bar in hard rule 5: Tony's ask,
+  the locked origin list, no prompts, no accounts.
+- THE EDIT KEY NEVER RIDES IN A URL (the embed URL is on a page players
+  can see). It is entered once per browser: on the home page, or through the
+  quiet key glyph in the corner of a static embed, and kept in localStorage
+  `cthdn.key`. Chrome PARTITIONS storage per top-level site, so the key
+  entered inside Notion lives inside Notion's partition and must be entered
+  there once too; that is also why the editor's own IndexedDB autosave in
+  the embed is a harmless local copy - the Worker copy is the truth. The
+  key's plaintext is in ~/.cth-diagrams-notion-key.txt on Tony's Mac (mode
+  600), not in this repo.
+- PUBLISHING: every editor `onDirty(true)` schedules a PUT 1200ms later
+  (`currentState()`), one in flight at a time with a pending re-run; the
+  header word reads Unpublished changes / Publishing… / Published /
+  Not published; leaving the route or unloading publishes first
+  (`keepalive`). `#/e/<id>?static` shows what players see.
+- THE STATIC VIEW renders `renderStateFlat(state, 0.5)` once and slices one
+  image per rink (`sliceFrames`) with the rink's caption above it, stacked
+  and scrolling vertically inside the embed's own height.
+- THE WORKER'S CORS LIST also accepts any `http://localhost:<port>` origin
+  (2026-09-01): the preview server picks fresh ports to dodge the module
+  cache, and a fixed 8642 entry made every other port fail its preflight.
+- Hub card: "Diagrams Notion", alphabetical after Diagrams.
+
 ## Design system rules (suite-wide)
 
 **shadcn is the design system for new work** (2026-08-30, Tony's call,

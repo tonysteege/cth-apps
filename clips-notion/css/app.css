@@ -1,0 +1,115 @@
+/* CTH Decks - shadcn design system, ported to plain CSS (Tony's call,
+   2026-08-30: shadcn for new work). Tokens are the official shadcn NEUTRAL
+   base palette (ui.shadcn.com, new-york style) written as hex/oklch
+   custom properties; component recipes below are the shadcn button, input,
+   card, tabs, dropdown-menu and dialog metrics ported 1:1. The primary is
+   near-black, which is also the suite's accent, so Decks reads as shadcn
+   AND as a CTH sibling. Diagram and slide CONTENT (the 1600x900 stage,
+   the measured type ramp, rink art) is not chrome and stays untouched. */
+
+:root {
+  --background: #ffffff;
+  --foreground: oklch(0.145 0 0);
+  --card: #ffffff;
+  --card-foreground: oklch(0.145 0 0);
+  --popover: #ffffff;
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --radius: 0.625rem;
+  --r-sm: calc(var(--radius) - 4px);
+  --r-md: calc(var(--radius) - 2px);
+  --r-lg: var(--radius);
+  --r-xl: calc(var(--radius) + 4px);
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --dur: 150ms;
+}
+
+* { box-sizing: border-box; }
+::selection { background: color-mix(in srgb, var(--primary) 12%, transparent); color: var(--foreground); }
+input, textarea, [contenteditable] { caret-color: var(--primary); }
+button, .btn, a, input, select { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.dk-rail, .dk-panel, .sheet-body, .dk-stagewrap { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: #000; color: var(--foreground); font: 400 14px/1.5 Inter, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+
+/* ------------------------------------------------ the embed */
+.cn { position: fixed; inset: 0; display: flex; flex-direction: column; background: #000; }
+.cn-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: none; }
+.cn-stage video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+.cn-stage canvas.cn-marks { position: absolute; pointer-events: none; }
+.cn-stage.is-armed canvas.cn-marks { pointer-events: auto; cursor: crosshair; }
+.cn-stage.is-select canvas.cn-marks { pointer-events: auto; cursor: default; }
+.cn-big { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; opacity: 0; transition: opacity var(--dur); }
+.cn-big span { width: 72px; height: 72px; border-radius: 999px; background: rgb(0 0 0 / 0.55); display: grid; place-items: center; color: #fff; }
+.cn-big svg { width: 32px; height: 32px; }
+.cn-stage.is-paused .cn-big { opacity: 1; }
+.cn-stage.is-paused.is-drawing .cn-big, .cn-stage.is-paused.has-marks .cn-big { opacity: 0; }
+
+/* Transport: a slim dark bar under the picture. */
+.cn-bar { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 10px; background: #0a0a0a; color: #fff; flex: none; }
+.cn-btn { display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--r-sm); color: #fff; }
+.cn-btn svg { width: 18px; height: 18px; }
+.cn-btn:hover { background: rgb(255 255 255 / 0.12); }
+.cn-time { font: 500 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: rgb(255 255 255 / 0.8); min-width: 88px; text-align: center; font-variant-numeric: tabular-nums; }
+.cn-tl { position: relative; flex: 1; height: 26px; cursor: pointer; }
+.cn-tl-track { position: absolute; left: 0; right: 0; top: 11px; height: 4px; border-radius: 2px; background: rgb(255 255 255 / 0.22); }
+.cn-tl-fill { position: absolute; left: 0; top: 11px; height: 4px; border-radius: 2px; background: #75d8ff; width: 0; }
+.cn-tl-head { position: absolute; top: 6px; width: 14px; height: 14px; border-radius: 999px; background: #fff; margin-left: -7px; box-shadow: 0 1px 3px rgb(0 0 0 / 0.4); left: 0; }
+.cn-speed { font-size: 12px; font-weight: 600; color: rgb(255 255 255 / 0.8); min-width: 40px; }
+
+/* Annotation toolbar: the Boards dock recipe, dark, one scrolling row. */
+.cn-tools { display: flex; align-items: center; gap: 2px; height: 48px; padding: 0 8px; background: var(--background); border-top: 1px solid var(--border); overflow-x: auto; overflow-y: hidden; flex: none; scrollbar-width: thin; }
+.cn-tools .row { display: flex; align-items: center; gap: 2px; margin: 0 auto; width: max-content; }
+.cn-tool { position: relative; display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--r-md); color: var(--foreground); flex: none; }
+.cn-tool svg { width: 18px; height: 18px; }
+.cn-tool:hover { background: var(--accent); }
+.cn-tool.on { background: var(--primary); color: var(--primary-foreground); }
+.cn-tool.on .cn-key { color: rgb(255 255 255 / 0.8); }
+.cn-key { position: absolute; right: 3px; bottom: 2px; font: 600 8px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted-foreground); }
+.cn-div { width: 1px; height: 24px; background: var(--border); margin: 0 6px; flex: none; }
+.cn-swatch { width: 20px; height: 20px; border-radius: 6px; border: 1px solid var(--border); flex: none; }
+.cn-swatch.on { outline: 2px solid #75d8ff; outline-offset: 1px; }
+.cn-player { width: 26px; height: 26px; border-radius: 999px; border: 2px solid #1e1e1e; flex: none; }
+.cn-player.on { outline: 2px solid #75d8ff; outline-offset: 1px; }
+.cn-tool.danger { color: var(--destructive); }
+.cn-text-field { position: absolute; z-index: 5; background: #fff; border: 2px solid #1e1e1e; border-radius: 10px; padding: 4px 10px; font: 800 20px/1.3 Inter, sans-serif; color: #1e1e1e; outline: none; min-width: 60px; }
+
+/* ------------------------------------------------ the builder page */
+.cn-home { background: var(--secondary); color: var(--foreground); min-height: 100%; }
+.cn-home main { max-width: 860px; margin: 0 auto; padding: 24px; display: grid; gap: 20px; }
+.cn-home header { display: flex; align-items: center; gap: 12px; }
+.cn-home h1 { font-size: 20px; font-weight: 600; margin: 0; flex: 1; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: var(--r-xl); box-shadow: var(--shadow-sm); padding: 20px; }
+.card h2 { font-size: 14px; font-weight: 600; margin: 0 0 10px; }
+.fld { display: grid; gap: 6px; margin-bottom: 12px; font-size: 13px; font-weight: 500; }
+.fld > span { color: var(--muted-foreground); font-size: 12px; }
+.input { height: 36px; width: 100%; padding: 0 12px; border: 1px solid var(--input); border-radius: var(--r-md); background: var(--background); font: inherit; font-size: 14px; box-shadow: var(--shadow-xs); outline: none; }
+.input:focus { border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 50%, transparent); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 16px; border-radius: var(--r-md); font-size: 14px; font-weight: 500; white-space: nowrap; text-decoration: none; }
+.btn svg { width: 16px; height: 16px; }
+.btn-primary { background: var(--primary); color: var(--primary-foreground); box-shadow: var(--shadow-xs); }
+.btn-outline { background: var(--background); border: 1px solid var(--border); box-shadow: var(--shadow-xs); }
+.btn-outline:hover, .btn-ghost:hover { background: var(--accent); }
+.btn-icon { width: 36px; padding: 0; }
+.cn-links { display: grid; gap: 10px; }
+.cn-link { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+.cn-link code { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; padding: 8px 10px; background: var(--muted); border-radius: var(--r-md); }
+.cn-preview { aspect-ratio: 16/9; width: 100%; border: 1px solid var(--border); border-radius: var(--r-md); background: #000; }
+.hint { font-size: 12px; color: var(--muted-foreground); line-height: 1.5; margin: 0; }
+ol.hint { padding-left: 18px; }
