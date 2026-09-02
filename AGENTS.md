@@ -1247,6 +1247,30 @@ control.
 - SETTINGS SHEET: grid style/size, snap, background live on the board
   record; default sticky colour, pen colour and width are the user's own
   and live in localStorage `cthk.prefs`.
+- DECK ROWS ARE FIGMA SECTION ROWS (2026-09-01, from Tony's screen recording
+  of Figma Slides). There is NO header bar on a deck. A row is: a name tab
+  above (click selects the deck, double-click renames, drags), a grip pill on
+  the left edge that drags the whole row, a number above each frame, and a
+  HEAD BAR over each frame that turns into a pale blue bar when that slide
+  is selected - the bar is the handle that drags the slide along the row
+  (neighbours shift, drop reorders). A `+` dot in every gap inserts a blank
+  slide there; a dot under the row starts a new deck below. Delete removes
+  the selected slide (undo covers it - no confirm). `endSlideDrag` takes the
+  drag record as an argument: `onPointerUp` clears `ed.drag` before it runs.
+- TEXT BOXES EDIT LIKE FIGMA: click outlines, double-click selects ALL the
+  text so typing replaces it, Enter on a selected box starts editing, Escape
+  or a click elsewhere commits.
+- THE TEMPLATE IS TONY'S FIGMA TEMPLATE at the coordinates measured for the
+  Slides app: cover = horizontal white logo top left, Title / Subtitle on the
+  lower third, "(c) Coach Tony Hockey" caption bottom right; content = Subheader
+  / Header / "- Text" body with the icon mark bottom right. The `logo`
+  element type points at the canonical files in /slides/logos (never a blob).
+  Inter is loaded from Google Fonts exactly as the hub and Slides do.
+- RINK SLIDES BURN THE RINK INTO THE SLIDE: `slide.bgImage { src, mode }`
+  renders a pointer-events-none layer UNDER the elements, using the Diagrams
+  app's own rink art (/diagrams/assets/rink.png). Modes: 'half-right' (the
+  left half of the rink as a square on the right of the slide) and
+  'full-right'. The rink is never selectable or movable; the text boxes are.
 - SLIDE VIEW is a focus mode on ONE deck (the "Edit" button on a deck
   header, or the view toggle): filmstrip with a deck picker, single stage,
   notes tray. The board stays the default and the primary editor.

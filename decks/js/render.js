@@ -3,7 +3,7 @@
 // slide space (1600x900); the stage is a size container and text is sized
 // in cqw so one record lays out identically at every scale.
 
-import { SLIDE_W, SLIDE_H, styleOf } from './model.js';
+import { SLIDE_W, SLIDE_H, styleOf, LOGOS } from './model.js';
 import { assetUrl, getDrill } from './store.js';
 import { renderStateFlat } from '/diagrams/js/flat.js';
 import { loadAssets } from '/diagrams/js/rink.js';
@@ -42,6 +42,10 @@ export function elHtml(e, theme) {
   if (e.type === 'image') {
     return `<div class="dk-el dk-el-image" data-el="${e.id}" style="${box}"><img data-asset="${esc(e.asset)}" alt=""></div>`;
   }
+  if (e.type === 'logo') {
+    const l = LOGOS[e.variant] || LOGOS['icon-black'];
+    return `<div class="dk-el dk-el-logo" data-el="${e.id}" style="${box}"><img src="${l.src}" alt="CTH" draggable="false"></div>`;
+  }
   if (e.type === 'video') {
     return `<div class="dk-el dk-el-video" data-el="${e.id}" style="${box}"><video data-asset="${esc(e.asset)}" playsinline preload="metadata"></video><div class="dk-vbadge">video</div></div>`;
   }
@@ -53,7 +57,10 @@ export function elHtml(e, theme) {
 
 export function slideHtml(s, theme) {
   const els = (s.els || []).map((e) => elHtml(e, theme)).join('');
-  return `<div class="dk-stage" data-slide="${s.id}" style="background:${s.bg || '#ffffff'}">${els}</div>`;
+  const bg = s.bgImage && s.bgImage.src
+    ? `<div class="dk-bgimg dk-bgimg--${esc(s.bgImage.mode || 'full')}" aria-hidden="true"><img src="${esc(s.bgImage.src)}" alt="" draggable="false"></div>`
+    : '';
+  return `<div class="dk-stage" data-slide="${s.id}" style="background:${s.bg || '#ffffff'}">${bg}${els}</div>`;
 }
 
 // ------------------------------------------------------------- board items
@@ -96,26 +103,27 @@ export function itemHtml(it) {
   return '';
 }
 
-// A deck on the board: a header (name, count, present) over a row of
-// live slide frames. Each frame is a real stage, so slides edit in place.
+// A deck on the board is a Figma-style SECTION ROW: a name tab above the
+// row, a grip pill on the left edge that drags the whole row, a head bar
+// over each frame (the number at rest, a blue drag bar when selected) and
+// a + dot in every gap to insert a slide there. No header bar.
 export function deckHtml(it, cur = -1) {
   const n = it.slides.length;
   const frames = it.slides.map((s, i) => `
-    <div class="dk-frame ${i === cur ? 'on' : ''} ${s.skip ? 'skip' : ''}" data-i="${i}" style="left:${i * (960 + 60)}px;top:${44}px;width:960px">
-      <button class="dk-fnum" data-tip="Slide ${i + 1}" aria-label="Select slide ${i + 1}">${i + 1}</button>
+    <div class="dk-frame ${i === cur ? 'on' : ''} ${s.skip ? 'skip' : ''}" data-i="${i}" style="left:${i * (960 + 60)}px;top:0;width:960px">
+      <div class="dk-fhead" data-fhead="${i}" role="button" tabindex="-1" aria-label="Slide ${i + 1}, drag to reorder"><span class="dk-fnum">${i + 1}</span></div>
       ${slideHtml(s, it.theme)}
       <div class="dk-chrome" data-chrome="${it.id}:${i}"></div>
+      <button class="dk-insert" data-insert="${i + 1}" data-tip="Insert slide" aria-label="Insert slide after ${i + 1}">+</button>
     </div>`).join('');
   return `<div class="wb-item wb-deck${it.locked ? ' wb-locked' : ''}" data-item="${it.id}" style="${boxStyle(it)}">
-    <div class="wb-deck-head">
-      <span class="wb-deck-grip" aria-hidden="true"></span>
-      <span class="wb-deck-name">${esc(it.name || 'Untitled Deck')}</span>
-      <span class="wb-deck-count">${n} slide${n === 1 ? '' : 's'}</span>
-      <button class="wb-deck-btn" data-deckact="add" data-tip="New Slide" aria-label="New slide">+</button>
-      <button class="wb-deck-btn" data-deckact="focus" data-tip="Open in slide view" aria-label="Open in slide view">Edit</button>
-      <button class="wb-deck-btn wb-deck-present" data-deckact="present" data-tip="Present this deck" aria-label="Present this deck">Present</button>
-    </div>
+    <div class="wb-deck-line" aria-hidden="true"></div>
+    <button class="wb-deck-tab" data-decktab data-tip="Deck: click to select, double-click to rename" aria-label="Deck ${esc(it.name || 'Untitled Deck')}">${esc(it.name || 'Untitled Deck')}</button>
+    <button class="wb-deck-grip" data-deckgrip data-tip="Drag deck" aria-label="Drag deck"></button>
+    <button class="dk-insert dk-insert-first" data-insert="0" data-tip="Insert slide" aria-label="Insert slide at the start">+</button>
     ${frames}
+    <button class="wb-deck-addrow" data-addrow data-tip="New deck below" aria-label="New deck below">+</button>
+    <span class="wb-deck-count" aria-hidden="true">${n}</span>
   </div>`;
 }
 

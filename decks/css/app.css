@@ -422,3 +422,81 @@ img[data-asset]:not([src]) { visibility: hidden; }
 .dk-card-blank { aspect-ratio: 16/9; background: repeating-linear-gradient(45deg, var(--muted) 0 8px, transparent 8px 16px); }
 .dk-toolbar { z-index: 6; }
 .dk-placebar { z-index: 6; }
+
+/* ------------------------------------------------ Figma-style deck rows */
+
+/* The old header bar is gone: the row is the frames, a name tab above,
+   a grip pill on the left edge, and a blue line along the top when the
+   deck itself is selected. Sizes ride --inv so they hold at any zoom. */
+.wb-deck-head, .wb-deck-btn, .wb-deck-present, .wb-deck-name, .wb-deck-count { display: none; }
+.wb-deck { border-radius: 0; }
+.wb-deck-line { position: absolute; left: 0; right: 0; top: calc(-10px * var(--inv)); height: calc(2px * var(--inv)); background: #3392ff; opacity: 0; pointer-events: none; }
+.wb-deck.on .wb-deck-line { opacity: 1; }
+.wb-deck-tab {
+  position: absolute; left: 0; top: calc(-34px * var(--inv));
+  font-size: calc(12px * var(--inv)); font-weight: 600; color: var(--muted-foreground);
+  padding: calc(3px * var(--inv)) calc(10px * var(--inv)); border-radius: calc(6px * var(--inv)) calc(6px * var(--inv)) 0 0;
+  max-width: 40%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: grab;
+}
+.wb-deck-tab:hover { color: var(--foreground); background: rgb(51 146 255 / 0.12); }
+.wb-deck.on .wb-deck-tab { background: #3392ff; color: #fff; }
+.wb-deck-tab[contenteditable] { outline: none; background: var(--background); color: var(--foreground); box-shadow: 0 0 0 calc(1.5px * var(--inv)) #3392ff; cursor: text; }
+.wb-deck-grip {
+  position: absolute; left: calc(-30px * var(--inv)); top: 50%; transform: translateY(-50%);
+  width: calc(18px * var(--inv)); height: calc(56px * var(--inv)); border-radius: 999px;
+  background: #3392ff; opacity: 0; cursor: grab;
+  background-image: radial-gradient(circle, #fff calc(1.2px * var(--inv)), transparent calc(1.6px * var(--inv)));
+  background-size: calc(6px * var(--inv)) calc(6px * var(--inv)); background-position: center; background-repeat: repeat;
+  background-clip: content-box; padding: calc(12px * var(--inv)) calc(5px * var(--inv));
+  transition: opacity var(--dur);
+}
+.wb-deck:hover .wb-deck-grip, .wb-deck.on .wb-deck-grip, .wb-deck:has(.dk-frame.on) .wb-deck-grip { opacity: 1; }
+.wb-deck-grip:active { cursor: grabbing; }
+
+/* Frame head: the number at rest, a pale blue bar when the slide is
+   selected - and that bar is the handle that drags the slide along the row. */
+.wb-deck .dk-frame > .dk-stage { border: 1px solid var(--border); }
+.wb-deck .dk-frame.on > .dk-stage { outline: calc(2px * var(--inv)) solid #3392ff; outline-offset: 0; }
+.dk-fhead { position: absolute; left: 0; right: 0; top: calc(-24px * var(--inv)); height: calc(24px * var(--inv)); display: flex; align-items: flex-end; padding-bottom: calc(4px * var(--inv)); cursor: grab; border-radius: calc(6px * var(--inv)) calc(6px * var(--inv)) 0 0; }
+.dk-fhead:active { cursor: grabbing; }
+.dk-frame.on .dk-fhead { background: #bcdcff; align-items: center; padding: 0 calc(8px * var(--inv)); top: calc(-16px * var(--inv)); height: calc(16px * var(--inv)); }
+.wb-deck .dk-fnum { position: static; padding: 0; font-size: calc(12px * var(--inv)); color: var(--muted-foreground); background: none; border: 0; pointer-events: none; }
+.dk-frame.on .dk-fnum { color: #0a3d80; font-weight: 600; }
+.dk-frame.dragging { z-index: 4; opacity: 0.9; }
+.dk-frame.shifting { transition: transform var(--dur); }
+.dk-frame.dragging > .dk-stage { box-shadow: 0 12px 32px -8px rgb(0 0 0 / 0.35); }
+
+/* Insert dots in the gaps, and the new-row dot under the row. */
+.dk-insert {
+  position: absolute; top: 50%; right: calc(-30px - 11px * var(--inv)); transform: translateY(-50%);
+  width: calc(22px * var(--inv)); height: calc(22px * var(--inv)); border-radius: 999px;
+  background: #3392ff; color: #fff; font-size: calc(16px * var(--inv)); font-weight: 500; line-height: 1;
+  display: grid; place-items: center; opacity: 0; transition: opacity var(--dur); z-index: 3;
+}
+.dk-insert-first { right: auto; left: calc(-30px - 11px * var(--inv)); }
+.wb-deck:hover .dk-insert, .dk-insert:focus-visible { opacity: 0.55; }
+.dk-insert:hover { opacity: 1 !important; transform: translateY(-50%) scale(1.1); }
+.wb-deck-addrow {
+  position: absolute; left: 50%; bottom: calc(-46px * var(--inv)); transform: translateX(-50%);
+  width: calc(22px * var(--inv)); height: calc(22px * var(--inv)); border-radius: 999px;
+  background: #3392ff; color: #fff; font-size: calc(16px * var(--inv)); line-height: 1; display: grid; place-items: center;
+  opacity: 0; transition: opacity var(--dur);
+}
+.wb-deck:hover .wb-deck-addrow, .wb-deck.on .wb-deck-addrow, .wb-deck-addrow:focus-visible { opacity: 0.55; }
+.wb-deck-addrow:hover { opacity: 1; }
+
+/* Burned-in slide background (the rink layouts) and the logo element. */
+.dk-bgimg { position: absolute; overflow: hidden; pointer-events: none; }
+.dk-bgimg img { display: block; height: 100%; width: auto; max-width: none; }
+.dk-bgimg--half-right { left: 54%; top: 12%; width: 42.75%; height: 76%; }
+.dk-bgimg--half-right img { height: 100%; }
+.dk-bgimg--full-right { left: 36%; top: 22%; width: 60%; height: 56%; }
+.dk-bgimg--full-right img { width: 100%; height: 100%; }
+.dk-bgimg--full { left: 5%; top: 8%; width: 90%; height: 84%; }
+.dk-bgimg--full img { width: 100%; height: 100%; object-fit: contain; }
+.dk-el-logo img { width: 100%; height: 100%; display: block; object-fit: contain; pointer-events: none; }
+
+/* Text boxes edit like Figma: a thin blue outline while selected is the
+   selbox; while editing the box shows a caret and a selection tint. */
+.dk-el-text[contenteditable] { outline: calc(1px * var(--inv, 1)) solid #3392ff; }
+.dk-el-text[contenteditable]::selection, .dk-el-text[contenteditable] *::selection { background: rgb(51 146 255 / 0.35); }

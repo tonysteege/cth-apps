@@ -55,50 +55,82 @@ export const newShape = (shape = 'rect', over = {}) => ({
   fill: '#0a0a0a', alpha: 1, radius: 16, text: '', ...over,
 });
 
+// The marks are the canonical files in slides/logos (never redrawn). The
+// horizontal lockup is 1000x286 (3.497:1); the icon is square.
+export const LOGOS = {
+  'horizontal-white': { src: '/slides/logos/cth-horizontal-white.svg', ratio: 3.497 },
+  'horizontal-black': { src: '/slides/logos/cth-horizontal-black.svg', ratio: 3.497 },
+  'icon-white': { src: '/slides/logos/cth-icon-white.svg', ratio: 1 },
+  'icon-black': { src: '/slides/logos/cth-icon-black.svg', ratio: 1 },
+};
+export const newLogo = (variant, over = {}) => {
+  const w = over.w || (variant.startsWith('icon') ? 54 : 300);
+  return { id: uid(), type: 'logo', variant, x: MARGIN.x, y: MARGIN.y, w, h: Math.round(w / LOGOS[variant].ratio), ...over };
+};
+
+// A slide may carry a BURNED-IN background picture: `bgImage { src, mode }`
+// drawn under the elements and never selectable. The rink layouts use the
+// Diagrams app's own rink art (3200x1600) - 'half-right' shows the left
+// half of the rink as a square on the right of the slide, 'full-right' the
+// whole rink on the right.
+export const RINK_SRC = '/diagrams/assets/rink.png';
+
 export const newImage = (asset, over = {}) => ({ id: uid(), type: 'image', asset, x: 400, y: 200, w: 800, h: 500, ...over });
 export const newVideo = (asset, over = {}) => ({ id: uid(), type: 'video', asset, x: 240, y: 130, w: 1120, h: 630, ...over });
 export const newDiagram = (drill, over = {}) => ({ id: uid(), type: 'diagram', drill, x: 320, y: 150, w: 960, h: 480, animate: true, ...over });
 
 const M = MARGIN;
 export const LAYOUTS = {
-  blank:   { label: 'Blank' },
-  title:   { label: 'Title' },
-  section: { label: 'Section' },
-  content: { label: 'Content' },
-  media:   { label: 'Text + Media' },
-  rink:    { label: 'Rink' },
+  blank:    { label: 'Blank' },
+  title:    { label: 'Title' },
+  section:  { label: 'Section' },
+  content:  { label: 'Content' },
+  media:    { label: 'Text + Media' },
+  rinkHalf: { label: 'Rink Half' },
+  rinkFull: { label: 'Rink Full' },
 };
 
 export function newSlide(layout = 'blank') {
   const s = { id: uid(), bg: '#ffffff', notes: '', els: [] };
+  // The layouts are Tony's Figma template at the coordinates MEASURED for
+  // the Slides app (2026-08-27): logo top left, title on the lower third,
+  // the credit bottom right; content slides stack subheader / header /
+  // bullet body from the top margin. A dark slide carries its own text
+  // colours - the role defaults are ink and ink on black is invisible.
   if (layout === 'title') {
-    // A dark cover carries its own text colours - the role defaults are ink
-    // and ink on black is the first bug every new deck used to show.
     s.bg = '#0a0a0a';
     s.els.push(
-      newText('title', { x: M.x, y: 520, w: SLIDE_W - M.x * 2, h: 130, text: 'Deck Title', color: '#ffffff' }),
-      newText('subtitle', { x: M.x, y: 668, w: SLIDE_W - M.x * 2, h: 90, text: 'Subtitle', color: '#a3a3a3' }),
+      newLogo('horizontal-white'),
+      newText('title', { x: M.x, y: 385, w: 1200, h: 132, text: 'Title', color: '#ffffff' }),
+      newText('subtitle', { x: M.x, y: 517, w: 1200, h: 84, text: 'Subtitle', color: '#a3a3a3' }),
+      newText('caption', { x: 1000, y: 792, w: 520, h: 40, text: '\u00a9 Coach Tony Hockey', color: '#a3a3a3', align: 'right' }),
     );
   } else if (layout === 'section') {
     s.bg = '#0a0a0a';
-    s.els.push(newText('header', { x: M.x, y: 390, w: SLIDE_W - M.x * 2, h: 110, text: 'Section', color: '#ffffff' }));
+    s.els.push(
+      newLogo('horizontal-white'),
+      newText('title', { x: M.x, y: 400, w: 1440, h: 140, text: 'Section', color: '#ffffff' }),
+    );
   } else if (layout === 'content') {
     s.els.push(
-      newText('subheader', { x: M.x, y: M.y, w: SLIDE_W - M.x * 2, h: 48, text: 'Section' }),
-      newText('header', { x: M.x, y: M.y + 56, w: SLIDE_W - M.x * 2, h: 92, text: 'Header' }),
-      newText('body', { x: M.x, y: M.y + 190, w: SLIDE_W - M.x * 2, h: 480, text: 'Body' }),
+      newText('subheader', { x: M.x, y: M.y, w: 1000, h: 48, text: 'Subheader' }),
+      newText('header', { x: M.x, y: 118, w: 1200, h: 100, text: 'Header' }),
+      newText('body', { x: M.x, y: 262, w: 1000, h: 460, text: '\u2022 Text' }),
+      newLogo('icon-black', { x: 1466, y: 782, w: 54 }),
     );
   } else if (layout === 'media') {
     s.els.push(
-      newText('header', { x: M.x, y: M.y, w: SLIDE_W - M.x * 2, h: 92, text: 'Header' }),
-      newText('body', { x: M.x, y: M.y + 140, w: 560, h: 520, text: 'Body' }),
+      newText('subheader', { x: M.x, y: M.y, w: 660, h: 48, text: 'Subheader' }),
+      newText('header', { x: M.x, y: 118, w: 700, h: 100, text: 'Header' }),
+      newText('body', { x: M.x, y: 262, w: 660, h: 460, text: '\u2022 Text' }),
+      newLogo('icon-black', { x: 1466, y: 782, w: 54 }),
     );
-  } else if (layout === 'rink') {
+  } else if (layout === 'rinkHalf' || layout === 'rinkFull') {
+    s.bgImage = { src: RINK_SRC, mode: layout === 'rinkHalf' ? 'half-right' : 'full-right' };
     s.els.push(
-      newText('header', { x: M.x, y: M.y, w: SLIDE_W - M.x * 2, h: 92, text: 'Drill' }),
-      // The diagram itself is placed from the picker - a rink layout without
-      // a chosen drill holds the space it will take.
-      newShape('rect', { x: M.x, y: M.y + 140, w: SLIDE_W - M.x * 2, h: 560, fill: '#f5f5f5', radius: 12, text: 'Add a diagram' }),
+      newText('subheader', { x: M.x, y: M.y, w: 660, h: 48, text: 'Subheader' }),
+      newText('header', { x: M.x, y: 118, w: 700, h: 100, text: 'Header' }),
+      newText('body', { x: M.x, y: 262, w: 560, h: 460, text: '\u2022 Text' }),
     );
   }
   return s;
@@ -147,7 +179,7 @@ export const presentable = (deck) => deck.slides.filter((s) => !s.skip);
 export const DECK_FRAME_W = 960;
 export const DECK_FRAME_H = 540;
 export const DECK_GAP = 60;
-export const DECK_HEAD = 44;
+export const DECK_HEAD = 0;
 
 export const STICKY_COLORS = ['#fef08a', '#fdba74', '#f9a8d4', '#bfdbfe', '#bbf7d0', '#e9d5ff', '#e5e7eb', '#ffffff'];
 

@@ -162,6 +162,7 @@ function shellHtml(board) {
           <button class="seg-btn on" id="dkViewBoard" data-tip="Board" aria-label="Board view">${I.grid}</button>
           <button class="seg-btn" id="dkViewSlide" data-tip="Slide view" aria-label="Slide view">${I.film}</button>
         </div>
+        <button class="btn btn-outline" id="dkNewSlide">${I.plus} New Slide</button>
         <button class="btn btn-outline btn-icon" id="dkSettings" data-tip="Board settings" aria-label="Board settings">${I.gear}</button>
         <button class="btn btn-primary" id="dkPresent">${I.play} Present</button>
       </div>
@@ -175,6 +176,7 @@ function wireShell() {
   $('#dkBack').onclick = () => { location.hash = '#/'; };
   $('#dkName').onchange = (e) => { ed.board.name = e.target.value.trim() || 'Untitled Board'; markDirty(); };
   $('#dkSettings').onclick = openSettingsSheet;
+  $('#dkNewSlide').onclick = (e) => { const d = deckOf() || focusDeck(); if (d) layoutMenu(e, d); };
   $('#dkPresent').onclick = () => presentDeck(deckOf() || focusDeck());
   $('#dkViewSlide').onclick = () => setView('slide');
   $('#dkViewBoard').onclick = () => setView('board');
@@ -256,21 +258,80 @@ function paintBoard() {
   board.addEventListener('wheel', onBoardWheel, { passive: false });
   board.ondblclick = onBoardDblClick;
   board.oncontextmenu = onBoardContext;
-  $$('.dk-stage', canvas).forEach((st) => { st.addEventListener('pointerdown', onStageDown); });
-  $$('.dk-fnum', canvas).forEach((n) => {
-    n.onclick = (e) => { e.stopPropagation(); const f = n.closest('.dk-frame'); const d = n.closest('.wb-deck'); selectSlide(d.dataset.item, +f.dataset.i); };
-    n.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); const f = n.closest('.dk-frame'); const d = n.closest('.wb-deck'); selectSlide(d.dataset.item, +f.dataset.i); slideMenu(e, item(d.dataset.item), +f.dataset.i); };
+  $$('.wb-deck', canvas).forEach((node) => wireDeck(node, item(node.dataset.item)));
+}
+
+// A deck row's own controls: stages edit in place, the frame head selects
+// and drags a slide along the row, the tab selects/renames the deck, the
+// grip drags the whole row, the dots insert.
+function wireDeck(node, d) {
+  $$('.dk-stage', node).forEach((st) => { st.addEventListener('pointerdown', onStageDown); st.addEventListener('dblclick', onStageDblClick); });
+  $$('.dk-fhead', node).forEach((h) => {
+    h.onpointerdown = (e) => { if (e.button !== 0) return; e.stopPropagation(); const i = +h.dataset.fhead; selectSlide(d.id, i); startSlideDrag(e, d, i, h.closest('.dk-frame')); };
+    h.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); const i = +h.dataset.fhead; selectSlide(d.id, i); slideMenu(e, d, i); };
   });
-  $$('[data-deckact]', canvas).forEach((b) => {
+  const tab = $('[data-decktab]', node);
+  if (tab) {
+    tab.onpointerdown = (e) => { if (e.button !== 0 || tab.isContentEditable) return; e.stopPropagation(); if (!ed.sel.has(d.id) || ed.ssel) { ed.ssel = null; select([d.id], e.shiftKey); } startItemDrag(e, 'move'); };
+    tab.ondblclick = (e) => { e.stopPropagation(); renameDeck(d, tab); };
+  }
+  const grip = $('[data-deckgrip]', node);
+  if (grip) grip.onpointerdown = (e) => { if (e.button !== 0) return; e.stopPropagation(); ed.ssel = null; if (!ed.sel.has(d.id)) select([d.id], e.shiftKey); startItemDrag(e, 'move'); };
+  $$('.dk-insert', node).forEach((b) => {
     b.onpointerdown = (e) => e.stopPropagation();
-    b.onclick = (e) => {
-      e.stopPropagation();
-      const d = item(b.closest('.wb-deck').dataset.item);
-      if (b.dataset.deckact === 'add') layoutMenu(e, d);
-      if (b.dataset.deckact === 'focus') setView('slide', d.id);
-      if (b.dataset.deckact === 'present') presentDeck(d);
-    };
+    b.onclick = (e) => { e.stopPropagation(); const at = +b.dataset.insert; d.slides.splice(at, 0, newSlide('blank')); commit(); repaintDeck(d); selectSlide(d.id, at); if (ed.view === 'slide') paintRail(); };
   });
+  const addrow = $('[data-addrow]', node);
+  if (addrow) {
+    addrow.onpointerdown = (e) => e.stopPropagation();
+    addrow.onclick = (e) => {
+      e.stopPropagation();
+      const deck = newDeck('Untitled Deck'); deck.slides = [newSlide('blank')];
+      const it = newDeckItem(deck, { x: d.x, y: d.y + d.h + 140 });
+      ed.board.items.push(it); commit(); paintBoard(); selectSlide(it.id, 0);
+    };
+  }
+}
+
+// Drag a slide along its row by the head bar; the neighbours shift out of
+// the way and the drop reorders. A press without movement is a select.
+function startSlideDrag(e, d, from, frameNode) {
+  const p = boardPoint(e);
+  ed.drag = { mode: 'slide', d, from, to: from, node: frameNode, sx: p.x, moved: false };
+  frameNode.classList.add('dragging');
+  e.preventDefault();
+}
+function moveSlideDrag(e) {
+  const dr = ed.drag; const p = boardPoint(e);
+  const dx = p.x - dr.sx;
+  if (Math.abs(dx) > 4 / ed.bd.z) dr.moved = true;
+  if (!dr.moved) return;
+  const pitch = DECK_FRAME_W + DECK_GAP;
+  dr.node.style.transform = `translateX(${dx}px)`;
+  const to = clamp(Math.round(dr.from + dx / pitch), 0, dr.d.slides.length - 1);
+  if (to !== dr.to) {
+    dr.to = to;
+    const deckNode = dr.node.closest('.wb-deck');
+    $$('.dk-frame', deckNode).forEach((f) => {
+      const i = +f.dataset.i;
+      if (i === dr.from) return;
+      f.classList.add('shifting');
+      let shift = 0;
+      if (dr.from < to && i > dr.from && i <= to) shift = -pitch;
+      if (dr.from > to && i >= to && i < dr.from) shift = pitch;
+      f.style.transform = shift ? `translateX(${shift}px)` : '';
+    });
+  }
+}
+function endSlideDrag(dr) {
+  dr.node.classList.remove('dragging');
+  if (dr.moved && dr.to !== dr.from) {
+    const [sl] = dr.d.slides.splice(dr.from, 1);
+    dr.d.slides.splice(dr.to, 0, sl);
+    commit(); repaintDeck(dr.d); selectSlide(dr.d.id, dr.to); if (ed.view === 'slide') paintRail();
+  } else {
+    repaintDeck(dr.d);
+  }
 }
 
 function applyTransform() {
@@ -372,6 +433,7 @@ function paintChrome() {
   const chrome = $('#dkChrome'); if (!chrome) return;
   $$('.dk-chrome').forEach((c) => { c.innerHTML = ''; });
   chrome.innerHTML = '';
+  $$('.wb-deck').forEach((n) => n.classList.toggle('on', ed.sel.has(n.dataset.item) && !(ed.ssel && ed.ssel.deck === n.dataset.item)));
   // Slide-level element selection lives in the frame's own chrome layer.
   const el = selEl();
   if (el && ed.ssel) {
@@ -385,7 +447,7 @@ function paintChrome() {
   }
   // A deck whose slide is being edited shows the frame outline, not a
   // second box around the whole deck.
-  const items = selItems().filter((it) => isBox(it) && !(it.kind === 'deck' && ed.ssel?.deck === it.id));
+  const items = selItems().filter((it) => isBox(it) && it.kind !== 'deck');
   if (!items.length) return;
   const single = items.length === 1 ? items[0] : null;
   chrome.innerHTML = items.map((it) => `<div class="wb-selbox ${single ? '' : 'multi'}" data-selbox="${it.id}" style="left:${it.x}px;top:${it.y}px;width:${it.w}px;height:${it.h}px">
@@ -429,8 +491,9 @@ function onBoardDown(e) {
   if (!node) { clearSel(); startMarquee(e); return; }
   const it = item(node.dataset.item);
   if (!it) return;
-  if (it.kind === 'deck' && !target.closest('.wb-deck-head')) {
-    // A click on a deck's body that is not a stage: select the deck.
+  if (it.kind === 'deck') {
+    // Anything on a deck that is not a stage, head, tab or grip: select it.
+    ed.ssel = null;
     select([it.id], e.shiftKey);
     return;
   }
@@ -499,6 +562,7 @@ function onPointerMove(e) {
   const d = ed.drag;
   if (d.mode === 'pan') { ed.bd.x = d.ox + (e.clientX - d.sx); ed.bd.y = d.oy + (e.clientY - d.sy); applyTransform(); return; }
   if (d.mode === 'el') { moveEl(e); return; }
+  if (d.mode === 'slide') { moveSlideDrag(e); return; }
   if (!$('#dkBoard')) return;
   const p = boardPoint(e);
   const dx = p.x - d.sx; const dy = p.y - d.sy;
@@ -571,6 +635,7 @@ function onPointerUp(e) {
   ed.drag = null;
   if (d.mode === 'pan') { $('#dkBoard')?.classList.remove('is-panning'); return; }
   if (d.mode === 'el') { if (d.moved) { commit(); paintPanel(); paintRailSoon(); } return; }
+  if (d.mode === 'slide') { endSlideDrag(d); return; }
   if (d.mode === 'marquee') {
     const m = $('#dkMarquee'); if (m) m.hidden = true;
     if (d.moved && d.rect) {
@@ -648,7 +713,7 @@ function onBoardDblClick(e) {
   if (!node) { fitToContent(); return; }
   const it = item(node.dataset.item);
   if (!it || it.locked) return;
-  if (e.target.closest('.wb-deck-name')) { renameDeck(it, e.target); return; }
+  if (e.target.closest('[data-decktab]')) { renameDeck(it, e.target.closest('[data-decktab]')); return; }
   if (it.kind === 'sticky' || it.kind === 'text' || it.kind === 'shape' || it.kind === 'section') editItemText(it);
 }
 
@@ -834,15 +899,7 @@ function repaintDeck(d) {
   node.outerHTML = deckHtml(d, ed.ssel?.deck === d.id ? ed.ssel.i : -1);
   const fresh = $(`.wb-deck[data-item="${d.id}"]`, $('#dkCanvas'));
   hydrate(fresh);
-  $$('.dk-stage', fresh).forEach((st) => st.addEventListener('pointerdown', onStageDown));
-  $$('.dk-fnum', fresh).forEach((n) => {
-    n.onclick = (e) => { e.stopPropagation(); selectSlide(d.id, +n.closest('.dk-frame').dataset.i); };
-    n.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); const i = +n.closest('.dk-frame').dataset.i; selectSlide(d.id, i); slideMenu(e, d, i); };
-  });
-  $$('[data-deckact]', fresh).forEach((b) => {
-    b.onpointerdown = (e) => e.stopPropagation();
-    b.onclick = (e) => { e.stopPropagation(); if (b.dataset.deckact === 'add') layoutMenu(e, d); if (b.dataset.deckact === 'focus') setView('slide', d.id); if (b.dataset.deckact === 'present') presentDeck(d); };
-  });
+  wireDeck(fresh, d);
   paintConns(); paintChrome();
 }
 
@@ -853,15 +910,26 @@ function onStageDblClick(e) {
   const frame = stage.closest('.dk-frame'); const deckNode = stage.closest('.wb-deck');
   const deckId = deckNode ? deckNode.dataset.item : ed.focus; const i = frame ? +frame.dataset.i : ed.ssel.i;
   const d = item(deckId); const el = d.slides[i].els.find((x) => x.id === node.dataset.el);
-  if (!el) return;
+  if (!el || d.locked) return;
   e.stopPropagation();
   selectSlide(deckId, i, el.id);
+  editSlideText(node, d, i, el);
+}
+
+function editSlideText(node, d, i, el) {
+  if (node.isContentEditable) return;
   node.contentEditable = 'plaintext-only'; node.focus();
-  const range = document.createRange(); range.selectNodeContents(node); range.collapse(false);
+  const range = document.createRange(); range.selectNodeContents(node);
   const s = getSelection(); s.removeAllRanges(); s.addRange(range);
-  const done = () => { node.contentEditable = 'false'; el.text = node.innerText.replace(/\n$/, ''); commit(); repaintDeck(d); selectSlide(deckId, i, el.id); paintRailSoon(); };
+  let finished = false;
+  const done = () => {
+    if (finished) return; finished = true;
+    node.contentEditable = 'false';
+    el.text = node.innerText.replace(/\n$/, '');
+    commit(); repaintDeck(d); selectSlide(d.id, i, el.id); paintRailSoon();
+  };
   node.onblur = done;
-  node.onkeydown = (ev) => { ev.stopPropagation(); if (ev.key === 'Escape') node.blur(); };
+  node.onkeydown = (ev) => { ev.stopPropagation(); if (ev.key === 'Escape') { ev.preventDefault(); node.blur(); } };
 }
 
 // ------------------------------------------------------------- toolbar + tools
@@ -952,8 +1020,15 @@ function slideMenu(e, d, i) {
     { label: 'Duplicate Slide', run: () => { const c = JSON.parse(JSON.stringify(s)); c.id = uid(); c.els.forEach((x) => { x.id = uid(); }); d.slides.splice(i + 1, 0, c); commit(); repaintDeck(d); paintRail(); } },
     { label: s.skip ? 'Include in Present' : 'Skip Slide', run: () => { s.skip = !s.skip; commit(); repaintDeck(d); paintRail(); } },
     '-',
-    { label: 'Delete Slide', run: () => { if (d.slides.length <= 1) return; if (!confirm(`Delete slide ${i + 1}? This cannot be undone.`)) return; d.slides.splice(i, 1); if (ed.ssel?.deck === d.id) ed.ssel.i = Math.min(ed.ssel.i, d.slides.length - 1); commit(); repaintDeck(d); paintRail(); paintPanel(); } },
+    { label: 'Delete Slide', run: () => deleteSlide(d, i) },
   ]);
+}
+
+function deleteSlide(d, i) {
+  if (!d || d.slides.length <= 1) return;
+  d.slides.splice(i, 1);
+  const at = Math.min(i, d.slides.length - 1);
+  commit(); repaintDeck(d); selectSlide(d.id, at); if (ed.view === 'slide') paintRail();
 }
 
 // ------------------------------------------------------------- media in
@@ -1359,7 +1434,13 @@ function onKeyDown(e) {
   }
   if (e.key === 'Delete' || e.key === 'Backspace') {
     if (el) { const d = deckOf(); slideOf().els = slideOf().els.filter((x) => x.id !== el.id); ed.ssel.el = null; commit(); repaintDeck(d); paintPanel(); paintRailSoon(); e.preventDefault(); return; }
+    if (ed.ssel && slideOf()) { deleteSlide(deckOf(), ed.ssel.i); e.preventDefault(); return; }
     if (ed.sel.size) { deleteSel(); e.preventDefault(); }
+    return;
+  }
+  if (e.key === 'Enter' && el && el.type === 'text') {
+    const node = $(`.dk-el[data-el="${el.id}"]`, currentStage());
+    if (node) { e.preventDefault(); editSlideText(node, deckOf(), ed.ssel.i, el); }
     return;
   }
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
