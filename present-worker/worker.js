@@ -36,7 +36,7 @@ function cors(req) {
   return {
     'Access-Control-Allow-Origin': ok ? o : ALLOWED_ORIGINS[0],
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, X-DG-Key',
+    'Access-Control-Allow-Headers': 'Content-Type, X-DG-Key, X-DG-Token',
     Vary: 'Origin',
   };
 }
@@ -335,41 +335,59 @@ async function handleAi(request, env, path) {
 // DG_EDIT_KEY secret in the X-DG-Key header. The index key lists them for
 // the app's home page (also key-gated). Nothing is logged.
 const DG_MAX = 2_000_000;
+const dgToken = () => { const b = new Uint8Array(18); crypto.getRandomValues(b); return btoa(String.fromCharCode(...b)).replace(/[+/=]/g, (c) => ({ '+': '-', '/': '_', '=': '' }[c])); };
+const dgPublic = (doc) => { const { token, ...rest } = doc; return rest; };
 async function handleDg(request, env, url) {
   if (!env.DG) return json(request, { error: 'setup', message: 'The DG KV namespace is not bound on this Worker.' }, 503);
   const key = request.headers.get('X-DG-Key') || '';
-  const authed = !!env.DG_EDIT_KEY && key === env.DG_EDIT_KEY;
-  const m = url.pathname.match(/^\/dg\/([A-Za-z0-9_-]{4,64})$/);
+  const tok = request.headers.get('X-DG-Token') || '';
+  const master = !!env.DG_EDIT_KEY && key === env.DG_EDIT_KEY;
+  const m = url.pathname.match(/^\/dg\/([A-Za-z0-9_-]{4,64})(?:\/(duplicate))?$/);
   if (!m) {
     if (request.method !== 'GET') return json(request, { error: 'not_found' }, 404);
+    if (!master) return json(request, { error: 'auth', message: 'The edit key is wrong or missing.' }, 401);
+    return json(request, { diagrams: (await env.DG.get('index', 'json')) || [] });
+  }
+  const id = m[1]; const action = m[2];
+  const existing = await env.DG.get(`d:${id}`, 'json');
+  // A per-diagram token edits (and duplicates) that one diagram only.
+  const authed = master || (!!existing && !!existing.token && tok === existing.token);
+  if (action === 'duplicate') {
+    if (request.method !== 'POST') return json(request, { error: 'not_found' }, 404);
+    if (!existing) return json(request, { error: 'not_found', message: 'That diagram does not exist.' }, 404);
     if (!authed) return json(request, { error: 'auth', message: 'The edit key is wrong or missing.' }, 401);
-    const idx = (await env.DG.get('index', 'json')) || [];
-    return json(request, { diagrams: idx });
+    const nid = dgToken().slice(0, 12).toLowerCase().replace(/[^a-z0-9]/g, 'x');
+    const doc = { id: nid, name: existing.name ? `${existing.name} (copy)` : '', state: existing.state, token: dgToken(), updated: Date.now() };
+    await env.DG.put(`d:${nid}`, JSON.stringify(doc));
+    const idx = ((await env.DG.get('index', 'json')) || []).filter((x) => x.id !== nid);
+    idx.unshift({ id: nid, name: doc.name, updated: doc.updated, seq: doc.state?.seq || 1 });
+    await env.DG.put('index', JSON.stringify(idx.slice(0, 500)));
+    return json(request, { id: nid, token: doc.token });
   }
-  const id = m[1];
   if (request.method === 'GET') {
-    const doc = await env.DG.get(`d:${id}`, 'json');
-    if (!doc) return json(request, { error: 'not_found', message: 'That diagram does not exist.' }, 404);
-    return json(request, doc, 200, { 'Cache-Control': 'no-store' });
+    if (!existing) return json(request, { error: 'not_found', message: 'That diagram does not exist.' }, 404);
+    return json(request, authed ? existing : dgPublic(existing), 200, { 'Cache-Control': 'no-store' });
   }
-  if (!authed) return json(request, { error: 'auth', message: 'The edit key is wrong or missing.' }, 401);
   if (request.method === 'DELETE') {
+    if (!authed) return json(request, { error: 'auth', message: 'The edit key is wrong or missing.' }, 401);
     await env.DG.delete(`d:${id}`);
     const idx = ((await env.DG.get('index', 'json')) || []).filter((x) => x.id !== id);
     await env.DG.put('index', JSON.stringify(idx));
     return json(request, { ok: true });
   }
   if (request.method === 'PUT' || request.method === 'POST') {
+    // Creating needs the master key; updating needs the key or the token.
+    if (!(master || (existing && authed))) return json(request, { error: 'auth', message: 'The edit key is wrong or missing.' }, 401);
     let body;
     try { body = await request.json(); } catch (_) { return json(request, { error: 'bad_json', message: 'The body must be JSON.' }, 400); }
-    const doc = { id, name: String(body.name || '').slice(0, 200), state: body.state || null, updated: Date.now() };
+    const doc = { id, name: String(body.name ?? existing?.name ?? '').slice(0, 200), state: body.state ?? existing?.state ?? null, token: existing?.token || dgToken(), updated: Date.now() };
     const text = JSON.stringify(doc);
     if (text.length > DG_MAX) return json(request, { error: 'too_big', message: 'That diagram is over 2 MB - drop the photo background.' }, 413);
     await env.DG.put(`d:${id}`, text);
     const idx = ((await env.DG.get('index', 'json')) || []).filter((x) => x.id !== id);
     idx.unshift({ id, name: doc.name, updated: doc.updated, seq: doc.state?.seq || 1 });
     await env.DG.put('index', JSON.stringify(idx.slice(0, 500)));
-    return json(request, { ok: true, updated: doc.updated });
+    return json(request, { ok: true, updated: doc.updated, token: doc.token });
   }
   return json(request, { error: 'not_found' }, 404);
 }

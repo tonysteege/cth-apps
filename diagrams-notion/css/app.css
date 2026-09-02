@@ -1,14 +1,15 @@
 /* CTH Diagrams Notion - the Diagrams editor, embedded. Chrome is the
-   Diagrams stylesheet (loaded first); this file only adds the embed shell,
-   the static viewer and the home list. */
+   Diagrams stylesheet (loaded first); this file adds the embed shell, the
+   static viewer, the corner cluster and the home list. */
 
-html, body { height: 100%; }
-.dn { display: flex; flex-direction: column; height: 100%; min-height: 100vh; }
+html, body { height: 100%; overflow: hidden; }
+.dn { display: flex; flex-direction: column; height: 100vh; }
 
 /* Home (top level only). */
-.dn-home { max-width: 1080px; margin: 0 auto; padding: 24px; }
-.dn-home-head { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+.dn-home { max-width: 1080px; margin: 0 auto; padding: 24px; overflow: auto; height: 100vh; }
+.dn-home-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
 .dn-home-head h1 { flex: 1; margin: 0; font-size: 20px; font-weight: 600; }
+.dn-hint { font-size: 13px; color: var(--n-500, #737373); margin: 0 0 18px; max-width: 70ch; }
 .dn-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
 .dn-card { border: 1px solid var(--n-200, #ebebeb); border-radius: 16px; background: #fff; overflow: hidden; cursor: pointer; }
 .dn-card:hover { border-color: var(--n-300, #d9d9d9); box-shadow: 0 4px 12px -6px rgb(0 0 0 / 0.2); }
@@ -17,34 +18,44 @@ html, body { height: 100%; }
 .dn-card-meta { padding: 10px 12px; display: grid; gap: 2px; }
 .dn-card-name { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dn-card-sub { font-size: 12px; color: var(--n-500, #737373); }
-.dn-card-acts { display: flex; gap: 6px; padding: 0 12px 12px; }
+.dn-card-acts { display: flex; gap: 6px; padding: 0 12px 12px; flex-wrap: wrap; }
 .dn-signin { max-width: 420px; margin: 80px auto; text-align: center; display: grid; gap: 12px; }
 .dn-signin p { color: var(--n-500, #737373); margin: 0; }
 
-/* Editor shell inside an embed: slim header, no sidebar. */
-.dn .ed-head { gap: 8px; }
-.dn .ed-title { min-width: 120px; }
-.dn-pub { font-size: 12px; color: var(--n-500, #737373); white-space: nowrap; }
-.dn-pub.on { color: #16a34a; }
-.dn-pub.err { color: #dc2626; }
-.dn-link { font-size: 12px; }
+/* The embed editor: no header. The stage fills what the toolbar leaves and
+   never scrolls; the toolbar is a static row at the bottom. */
+.dn-edit .ed-main { flex: 1; min-height: 0; display: flex; }
+.dn-edit .ed-stagewrap { flex: 1; min-height: 0; overflow: hidden; padding: 10px 12px 4px; display: flex; align-items: center; justify-content: center; }
+.dn-edit .ed-zoom { margin: 0 auto; }
+.dn-edit .ed-addrow { display: none; }
+.dn-edit .tb { position: static; transform: none; margin: 6px auto 10px; max-width: calc(100vw - 16px); flex: none; }
+/* One rink per embed: no rink names, no per-rink icons. */
+.dn-edit .ed-rinkchip, .dn-edit .ed-rctl, .dn-edit .ed-flabelwrap { display: none; }
+.dn-edit .ed-stage { overflow: visible; }
+.dn-edit .tb { overflow-x: auto; overflow-y: hidden; flex-wrap: nowrap; scrollbar-width: thin; }
 
-/* Static viewer: rinks stacked, each with its caption, scrolls vertically. */
-.dn-view { padding: 12px 12px 24px; display: grid; gap: 18px; max-width: 1200px; margin: 0 auto; width: 100%; box-sizing: border-box; }
-.dn-view h2 { margin: 0; font-size: 16px; font-weight: 600; }
-.dn-rink { display: grid; gap: 6px; }
-.dn-rink-cap { font-size: 13px; font-weight: 600; color: var(--n-700, #404040); }
-.dn-rink img { width: 100%; height: auto; display: block; border-radius: 8px; }
+/* Static viewer: the one rink, fitted. */
+.dn-static .dn-view { flex: 1; min-height: 0; display: grid; place-items: center; padding: 10px 12px; }
+.dn-still { max-width: 100%; max-height: 100%; width: auto; height: auto; display: block; }
 .dn-empty { color: var(--n-500, #737373); padding: 40px; text-align: center; }
-/* The coach's way in: a quiet key in the corner of a static embed. */
-.dn-lock { position: fixed; right: 8px; bottom: 8px; width: 28px; height: 28px; border-radius: 999px; background: #fff; border: 1px solid var(--n-200, #ebebeb); color: var(--n-400, #a3a3a3); display: grid; place-items: center; opacity: 0.35; cursor: pointer; }
-.dn-lock:hover { opacity: 1; color: var(--n-700, #404040); }
-.dn-lock svg { width: 14px; height: 14px; }
-/* The key form: an in-page panel, because a dialog is blocked in an embed. */
-.dn-keyform { position: fixed; right: 12px; bottom: 44px; z-index: 50; width: min(320px, calc(100vw - 24px)); background: #fff; border: 1px solid var(--n-200, #ebebeb); border-radius: 16px; box-shadow: 0 10px 30px -10px rgb(0 0 0 / 0.3); padding: 14px; display: grid; gap: 10px; }
-.dn-signin .dn-keyform { position: static; width: auto; margin: 0 auto; }
-.dn-keyform label { display: grid; gap: 6px; font-size: 13px; font-weight: 600; text-align: left; }
-.dn-keyform input { height: 36px; padding: 0 10px; border: 0; border-radius: 10px; background: var(--n-200, #ebebeb); font: inherit; font-size: 14px; outline: none; }
-.dn-keyform input:focus { box-shadow: inset 0 0 0 2px var(--n-400, #a3a3a3); }
-.dn-keyform-acts { display: flex; gap: 8px; justify-content: flex-end; }
-.dn-keyform-err { margin: 0; font-size: 12px; color: #dc2626; }
+
+/* The corner cluster: up and left of the embed's own resize handles. */
+.dn-cluster { position: fixed; right: 36px; bottom: 84px; display: flex; align-items: center; gap: 6px; z-index: 30; }
+.dn-cbtn { min-width: 30px; height: 30px; padding: 0 6px; border-radius: 999px; background: #fff; border: 1px solid var(--n-200, #ebebeb); color: var(--n-500, #737373); display: grid; place-items: center; opacity: 0.45; cursor: pointer; font: 500 12px/1 Inter, system-ui, sans-serif; box-shadow: 0 1px 2px rgb(0 0 0 / 0.05); }
+.dn-cluster:hover .dn-cbtn, .dn-cbtn:focus-visible { opacity: 1; }
+.dn-cbtn:hover { color: var(--n-900, #171717); border-color: var(--n-300, #d9d9d9); }
+.dn-cbtn svg { width: 14px; height: 14px; }
+.dn-dot { width: 8px; height: 8px; border-radius: 999px; background: #16a34a; opacity: 0.7; }
+.dn-dot.wait { background: #f59e0b; }
+.dn-dot.busy { background: #f59e0b; animation: dnPulse 0.8s infinite alternate; }
+.dn-dot.err { background: #dc2626; }
+@keyframes dnPulse { to { opacity: 0.2; } }
+
+/* Panels (key, links): in-page, because dialogs are blocked in an embed. */
+.dn-panel { position: fixed; right: 36px; bottom: 122px; z-index: 50; width: min(340px, calc(100vw - 24px)); background: #fff; border: 1px solid var(--n-200, #ebebeb); border-radius: 16px; box-shadow: 0 10px 30px -10px rgb(0 0 0 / 0.3); padding: 14px; display: grid; gap: 10px; }
+.dn-panel--inline { position: static; width: auto; margin: 0 auto; }
+.dn-panel label { display: grid; gap: 6px; font-size: 13px; font-weight: 600; text-align: left; }
+.dn-panel input { height: 36px; padding: 0 10px; border: 0; border-radius: 10px; background: var(--n-200, #ebebeb); font: inherit; font-size: 13px; outline: none; width: 100%; }
+.dn-panel input:focus { box-shadow: inset 0 0 0 2px var(--n-400, #a3a3a3); }
+.dn-panel-acts { display: flex; gap: 8px; justify-content: flex-end; }
+.dn-panel-msg { margin: 0; font-size: 12px; color: var(--n-500, #737373); }

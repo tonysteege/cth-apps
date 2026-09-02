@@ -1393,56 +1393,71 @@ the TELESTRATION renderer. No tagging, no library, no folder.
 
 ## Diagrams Notion (/diagrams-notion/) rules
 
-CTH Diagrams Notion (2026-09-01, Tony's ask) is the Diagrams editor made for
-NOTION EMBEDS: one diagram, or a vertical sequence of rinks with captions,
-that Tony edits inside his Notion page (toolbar live during a Notion
-presentation) and that players see STATIC on a shared page. Same embed URL
-for both.
+CTH Diagrams Notion (2026-09-01, Tony's ask; reshaped the same evening on
+his second list) is the Diagrams editor made for NOTION EMBEDS: ONE DIAGRAM
+PER EMBED that Tony edits inside his Notion page (toolbar live during a
+Notion presentation) and that players see STATIC on a shared page.
 
 - IT IMPORTS THE DIAGRAMS EDITOR, never copies it: `/diagrams/js/editor.js`
   (`openEditor`, `editorActions`, `currentState`, `isDirty`, `closeEditor`),
-  `/diagrams/js/flat.js` (`renderStateFlat`, `sliceFrames`),
-  `/diagrams/js/rink.js` (`loadAssets('/diagrams/assets')`) and the Diagrams
-  stylesheet. The editor shell markup is the one `showEditor` in
-  diagrams/js/app.js builds (edStageWrap / edZoom / edStage / edSvg /
-  edBgG / edEls / edUi / edAddBar / edDupBar / edBar / edStatus); no
-  sidebar, no Animate. A drill state is the Film Room interchange format,
-  unchanged; captions are `state.rinkNames`.
-- STORAGE IS THE CTH WORKER, not IndexedDB: an embed loaded by a player's
-  browser has to read it from somewhere public. `present-worker` gained the
-  KV namespace `DG` (binding `DG`, id ac2eee393d714cebbfcc6e560166d87f) and
-  routes `GET /dg/<id>` (public, no-store), `PUT|DELETE /dg/<id>` and
-  `GET /dg/` (the index) - the writes and the list need the `X-DG-Key`
-  header equal to the `DG_EDIT_KEY` Worker secret. Records are
-  `{ id, name, state, updated }`, capped at 2 MB; nothing is logged. This is
-  the third Worker destination and met the bar in hard rule 5: Tony's ask,
-  the locked origin list, no prompts, no accounts.
+  `/diagrams/js/flat.js` (`renderStateFlat`), `/diagrams/js/rink.js`
+  (`loadAssets('/diagrams/assets')`) and the Diagrams stylesheet. The shell
+  markup is the one `showEditor` in diagrams/js/app.js builds (edStageWrap /
+  edZoom / edStage / edSvg / edBgG / edEls / edUi / edAddBar / edDupBar /
+  edBar / edStatus) with NO HEADER at all - a header whose text changed
+  width made the rink jump under the pen. Hidden here by CSS: the rink name
+  (`.ed-flabelwrap`), the per-rink icons (`.ed-rctl`), Add Rink and
+  Duplicate Rink (`.ed-addrow`). No Animate. The drill state is the Film
+  Room interchange format, unchanged.
+- THE RINK FILLS THE FRAME AND NEVER SCROLLS: `.dn` is a 100vh column, the
+  stage wrap is `overflow: hidden` and centres the stage, the toolbar is a
+  STATIC row at the bottom (`.tb { position: static }`, sideways scroll
+  when narrow). The editor's SVG keeps its 170-unit label strip above the
+  rink and 70 below even with the label hidden, so `fit()` pulls the stage
+  up by `width * 170/3200` and trims `width * 70/3200` below, re-derived
+  from the width `sizeStage` chose on every ResizeObserver tick.
+- STORAGE IS THE CTH WORKER (KV namespace `DG`, binding `DG`, id
+  ac2eee393d714cebbfcc6e560166d87f). Records are `{ id, name, state, token,
+  updated }`, capped at 2 MB; nothing is logged. Routes:
+  `GET /dg/<id>` public and no-store - it STRIPS `token` unless the caller
+  is authorised (that presence is the client's proof it may edit);
+  `PUT /dg/<id>` creates with the master key and updates with the key or
+  the diagram's own token; `DELETE /dg/<id>`; `POST /dg/<id>/duplicate`
+  (key or token) copies the state into a new id with a NEW token and
+  returns `{ id, token }`; `GET /dg/` lists (master key only). Auth headers:
+  `X-DG-Key` = the `DG_EDIT_KEY` secret, `X-DG-Token` = a diagram's token.
+  Third Worker destination, meeting the bar in hard rule 5.
+- TWO LINKS PER DIAGRAM. The VIEW link `#/e/<id>` is static for everyone.
+  The EDIT link `#/e/<id>?t=<token>` edits THAT diagram only, in any browser
+  and in Notion's desktop app, with nothing to type - it is what Tony pastes
+  into his own Notion page. The trade, stated plainly: whoever can read the
+  page's embed URL can edit that one diagram (never another, never the
+  list); the plain link is what to put on a page built for players. The
+  master key still unlocks any embed through the corner key and runs the
+  home page; it lives in memory for the session and in localStorage where
+  the embed is allowed storage (Chrome partitions it per site; Notion's
+  desktop app blocks it, which is why the token link exists). Plaintext in
+  ~/.cth-diagrams-notion-key.txt (mode 600), never in the repo or a URL.
 - NO DIALOGS IN THE EMBED: Chrome blocks `prompt()` / `alert()` / `confirm()`
-  inside a cross-site iframe, so the key glyph opens an IN-PAGE form
-  (`keyForm`, `.dn-keyform`) - the first build used prompt() and the glyph
-  did nothing in Notion (Tony's recording, 2026-09-01). Anything else this
-  app ever asks must be a real element too.
-- THE EDIT KEY NEVER RIDES IN A URL (the embed URL is on a page players
-  can see). It is entered once per browser: on the home page, or through the
-  quiet key glyph in the corner of a static embed, and kept in localStorage
-  `cthdn.key`. Chrome PARTITIONS storage per top-level site, so the key
-  entered inside Notion lives inside Notion's partition and must be entered
-  there once too; that is also why the editor's own IndexedDB autosave in
-  the embed is a harmless local copy - the Worker copy is the truth. The
-  key's plaintext is in ~/.cth-diagrams-notion-key.txt on Tony's Mac (mode
-  600), not in this repo.
+  inside a cross-site iframe, and the clipboard is sometimes blocked too, so
+  the key, the links and the sign-out all live in an IN-PAGE panel
+  (`panel()`, `.dn-panel`) with the link selectable as text.
+- THE CORNER CLUSTER (`.dn-cluster`, right 36 / bottom 84 - clear of Notion's
+  own resize handles at the embed's corner) holds: Back (top level only), a
+  publish dot (green published / amber pending / red failed), DUPLICATE
+  (publishes, POSTs /duplicate, and shows the new embed's EDIT link already
+  copied - paste it under this one to continue a sequence), and the key.
 - PUBLISHING: every editor `onDirty(true)` schedules a PUT 1200ms later
-  (`currentState()`), one in flight at a time with a pending re-run; the
-  header word reads Unpublished changes / Publishing… / Published /
-  Not published; leaving the route or unloading publishes first
-  (`keepalive`). `#/e/<id>?static` shows what players see.
-- THE STATIC VIEW renders `renderStateFlat(state, 0.5)` once and slices one
-  image per rink (`sliceFrames`) with the rink's caption above it, stacked
-  and scrolling vertically inside the embed's own height.
-- THE WORKER'S CORS LIST also accepts any `http://localhost:<port>` origin
-  (2026-09-01): the preview server picks fresh ports to dodge the module
-  cache, and a fixed 8642 entry made every other port fail its preflight.
-- Hub card: "Diagrams Notion", alphabetical after Diagrams.
+  (`currentState()`), one in flight with a pending re-run; leaving the route
+  or unloading publishes first (`keepalive`). `#/e/<id>?static` shows the
+  players' view. The editor's own IndexedDB autosave in the embed is a
+  harmless local copy; the Worker copy is the truth.
+- THE STATIC VIEW is one image (`renderStateFlat({...state, seq: 1}, 0.5)`)
+  fitted to the frame; the old stacked-captions sequence view is gone with
+  the one-rink rule - a sequence is now several embeds, one under another,
+  made with Duplicate.
+- THE WORKER'S CORS LIST accepts any `http://localhost:<port>` origin for
+  previews. Hub card: "Diagrams Notion", alphabetical after Diagrams.
 
 ## Design system rules (suite-wide)
 
