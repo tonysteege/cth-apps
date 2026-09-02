@@ -236,8 +236,8 @@ img[data-asset]:not([src]) { visibility: hidden; }
 /* The selection marquee stays the suite's blue: chrome drawn over content
    whose colour we do not control, and the accent is black. Sizes ride
    --inv so grips stay targets at any board zoom. */
-.dk-selbox { position: absolute; border: calc(1.5px * var(--inv, 1)) solid #3392ff; pointer-events: auto; cursor: move; }
-.dk-grip { position: absolute; width: calc(9px * var(--inv, 1)); height: calc(9px * var(--inv, 1)); background: #fff; border: calc(1.5px * var(--inv, 1)) solid #3392ff; border-radius: calc(2px * var(--inv, 1)); pointer-events: auto; }
+.dk-selbox { position: absolute; border: calc(1.5px * var(--inv, 1)) solid #75d8ff; pointer-events: auto; cursor: move; }
+.dk-grip { position: absolute; width: calc(9px * var(--inv, 1)); height: calc(9px * var(--inv, 1)); background: #fff; border: calc(1.5px * var(--inv, 1)) solid #75d8ff; border-radius: calc(2px * var(--inv, 1)); pointer-events: auto; }
 .dk-grip[data-g="nw"] { left: calc(-5px * var(--inv, 1)); top: calc(-5px * var(--inv, 1)); cursor: nwse-resize; }
 .dk-grip[data-g="ne"] { right: calc(-5px * var(--inv, 1)); top: calc(-5px * var(--inv, 1)); cursor: nesw-resize; }
 .dk-grip[data-g="sw"] { left: calc(-5px * var(--inv, 1)); bottom: calc(-5px * var(--inv, 1)); cursor: nesw-resize; }
@@ -262,7 +262,7 @@ img[data-asset]:not([src]) { visibility: hidden; }
 /* Colors row. */
 .dk-colors { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .dk-swatch { width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--border); }
-.dk-swatch.on { outline: 2px solid #3392ff; outline-offset: 1px; }
+.dk-swatch.on { outline: 2px solid #75d8ff; outline-offset: 1px; }
 .dk-cwell { width: 26px; height: 26px; padding: 0; border: 1px solid var(--border); border-radius: 6px; background: none; }
 .dk-theme-colors .dk-cwell { width: 32px; height: 32px; }
 
@@ -349,8 +349,8 @@ img[data-asset]:not([src]) { visibility: hidden; }
 .wb-canvas { position: absolute; left: 0; top: 0; transform-origin: 0 0; --inv: 1; }
 .wb-conns { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
 .wb-conns path[data-connhit] { pointer-events: stroke; cursor: pointer; }
-.wb-conns path.on { stroke: #3392ff; }
-.wb-marquee { position: absolute; border: 1px solid #3392ff; background: rgb(51 146 255 / 0.08); pointer-events: none; z-index: 5; }
+.wb-conns path.on { stroke: #75d8ff; }
+.wb-marquee { position: absolute; border: 1px solid #75d8ff; background: rgb(117 216 255 / 0.2); pointer-events: none; z-index: 5; }
 
 .wb-item { position: absolute; user-select: none; }
 .wb-item.wb-locked { opacity: 0.92; }
@@ -395,9 +395,9 @@ img[data-asset]:not([src]) { visibility: hidden; }
 .wb-deck .dk-fnum { top: calc(-26px * var(--inv)); }
 
 /* Board selection chrome. */
-.wb-selbox { position: absolute; border: calc(1.5px * var(--inv, 1)) solid #3392ff; pointer-events: auto; cursor: move; }
+.wb-selbox { position: absolute; border: calc(1.5px * var(--inv, 1)) solid #75d8ff; pointer-events: auto; cursor: move; }
 .wb-selbox.multi { pointer-events: none; }
-.wb-selunion { position: absolute; border: calc(1px * var(--inv, 1)) dashed #3392ff; pointer-events: auto; cursor: move; }
+.wb-selunion { position: absolute; border: calc(1px * var(--inv, 1)) dashed #75d8ff; pointer-events: auto; cursor: move; }
 .wb-chrome { position: absolute; left: 0; top: 0; pointer-events: none; }
 .wb-chrome .dk-grip { pointer-events: auto; }
 
@@ -430,7 +430,7 @@ img[data-asset]:not([src]) { visibility: hidden; }
    deck itself is selected. Sizes ride --inv so they hold at any zoom. */
 .wb-deck-head, .wb-deck-btn, .wb-deck-present, .wb-deck-name, .wb-deck-count { display: none; }
 .wb-deck { border-radius: 0; }
-.wb-deck-line { position: absolute; left: 0; right: 0; top: calc(-10px * var(--inv)); height: calc(2px * var(--inv)); background: #3392ff; opacity: 0; pointer-events: none; }
+.wb-deck-line { position: absolute; left: 0; right: 0; top: calc(-10px * var(--inv)); height: calc(2px * var(--inv)); background: #75d8ff; opacity: 0; pointer-events: none; }
 .wb-deck.on .wb-deck-line { opacity: 1; }
 .wb-deck-tab {
   position: absolute; left: 0; top: calc(-34px * var(--inv));
@@ -438,13 +438,13 @@ img[data-asset]:not([src]) { visibility: hidden; }
   padding: calc(3px * var(--inv)) calc(10px * var(--inv)); border-radius: calc(6px * var(--inv)) calc(6px * var(--inv)) 0 0;
   max-width: 40%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: grab;
 }
-.wb-deck-tab:hover { color: var(--foreground); background: rgb(51 146 255 / 0.12); }
-.wb-deck.on .wb-deck-tab { background: #3392ff; color: #fff; }
-.wb-deck-tab[contenteditable] { outline: none; background: var(--background); color: var(--foreground); box-shadow: 0 0 0 calc(1.5px * var(--inv)) #3392ff; cursor: text; }
+.wb-deck-tab:hover { color: var(--foreground); background: rgb(117 216 255 / 0.25); }
+.wb-deck.on .wb-deck-tab { background: #75d8ff; color: #fff; }
+.wb-deck-tab[contenteditable] { outline: none; background: var(--background); color: var(--foreground); box-shadow: 0 0 0 calc(1.5px * var(--inv)) #75d8ff; cursor: text; }
 .wb-deck-grip {
   position: absolute; left: calc(-30px * var(--inv)); top: 50%; transform: translateY(-50%);
   width: calc(18px * var(--inv)); height: calc(56px * var(--inv)); border-radius: 999px;
-  background: #3392ff; opacity: 0; cursor: grab;
+  background: #75d8ff; opacity: 0; cursor: grab;
   background-image: radial-gradient(circle, #fff calc(1.2px * var(--inv)), transparent calc(1.6px * var(--inv)));
   background-size: calc(6px * var(--inv)) calc(6px * var(--inv)); background-position: center; background-repeat: repeat;
   background-clip: content-box; padding: calc(12px * var(--inv)) calc(5px * var(--inv));
@@ -456,12 +456,12 @@ img[data-asset]:not([src]) { visibility: hidden; }
 /* Frame head: the number at rest, a pale blue bar when the slide is
    selected - and that bar is the handle that drags the slide along the row. */
 .wb-deck .dk-frame > .dk-stage { border: 1px solid var(--border); }
-.wb-deck .dk-frame.on > .dk-stage { outline: calc(2px * var(--inv)) solid #3392ff; outline-offset: 0; }
+.wb-deck .dk-frame.on > .dk-stage { outline: calc(2px * var(--inv)) solid #75d8ff; outline-offset: 0; }
 .dk-fhead { position: absolute; left: 0; right: 0; top: calc(-24px * var(--inv)); height: calc(24px * var(--inv)); display: flex; align-items: flex-end; padding-bottom: calc(4px * var(--inv)); cursor: grab; border-radius: calc(6px * var(--inv)) calc(6px * var(--inv)) 0 0; }
 .dk-fhead:active { cursor: grabbing; }
-.dk-frame.on .dk-fhead { background: #bcdcff; align-items: center; padding: 0 calc(8px * var(--inv)); top: calc(-16px * var(--inv)); height: calc(16px * var(--inv)); }
+.dk-frame.on .dk-fhead { background: rgb(117 216 255 / 0.55); align-items: center; padding: 0 calc(8px * var(--inv)); top: calc(-16px * var(--inv)); height: calc(16px * var(--inv)); }
 .wb-deck .dk-fnum { position: static; padding: 0; font-size: calc(12px * var(--inv)); color: var(--muted-foreground); background: none; border: 0; pointer-events: none; }
-.dk-frame.on .dk-fnum { color: #0a3d80; font-weight: 600; }
+.dk-frame.on .dk-fnum { color: #0a0a0a; font-weight: 600; }
 .dk-frame.dragging { z-index: 4; opacity: 0.9; }
 .dk-frame.shifting { transition: transform var(--dur); }
 .dk-frame.dragging > .dk-stage { box-shadow: 0 12px 32px -8px rgb(0 0 0 / 0.35); }
@@ -470,7 +470,7 @@ img[data-asset]:not([src]) { visibility: hidden; }
 .dk-insert {
   position: absolute; top: 50%; right: calc(-30px - 11px * var(--inv)); transform: translateY(-50%);
   width: calc(22px * var(--inv)); height: calc(22px * var(--inv)); border-radius: 999px;
-  background: #3392ff; color: #fff; font-size: calc(16px * var(--inv)); font-weight: 500; line-height: 1;
+  background: #75d8ff; color: #fff; font-size: calc(16px * var(--inv)); font-weight: 500; line-height: 1;
   display: grid; place-items: center; opacity: 0; transition: opacity var(--dur); z-index: 3;
 }
 .dk-insert-first { right: auto; left: calc(-30px - 11px * var(--inv)); }
@@ -479,7 +479,7 @@ img[data-asset]:not([src]) { visibility: hidden; }
 .wb-deck-addrow {
   position: absolute; left: 50%; bottom: calc(-46px * var(--inv)); transform: translateX(-50%);
   width: calc(22px * var(--inv)); height: calc(22px * var(--inv)); border-radius: 999px;
-  background: #3392ff; color: #fff; font-size: calc(16px * var(--inv)); line-height: 1; display: grid; place-items: center;
+  background: #75d8ff; color: #fff; font-size: calc(16px * var(--inv)); line-height: 1; display: grid; place-items: center;
   opacity: 0; transition: opacity var(--dur);
 }
 .wb-deck:hover .wb-deck-addrow, .wb-deck.on .wb-deck-addrow, .wb-deck-addrow:focus-visible { opacity: 0.55; }
@@ -498,5 +498,86 @@ img[data-asset]:not([src]) { visibility: hidden; }
 
 /* Text boxes edit like Figma: a thin blue outline while selected is the
    selbox; while editing the box shows a caret and a selection tint. */
-.dk-el-text[contenteditable] { outline: calc(1px * var(--inv, 1)) solid #3392ff; }
-.dk-el-text[contenteditable]::selection, .dk-el-text[contenteditable] *::selection { background: rgb(51 146 255 / 0.35); }
+.dk-el-text[contenteditable] { outline: calc(1px * var(--inv, 1)) solid #75d8ff; }
+.dk-el-text[contenteditable]::selection, .dk-el-text[contenteditable] *::selection { background: rgb(117 216 255 / 0.45); }
+
+/* ------------------------------------------------ 2026-09-01 pass: dock, sidebar, dots, snapping */
+
+/* No tooltips in Decks: kill the shared tip recipe here. */
+.cs-tip { display: none !important; }
+
+/* The toolbar is a DOCK along the bottom of the window, one row, scrolling
+   sideways when it outgrows the width. */
+.dk-toolbar { position: fixed; left: 0; right: 0; bottom: 0; transform: none; padding: 6px 10px; border-radius: 0; border: 0; border-top: 1px solid var(--border); background: var(--background); box-shadow: 0 -1px 3px rgb(0 0 0 / 0.06); z-index: 40; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+.dk-dockrow { display: flex; align-items: center; gap: 2px; width: max-content; margin: 0 auto; min-width: 100%; justify-content: center; }
+.dk-dockrow.sorting .dk-tool:not(.dragging) { transition: transform var(--dur); }
+.dk-tool { position: relative; }
+.dk-tool.dragging { opacity: 0.5; }
+.dk-tool svg { width: 18px; height: 18px; }
+.dk-toolpng { width: 20px; height: 20px; object-fit: contain; display: block; }
+.dk-toolkey { position: absolute; right: 2px; bottom: 1px; font: 600 8px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted-foreground); letter-spacing: 0; }
+.dk-tool.on .dk-toolkey { color: rgb(255 255 255 / 0.8); }
+.dk-dockdiv { width: 1px; height: 24px; background: var(--border); margin: 0 6px; flex: none; }
+.dk-dockplus { color: var(--muted-foreground); margin-left: 6px; }
+.dk-editor .dk-main { padding-bottom: 0; }
+.dk-center { padding-bottom: 50px; }
+.wb-zoom { bottom: 62px; }
+.dk-placebar { bottom: 66px; }
+.dk-notes { padding-bottom: 8px; }
+
+/* Board panel collapses; a slim reopen handle stays on the edge. */
+.dk-panel.collapsed { display: none; }
+.dk-panel-toggle { position: absolute; right: 12px; top: 12px; z-index: 7; }
+.dk-main:has(.dk-panel.collapsed) .dk-panel-toggle { right: 12px; }
+
+/* The deck name tab sits fully above the number row. */
+.wb-deck-tab { top: calc(-56px * var(--inv)); }
+.wb-deck-line { top: calc(-30px * var(--inv)); }
+
+/* Insert dots: only along the deck's axis; the + is centred in its disc. */
+.dk-insert { right: calc(-30px - 12px * var(--inv)); left: auto; width: calc(24px * var(--inv)); height: calc(24px * var(--inv)); padding: 0; font-size: 0; }
+.dk-insert svg { width: calc(14px * var(--inv)); height: calc(14px * var(--inv)); display: block; }
+.dk-insert-below { top: auto; right: auto; left: 50%; bottom: calc(-30px - 12px * var(--inv)); transform: translateX(-50%); }
+.dk-insert-below:hover { transform: translateX(-50%) scale(1.1); }
+.dk-insert-first, .wb-deck-addrow { display: none; }
+.wb-deck--col .wb-deck-grip { top: 0; transform: none; left: calc(-30px * var(--inv)); }
+.wb-deck--col .dk-frame.on .dk-fhead { top: calc(-16px * var(--inv)); }
+
+/* Multi-selected frames and slide-level snapping guides. */
+.dk-frame.on > .dk-stage { outline-color: #75d8ff; }
+.dk-guide { position: absolute; background: #ff2d55; pointer-events: none; z-index: 5; }
+.dk-guide.v { width: 1px; top: 0; bottom: 0; }
+.dk-guide.h { height: 1px; left: 0; right: 0; }
+.wb-guide { position: absolute; background: #ff2d55; pointer-events: none; }
+.wb-guide.v { width: calc(1px * var(--inv, 1)); }
+.wb-guide.h { height: calc(1px * var(--inv, 1)); }
+
+/* The slide diagram layer and its selection ring. */
+.dk-dgm { position: absolute; display: block; pointer-events: none; }
+.dk-dgmsel { position: absolute; border: calc(1.5px * var(--inv, 1)) dashed #75d8ff; pointer-events: none; }
+.dk-el-text.editing { outline: calc(1px * var(--inv, 1)) solid #75d8ff; }
+
+/* Icon picker and preset rows in sheets. */
+.dk-iconsearch { margin-bottom: 10px; }
+.dk-icongrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 4px; max-height: 50vh; overflow: auto; }
+.dk-iconbtn { display: grid; place-items: center; height: 40px; border-radius: var(--r-md); color: var(--foreground); }
+.dk-iconbtn:hover { background: var(--accent); }
+.dk-iconbtn.on { background: var(--primary); color: var(--primary-foreground); }
+.dk-iconbtn svg { width: 20px; height: 20px; }
+.dk-presets { display: grid; gap: 8px; }
+.dk-preset { display: grid; grid-template-columns: 96px 1fr auto auto; gap: 10px; align-items: center; }
+.dk-preset .dk-thumb-box { width: 96px; }
+.dk-preset input { height: 32px; padding: 0 8px; border: 1px solid var(--input); border-radius: var(--r-sm); font: inherit; font-size: 13px; }
+.dk-canvas-fast { will-change: transform; }
+.wb-canvas { will-change: transform; }
+.dk-menu-sub { padding: 6px 8px 2px; font-size: 11px; font-weight: 600; color: var(--muted-foreground); }
+
+/* Selection, marquee and guides wear the Diagrams marquee cyan (2026-09-01,
+   Tony's call): chrome over content whose colour we do not control. */
+:root { --marquee: #75d8ff; --marquee-soft: rgb(117 216 255 / 0.2); }
+.wb-deck.on .wb-deck-tab { color: #0a0a0a; }
+.dk-guide, .wb-guide { background: #ff2d55; }
+/* The deck grip scales WITH the deck (Tony's call): canvas px, not --inv. */
+.wb-deck-grip { left: -34px; width: 22px; height: 64px; padding: 14px 6px; background-size: 6px 6px; }
+.wb-deck-grip { background-image: radial-gradient(circle, #fff 1.4px, transparent 1.8px); }
+.wb-deck--col .wb-deck-grip { left: -34px; }

@@ -60,7 +60,10 @@ export function slideHtml(s, theme) {
   const bg = s.bgImage && s.bgImage.src
     ? `<div class="dk-bgimg dk-bgimg--${esc(s.bgImage.mode || 'full')}" aria-hidden="true"><img src="${esc(s.bgImage.src)}" alt="" draggable="false"></div>`
     : '';
-  return `<div class="dk-stage" data-slide="${s.id}" style="background:${s.bg || '#ffffff'}">${bg}${els}</div>`;
+  const dgm = s.dgm && s.dgm.elements && s.dgm.elements.length
+    ? `<canvas class="dk-dgm" data-dgm="${esc(JSON.stringify({ els: s.dgm.elements, mode: s.bgImage?.mode || 'none' }))}" aria-hidden="true"></canvas>`
+    : '';
+  return `<div class="dk-stage" data-slide="${s.id}" style="background:${s.bg || '#ffffff'}">${bg}${dgm}${els}</div>`;
 }
 
 // ------------------------------------------------------------- board items
@@ -82,11 +85,12 @@ export function itemHtml(it) {
     const fill = it.fill || '#ffffff'; const stroke = it.stroke || '#0a0a0a';
     const alpha = it.alpha == null ? 1 : it.alpha;
     let body;
-    if (it.shape === 'ellipse') body = `<div class="wb-shape-body" style="background:${fill};border:2px solid ${stroke};border-radius:50%;opacity:${alpha}"></div>`;
-    else if (it.shape === 'diamond') body = `<svg class="wb-shape-body" viewBox="0 0 100 100" preserveAspectRatio="none" style="opacity:${alpha}"><path d="M50 2 L98 50 L50 98 L2 50 Z" fill="${fill}" stroke="${stroke}" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`;
+    const sw = it.sw || 2;
+    if (it.shape === 'ellipse') body = `<div class="wb-shape-body" style="background:${fill};border:${sw}px solid ${stroke};border-radius:50%;opacity:${alpha}"></div>`;
+    else if (it.shape === 'diamond') body = `<svg class="wb-shape-body" viewBox="0 0 100 100" preserveAspectRatio="none" style="opacity:${alpha}"><path d="M50 2 L98 50 L50 98 L2 50 Z" fill="${fill}" stroke="${stroke}" stroke-width="${sw}" vector-effect="non-scaling-stroke"/></svg>`;
     else if (it.shape === 'line') body = `<div class="wb-shape-body wb-shape-line" style="background:${stroke};opacity:${alpha}"></div>`;
     else if (it.shape === 'arrow') body = `<svg class="wb-shape-body" viewBox="0 0 100 100" preserveAspectRatio="none" style="opacity:${alpha}"><line x1="2" y1="50" x2="86" y2="50" stroke="${stroke}" stroke-width="3" vector-effect="non-scaling-stroke"/><path d="M84 38 L98 50 L84 62 Z" fill="${stroke}"/></svg>`;
-    else body = `<div class="wb-shape-body" style="background:${fill};border:2px solid ${stroke};border-radius:${it.radius || 0}px;opacity:${alpha}"></div>`;
+    else body = `<div class="wb-shape-body" style="background:${fill};border:${sw}px solid ${stroke};border-radius:${it.radius || 0}px;opacity:${alpha}"></div>`;
     const label = it.text ? `<div class="wb-shape-label">${esc(it.text).replace(/\n/g, '<br>')}</div>` : '';
     return `<div class="wb-item wb-shape${lock}" data-item="${it.id}" style="${boxStyle(it)}">${body}${label}</div>`;
   }
@@ -107,23 +111,31 @@ export function itemHtml(it) {
 // row, a grip pill on the left edge that drags the whole row, a head bar
 // over each frame (the number at rest, a blue drag bar when selected) and
 // a + dot in every gap to insert a slide there. No header bar.
-export function deckHtml(it, cur = -1) {
+export function deckHtml(it, cur = -1, sel = null) {
   const n = it.slides.length;
-  const frames = it.slides.map((s, i) => `
-    <div class="dk-frame ${i === cur ? 'on' : ''} ${s.skip ? 'skip' : ''}" data-i="${i}" style="left:${i * (960 + 60)}px;top:0;width:960px">
+  const col = it.orient === 'col';
+  const PLUS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 6v12M6 12h12"/></svg>';
+  const frames = it.slides.map((s, i) => {
+    const on = sel ? sel.has(i) : i === cur;
+    const left = col ? 0 : i * (960 + 60); const top = col ? i * (540 + 60) : 0;
+    const dots = [];
+    // The dot(s) after this frame: along the deck's axis, and on a
+    // single-slide deck both ways so the first + decides the orientation.
+    if (!col || n === 1) dots.push(`<button class="dk-insert dk-insert-right" data-insert="${i + 1}" data-orient="row" aria-label="Insert slide to the right">${PLUS}</button>`);
+    if (col || n === 1) dots.push(`<button class="dk-insert dk-insert-below" data-insert="${i + 1}" data-orient="col" aria-label="Insert slide below">${PLUS}</button>`);
+    return `
+    <div class="dk-frame ${on ? 'on' : ''} ${s.skip ? 'skip' : ''}" data-i="${i}" style="left:${left}px;top:${top}px;width:960px">
       <div class="dk-fhead" data-fhead="${i}" role="button" tabindex="-1" aria-label="Slide ${i + 1}, drag to reorder"><span class="dk-fnum">${i + 1}</span></div>
       ${slideHtml(s, it.theme)}
       <div class="dk-chrome" data-chrome="${it.id}:${i}"></div>
-      <button class="dk-insert" data-insert="${i + 1}" data-tip="Insert slide" aria-label="Insert slide after ${i + 1}">+</button>
-    </div>`).join('');
-  return `<div class="wb-item wb-deck${it.locked ? ' wb-locked' : ''}" data-item="${it.id}" style="${boxStyle(it)}">
+      ${dots.join('')}
+    </div>`;
+  }).join('');
+  return `<div class="wb-item wb-deck wb-deck--${col ? 'col' : 'row'}${it.locked ? ' wb-locked' : ''}" data-item="${it.id}" style="${boxStyle(it)}">
     <div class="wb-deck-line" aria-hidden="true"></div>
-    <button class="wb-deck-tab" data-decktab data-tip="Deck: click to select, double-click to rename" aria-label="Deck ${esc(it.name || 'Untitled Deck')}">${esc(it.name || 'Untitled Deck')}</button>
-    <button class="wb-deck-grip" data-deckgrip data-tip="Drag deck" aria-label="Drag deck"></button>
-    <button class="dk-insert dk-insert-first" data-insert="0" data-tip="Insert slide" aria-label="Insert slide at the start">+</button>
+    <button class="wb-deck-tab" data-decktab aria-label="Deck ${esc(it.name || 'Untitled Deck')}">${esc(it.name || 'Untitled Deck')}</button>
+    <button class="wb-deck-grip" data-deckgrip aria-label="Drag deck"></button>
     ${frames}
-    <button class="wb-deck-addrow" data-addrow data-tip="New deck below" aria-label="New deck below">+</button>
-    <span class="wb-deck-count" aria-hidden="true">${n}</span>
   </div>`;
 }
 
@@ -140,6 +152,20 @@ export async function hydrate(root) {
   for (const c of root.querySelectorAll('canvas[data-drill]')) {
     paintDiagram(c, c.dataset.drill);
   }
+  for (const c of root.querySelectorAll('canvas.dk-dgm[data-dgm]')) {
+    try { const d = JSON.parse(c.dataset.dgm); paintDgm(c, d.els, d.mode); } catch (_) {}
+  }
+}
+
+// The slide diagram layer: rink-unit elements drawn through flat.js onto a
+// canvas that covers the slide's diagram box (see dgm.js for the box).
+export async function paintDgm(canvas, els, mode) {
+  await rinkReady();
+  const { dgmBox, paintElements } = await import('./dgm.js');
+  const box = dgmBox(mode);
+  canvas.style.left = `${box.left}%`; canvas.style.top = `${box.top}%`;
+  canvas.style.width = `${box.width}%`; canvas.style.height = `${box.height}%`;
+  paintElements(canvas, els, mode);
 }
 
 const drillCache = new Map();

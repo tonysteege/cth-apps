@@ -142,6 +142,12 @@ export const newDeck = (name = 'Untitled Deck') => ({
   slides: [newSlide('title'), newSlide('content')],
 });
 
+// A slide may carry a DIAGRAM LAYER: `slide.dgm { elements: [] }` holding
+// Diagrams-app elements (player, arrow, box, circle, text, pen, stamp,
+// pucks - the Film Room interchange shapes, untouched) in rink units, drawn
+// under the text boxes through flat.js so they print exactly like Diagrams.
+export const dgmOf = (s) => (s.dgm ||= { elements: [] });
+
 export function normalizeDeck(d) {
   if (!d) return d;
   d.theme = d.theme || newTheme();
@@ -183,13 +189,18 @@ export const DECK_HEAD = 0;
 
 export const STICKY_COLORS = ['#fef08a', '#fdba74', '#f9a8d4', '#bfdbfe', '#bbf7d0', '#e9d5ff', '#e5e7eb', '#ffffff'];
 
-export const DEFAULT_SETTINGS = { grid: 'dots', gridSize: 40, snap: true, bg: '#f5f5f4', stickyColor: '#fef08a', penColor: '#0a0a0a', penWidth: 4 };
+// No grid by default (Tony's call 2026-09-01); snapping to OBJECTS is on
+// by default, snapping to the grid is a setting.
+export const DEFAULT_SETTINGS = { grid: 'none', gridSize: 40, snap: false, snapObjects: true, bg: '#f5f5f4', stickyColor: '#fef08a', penColor: '#0a0a0a', penWidth: 4 };
 
-export const deckWidth = (deck) => Math.max(1, deck.slides.length) * DECK_FRAME_W + (Math.max(1, deck.slides.length) - 1) * DECK_GAP;
-export const deckHeight = () => DECK_FRAME_H + DECK_HEAD;
+// A deck runs RIGHT (a row) or DOWN (a column): `orient` is 'row' or 'col',
+// chosen by which + the first slide grew from.
+const span = (n, size) => Math.max(1, n) * size + (Math.max(1, n) - 1) * DECK_GAP;
+export const deckWidth = (deck) => (deck.orient === 'col' ? DECK_FRAME_W : span(deck.slides.length, DECK_FRAME_W));
+export const deckHeight = (deck) => (deck && deck.orient === 'col' ? span(deck.slides.length, DECK_FRAME_H) : DECK_FRAME_H);
 
 export const newDeckItem = (deck, over = {}) => ({
-  id: uid(), kind: 'deck', x: 120, y: 120, w: deckWidth(deck), h: deckHeight(),
+  id: uid(), kind: 'deck', x: 120, y: 120, w: deckWidth(deck), h: deckHeight(deck), orient: 'row',
   name: deck.name || 'Untitled Deck', theme: deck.theme, slides: deck.slides, ...over,
 });
 export const newSticky = (over = {}) => ({ id: uid(), kind: 'sticky', x: 0, y: 0, w: 220, h: 220, text: '', color: DEFAULT_SETTINGS.stickyColor, ...over });
@@ -222,7 +233,8 @@ export function normalizeBoard(b) {
   for (const it of b.items) {
     if (it.kind === 'deck') {
       normalizeDeck(it);
-      it.w = deckWidth(it); it.h = deckHeight();
+      it.orient = it.orient || 'row';
+      it.w = deckWidth(it); it.h = deckHeight(it);
     }
   }
   return b;

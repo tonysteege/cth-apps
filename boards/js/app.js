@@ -30,7 +30,7 @@ async function showHome() {
     <div class="dk-home">
       <header class="dk-home-head">
         <a class="btn btn-ghost btn-icon" href="/" data-tip="Back to the hub" aria-label="Hub">${I.back}</a>
-        <h1>Decks</h1>
+        <h1>Boards</h1>
         <div class="dk-head-r">
           <input class="input dk-search" id="dkSearch" type="search" name="q" placeholder="Search boards…" autocomplete="off" spellcheck="false">
           <button class="btn btn-primary" id="dkNew">${I.plus} New Board</button>

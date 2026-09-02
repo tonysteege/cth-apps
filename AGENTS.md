@@ -1179,10 +1179,13 @@ after a live inspection of it. The two live side by side.
   renderer point at these; the two older one-off copies that used to sit
   loose in `slides/` are gone.
 
-## Decks (/decks/) rules
+## Boards (/boards/) rules
 
-Decks (2026-08-31, Tony's ask; rebuilt as a whiteboard 2026-09-01, Tony's
-call) is a Figma-file-style WHITEBOARD for coaching: an infinite canvas
+Boards - RENAMED FROM DECKS on 2026-09-01 (Tony's call; the folder moved from
+/decks/ to /boards/, /decks/index.html redirects and keeps the hash, and the
+IndexedDB name `cth-decks` plus the localStorage `cthk.*` keys are FROZEN
+storage names that did not move) - (2026-08-31, Tony's ask; rebuilt as a
+whiteboard 2026-09-01, Tony's call) is a Figma-file-style WHITEBOARD for coaching: an infinite canvas
 holding slide decks, sticky notes, text, shapes, pen strokes, connectors,
 sections and media. A deck is ONE KIND OF OBJECT on the board and its slides
 are live stages that edit in place. It is the first app built ON THE SHADCN
@@ -1271,6 +1274,63 @@ control.
   app's own rink art (/diagrams/assets/rink.png). Modes: 'half-right' (the
   left half of the rink as a square on the right of the slide) and
   'full-right'. The rink is never selectable or movable; the text boxes are.
+- THE 2026-09-01 EVENING PASS (Tony's list, all shipped):
+  - NO GRID BY DEFAULT; snapping is a SETTING. `settings.snapObjects` (default
+    on) snaps board objects to other objects' edges and centres and slide
+    elements to sibling elements and the slide's edges/centre, with red
+    guides drawn in the chrome layer while a drag runs; `settings.snap`
+    (grid) is off by default; the grid display is `settings.grid` (default
+    'none').
+  - SMOOTH TRACKPAD NAVIGATION: wheel deltas ACCUMULATE into `ed.pend` and
+    apply ONCE PER ANIMATION FRAME (`scheduleTransform`), with a setTimeout
+    backstop armed at schedule time; the pinch factor is clamped per frame,
+    the canvas is `translate3d` with `will-change: transform`.
+  - THE TOOLBAR IS A DOCK along the bottom of the WINDOW (`js/toolbar.js`),
+    one row, sideways scroll. Tony's layout lives in localStorage
+    `cthk.toolbar`: order (with `divider-*` entries), per-tool keys, per-tool
+    Lucide icons, per-tool STYLE settings and custom PNG object tools (bytes
+    in the `assets` store, `{id:'png-…', asset, w, h}`). Right-click a tool:
+    Tool Settings (colour, thickness, outline, opacity, default size… from
+    `STYLE_SCHEMA`), Shortcut, Change Icon (338 vendored Lucide icons in
+    `js/icons.js`, ISC), Add Divider After, and for PNG tools Default Size /
+    Rename / Remove. Drag a tool to rearrange (pointer sortable, no HTML5
+    DnD). The dock's `+` adds a PNG object, a divider, or resets. A tool added
+    later lands beside its neighbour in a saved order.
+  - THE DIAGRAMS TOOL ROW IS ON THE DOCK: Skate/With Puck/Backwards/Shoot/
+    Pass, Shaded Box/Circle, Ice Text, Ice Pen, three player colours, Coach,
+    Net, Puck, Pucks, Cone, Border. They draw on a SLIDE into `slide.dgm
+    { elements }` - the Film Room interchange shapes, in rink units, rendered
+    through flat.js drawEl onto a `.dk-dgm` canvas under the text boxes
+    (`js/dgm.js`: the diagram box per rink layout, unit mapping, hit-test,
+    move). Player radius 45, text 48, stroke 8, pen 8 - a shade under the
+    Diagrams defaults, sized for a slide.
+  - SLIDE PRESETS are Tony's own (localStorage `cthk.presets`): right-click a
+    slide > Save as Preset / Update a Preset; Settings lists them (rename,
+    insert, delete); every New Slide menu (header button, insert dots, panel)
+    offers Layouts then Presets. Insert dots OPEN THE MENU rather than
+    inserting blank.
+  - DECK ORIENTATION: a single-slide deck shows a + to the right AND below;
+    the one pressed sets `deck.orient` ('row' | 'col') and the frames lay out
+    along that axis; the context menu can flip it. There is NO dot before the
+    first slide. The + glyph is an SVG centred in its disc.
+  - MULTI-SLIDE SELECTION: rubber band over frames (a press in a deck's gaps
+    starts the band; the tab and grip select/drag the deck), shift-click
+    heads, Cmd+A inside a deck. Cmd+D duplicates the selection (slides,
+    elements or board objects - one shortcut everywhere), Delete removes it.
+    `selectSlide` resets the multi-set when the slide changes, so callers set
+    `ed.sslides` AFTER calling it.
+  - TEXT BOXES: click a selected box to edit at the caret
+    (`caretRangeFromPoint`), double-click or Enter selects all.
+  - NO TOOLTIPS in Boards (tip.js is not loaded; `.cs-tip` is hidden). The
+    right panel COLLAPSES from a header button (`prefs.panelHidden`). The deck
+    name tab sits fully above the number row. The deck GRIP scales with the
+    deck (canvas px, not --inv) - Tony's call. Selection, marquee and guides
+    wear the Diagrams marquee cyan `#75d8ff`, not the darker blue.
+  - BOARDS SAVE TO THE CTH FOLDER: every flush also writes
+    `/cth-admin/Sidebar 1/Apps/Whiteboard/<board name>.json` through
+    clips/js/localfs.js when the folder is connected (Settings > Saving has
+    Connect / Reconnect / Save Now). IndexedDB stays the source of truth; the
+    JSON is a mirror for the admin app.
 - SLIDE VIEW is a focus mode on ONE deck (the "Edit" button on a deck
   header, or the view toggle): filmstrip with a deck picker, single stage,
   notes tray. The board stays the default and the primary editor.
