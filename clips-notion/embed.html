@@ -16,6 +16,8 @@
     import { mountPlayer } from './js/player.js';
     import { mountAnnotate, mountViewer } from './js/annotate.js';
     // Public URL format: #src=<video url>&t=<seconds>&mode=edit|view
+    // The hash IS the document: a new src or mode means a fresh player.
+    window.addEventListener('hashchange', () => location.reload());
     const p = new URLSearchParams(location.hash.replace(/^#/, ''));
     const src = p.get('src') || p.get('v') || '';
     const mode = p.get('mode') === 'edit' ? 'edit' : 'view';
