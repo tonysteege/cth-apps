@@ -392,11 +392,82 @@ async function handleDg(request, env, url) {
   return json(request, { error: 'not_found' }, 404);
 }
 
+// Notion database button "Diagrams" (Docs database): the button's webhook
+// action POSTs the page here; we create a blank diagram with its own edit
+// token and append its edit-link embed to the END of that page through the
+// Notion API (NOTION_TOKEN must have insert-content access to the page).
+// Gated by the pinned automation id (see below) or the DG_HOOK_KEY secret.
+const DG_APP = 'https://apps.coachtonyhockey.com/diagrams-notion/';
+const DG_HOOK_DB = 'ba8cf93f7dd0839cba89815b259ee9fb'; // the Docs database
+async function handleDgHook(request, env, url) {
+  // GET with the master key returns the last call's body and outcome, so a
+  // misfiring button can be diagnosed without Worker logs.
+  if (request.method === 'GET') {
+    if (!env.DG_EDIT_KEY || request.headers.get('X-DG-Key') !== env.DG_EDIT_KEY) return json(request, { error: 'auth' }, 401);
+    return json(request, (await env.DG.get('hook:last', 'json')) || null);
+  }
+  if (request.method !== 'POST') return json(request, { error: 'not_found' }, 404);
+  const res = await dgHookRun(request, env);
+  if (env.DG) {
+    const out = await res.clone().json().catch(() => null);
+    await env.DG.put('hook:last', JSON.stringify({ at: Date.now(), status: res.status, out, body: (request._dgBody || '').slice(0, 4000) }));
+  }
+  return res;
+}
+async function dgHookRun(request, env) {
+  if (!env.DG || !env.NOTION_TOKEN) return json(request, { error: 'setup', message: 'DG or NOTION_TOKEN is not set on this Worker.' }, 503);
+  let body;
+  const raw = await request.text(); request._dgBody = raw;
+  try { body = JSON.parse(raw); } catch (_) { return json(request, { error: 'bad_json', message: 'The body must be JSON.' }, 400); }
+  // Auth, without a shared secret in Notion's config: the DG_HOOK_KEY header
+  // (curl, tests) OR the Notion automation that made the FIRST call, pinned
+  // in KV (trust on first use), AND the page must live in the Docs database.
+  const k = request.headers.get('X-DG-Hook') || '';
+  const keyOk = !!env.DG_HOOK_KEY && k === env.DG_HOOK_KEY;
+  const src = body?.source || {};
+  if (!keyOk) {
+    if (!src.automation_id) return json(request, { error: 'auth', message: 'Not a Notion automation call.' }, 401);
+    const pin = await env.DG.get('hook:pin', 'json');
+    if (pin && pin.automation_id !== src.automation_id) return json(request, { error: 'auth', message: 'Not the pinned Notion automation.' }, 401);
+    if (!pin) await env.DG.put('hook:pin', JSON.stringify({ automation_id: src.automation_id, user_id: src.user_id || '', at: Date.now() }));
+  }
+  const page = body?.data?.object === 'page' ? body.data : (body?.page || body?.data || body);
+  const pageId = String(page?.id || '').replace(/-/g, '');
+  if (!/^[0-9a-f]{32}$/.test(pageId)) return json(request, { error: 'bad_page', message: 'No Notion page id in the webhook body.' }, 400);
+  const parentDb = String(page?.parent?.database_id || page?.parent?.data_source_id || '').replace(/-/g, '');
+  if (parentDb && parentDb !== DG_HOOK_DB) return json(request, { error: 'wrong_db', message: 'That page is not in the Docs database.' }, 403);
+  let name = '';
+  for (const prop of Object.values(page?.properties || {})) {
+    if (prop?.type === 'title') { name = (prop.title || []).map((t) => t.plain_text || '').join('').trim(); break; }
+  }
+  const id = dgToken().slice(0, 12).toLowerCase().replace(/[^a-z0-9]/g, 'x');
+  const doc = { id, name: name.slice(0, 200), state: null, token: dgToken(), updated: Date.now(), page: pageId };
+  await env.DG.put(`d:${id}`, JSON.stringify(doc));
+  const idx = ((await env.DG.get('index', 'json')) || []).filter((x) => x.id !== id);
+  idx.unshift({ id, name: doc.name, updated: doc.updated, seq: 1 });
+  await env.DG.put('index', JSON.stringify(idx.slice(0, 500)));
+  const embed = `${DG_APP}#/e/${id}?t=${doc.token}`;
+  const r = await fetch(`${NOTION}/blocks/${pageId}/children`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${env.NOTION_TOKEN}`, 'Notion-Version': NV, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ children: [{ object: 'block', type: 'embed', embed: { url: embed } }] }),
+  });
+  if (!r.ok) {
+    // No orphan: the diagram only exists if it landed on the page.
+    await env.DG.delete(`d:${id}`);
+    await env.DG.put('index', JSON.stringify(idx.filter((x) => x.id !== id)));
+    const msg = await r.text();
+    return json(request, { error: 'notion', message: `Notion refused the append (${r.status}): ${msg.slice(0, 300)}` }, 502);
+  }
+  return json(request, { ok: true, id, embed });
+}
+
 export default {
   async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') return new Response(null, { headers: cors(request) });
     const url = new URL(request.url);
     if (url.pathname.startsWith('/ai/')) return handleAi(request, env, url.pathname);
+    if (url.pathname === '/dg-hook/notion') return handleDgHook(request, env, url);
     if (url.pathname.startsWith('/dg/') || url.pathname === '/dg') return handleDg(request, env, url);
     const m = url.pathname.match(/^\/notion\/page\/([0-9a-f]{32})$/);
     if (!m) return json(request, { error: 'not_found' }, 404);

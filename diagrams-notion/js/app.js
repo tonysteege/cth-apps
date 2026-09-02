@@ -155,6 +155,7 @@ async function showEmbed(id, forceStatic) {
   await showStatic(doc);
 }
 
+const CHEV_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
 const KEY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2M15 8l3 3M18 5l3 3"/></svg>';
 const DUP_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
 
@@ -186,8 +187,9 @@ async function showEditor(doc) {
             <div class="ed-addrow" hidden><button class="ed-addbar" id="edAddBar" hidden>+ Add Rink</button><button class="ed-addbar" id="edDupBar" hidden>Duplicate Rink</button></div>
           </div>
         </div>
+        <div class="tb" id="edBar"></div>
       </div>
-      <div class="tb" id="edBar"></div>
+      <button class="dn-tbtoggle" id="dnTb" aria-label="Hide tools" aria-expanded="true">${CHEV_ICON}</button>
       <div class="dn-cluster">
         ${embedded() ? '' : '<button class="dn-cbtn" id="dnBack" aria-label="Back to your diagrams">Back</button>'}
         <span class="dn-dot on" id="dnPub" aria-label="Published"></span>
@@ -226,24 +228,43 @@ async function showEditor(doc) {
   // Keep the rink fitted and CENTRED. The editor's SVG keeps a 170-unit
   // label strip above the rink (out of 1600 + 240) even with the label
   // hidden; pull the stage up by that strip so the rink itself sits in the
-  // middle of the frame. Re-derived on every resize from the width the
-  // editor chose.
+  // middle of the frame. The WIDTH is not set here: the editor's own
+  // sizeStage() re-runs on every toolbar click and used to shrink the rink
+  // to the frame height (Tony's "rink jumps" bug), so the stylesheet pins
+  // `.ed-zoom` to 100% with !important and the editor's inline width is
+  // ignored. Width always wins; the frame height follows.
   const fit = () => {
-    window.dispatchEvent(new Event('resize'));
     const z = $('#edZoom'); const st = $('#edStage'); if (!z || !st) return;
-    // WIDTH ALWAYS WINS (Tony's call): the rink spans the whole embed width
-    // and the frame's height follows; the editor's own fit would shrink it
-    // to the height instead.
-    const wrapEl = $('#edStageWrap'); const cs = getComputedStyle(wrapEl);
-    const pad = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
-    const w = Math.max(280, wrapEl.clientWidth - pad - 2);
-    z.style.width = `${Math.round(w)}px`;
+    const w = z.clientWidth;
     st.style.marginTop = `${-(w * 170 / 3200)}px`;
     st.style.marginBottom = `${-(w * 70 / 3200)}px`;
   };
-  const ro = new ResizeObserver(fit);
-  ro.observe($('#edStageWrap'));
+  new ResizeObserver(fit).observe($('#edZoom'));
   fit(); setTimeout(fit, 50);
+  // The tool rail on the right collapses out of the way for presenting.
+  const root = $('.dn-edit'); const tbtn = $('#dnTb');
+  const setTb = (open) => {
+    root.classList.toggle('dn-tbhide', !open);
+    tbtn.setAttribute('aria-expanded', String(open));
+    tbtn.setAttribute('aria-label', open ? 'Hide tools' : 'Show tools');
+    try { localStorage.setItem('cthdn.tb', open ? '1' : '0'); } catch { /* embeds may have no storage */ }
+  };
+  let tbOpen = true; try { tbOpen = localStorage.getItem('cthdn.tb') !== '0'; } catch { /* no storage */ }
+  setTb(tbOpen);
+  tbtn.onclick = () => setTb(root.classList.contains('dn-tbhide'));
+  // The editor drops its tool popups ABOVE the button (a bottom bar habit).
+  // Beside a right-hand rail that lands off the top of the frame, so move
+  // each popup to the left of the rail, level with its button.
+  new MutationObserver((muts) => {
+    for (const m of muts) for (const n of m.addedNodes) {
+      if (!(n instanceof HTMLElement) || !n.classList.contains('pmenu')) continue;
+      const bar = $('#edBar'); if (!bar) continue;
+      const br = bar.getBoundingClientRect(); const h = n.offsetHeight; const mw = n.offsetWidth;
+      const btnTop = (parseFloat(n.style.top) || 0) + h + 10;
+      n.style.left = `${Math.max(4, br.left - mw - 6)}px`;
+      n.style.top = `${Math.max(4, Math.min(window.innerHeight - h - 4, btnTop + 16 - h / 2))}px`;
+    }
+  }).observe(document.body, { childList: true });
 }
 
 window.addEventListener('hashchange', route);

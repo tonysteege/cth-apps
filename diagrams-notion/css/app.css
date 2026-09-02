@@ -22,25 +22,46 @@ html, body { height: 100%; overflow: hidden; }
 .dn-signin { max-width: 420px; margin: 80px auto; text-align: center; display: grid; gap: 12px; }
 .dn-signin p { color: var(--n-500, #737373); margin: 0; }
 
-/* The embed editor: no header. The stage fills what the toolbar leaves and
-   never scrolls; the toolbar is a static row at the bottom. */
+/* The embed editor: no header. The stage fills what the tool rail leaves
+   and never scrolls. The rail is a vertical column on the right, and it
+   collapses (dn-tbhide) so nothing sits over the rink while presenting. */
 .dn-edit .ed-main { flex: 1; min-height: 0; display: flex; }
-.dn-edit .ed-stagewrap { flex: 1; min-height: 0; overflow: hidden; padding: 6px 8px 4px; display: flex; align-items: center; justify-content: center; }
-.dn-edit .ed-zoom { margin: 0 auto; }
+.dn-edit .ed-stagewrap { flex: 1; min-width: 0; min-height: 0; overflow: hidden; padding: 6px 6px 4px 8px; display: flex; align-items: center; justify-content: center; }
+/* Width always wins. The editor's sizeStage() writes an inline width on
+   every toolbar repaint (height-bound, so the rink shrank and jumped);
+   !important here makes that inline width inert. */
+.dn-edit .ed-zoom { width: 100% !important; margin: 0 auto; }
 .dn-edit .ed-addrow { display: none; }
-.dn-edit .tb { position: static; transform: none; margin: 6px auto 10px; max-width: calc(100vw - 16px); flex: none; }
+.dn-edit .ed-stage { overflow: visible; }
 /* One rink per embed: no rink names, no per-rink icons. */
 .dn-edit .ed-rinkchip, .dn-edit .ed-rctl, .dn-edit .ed-flabelwrap { display: none; }
-.dn-edit .ed-stage { overflow: visible; }
-.dn-edit .tb { overflow-x: auto; overflow-y: hidden; flex-wrap: nowrap; scrollbar-width: thin; }
+.dn-edit .tb {
+  position: static; transform: none; flex: none; align-self: stretch;
+  flex-direction: column; flex-wrap: nowrap; gap: 3px;
+  width: 44px; max-width: none; margin: 34px 6px 6px 0; padding: 5px 4px;
+  overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none;
+  border-radius: 12px;
+}
+.dn-edit .tb-btn, .dn-edit .tb-player, .dn-edit .tb-swatch { width: 32px; height: 32px; flex: none; }
+.dn-edit .tb-btn svg { width: 17px; height: 17px; }
+.dn-edit .tb-btn img { width: 21px; height: 21px; }
+.dn-edit .tb-swatch { width: 24px; height: 24px; margin: 2px 4px; }
+.dn-edit .tb-word { width: 32px; padding: 0; font-size: 11px; }
+.dn-edit .tb-key { display: none; }
+.dn-edit .tb-sep { width: auto; height: 1px; align-self: stretch; margin: 2px 4px; }
+.dn-edit.dn-tbhide .tb { display: none; }
+.dn-tbtoggle { position: fixed; top: 6px; right: 6px; z-index: 30; width: 24px; height: 24px; padding: 0; border-radius: 8px; background: #fff; border: 1px solid var(--n-200, #ebebeb); color: var(--n-500, #737373); display: grid; place-items: center; opacity: 0.45; cursor: pointer; }
+.dn-tbtoggle:hover, .dn-tbtoggle:focus-visible { opacity: 1; color: var(--n-900, #171717); }
+.dn-tbtoggle svg { width: 14px; height: 14px; transition: transform 0.15s; }
+.dn-tbhide .dn-tbtoggle svg { transform: rotate(180deg); }
 
 /* Static viewer: the one rink, fitted. */
 .dn-static .dn-view { flex: 1; min-height: 0; display: grid; place-items: center; padding: 6px 8px; overflow: hidden; }
 .dn-still { width: 100%; height: auto; display: block; }
 .dn-empty { color: var(--n-500, #737373); padding: 40px; text-align: center; }
 
-/* The corner cluster: up and left of the embed's own resize handles. */
-.dn-cluster { position: fixed; right: 36px; bottom: 84px; display: flex; align-items: center; gap: 6px; z-index: 30; }
+/* The corner cluster: bottom-left, clear of Notion's side and bottom-centre resize handles. */
+.dn-cluster { position: fixed; left: 10px; bottom: 12px; display: flex; align-items: center; gap: 6px; z-index: 30; }
 .dn-cbtn { min-width: 30px; height: 30px; padding: 0 6px; border-radius: 999px; background: #fff; border: 1px solid var(--n-200, #ebebeb); color: var(--n-500, #737373); display: grid; place-items: center; opacity: 0.45; cursor: pointer; font: 500 12px/1 Inter, system-ui, sans-serif; box-shadow: 0 1px 2px rgb(0 0 0 / 0.05); }
 .dn-cluster:hover .dn-cbtn, .dn-cbtn:focus-visible { opacity: 1; }
 .dn-cbtn:hover { color: var(--n-900, #171717); border-color: var(--n-300, #d9d9d9); }
@@ -52,7 +73,7 @@ html, body { height: 100%; overflow: hidden; }
 @keyframes dnPulse { to { opacity: 0.2; } }
 
 /* Panels (key, links): in-page, because dialogs are blocked in an embed. */
-.dn-panel { position: fixed; right: 36px; bottom: 122px; z-index: 50; width: min(340px, calc(100vw - 24px)); background: #fff; border: 1px solid var(--n-200, #ebebeb); border-radius: 16px; box-shadow: 0 10px 30px -10px rgb(0 0 0 / 0.3); padding: 14px; display: grid; gap: 10px; }
+.dn-panel { position: fixed; left: 10px; bottom: 50px; z-index: 50; width: min(340px, calc(100vw - 24px)); background: #fff; border: 1px solid var(--n-200, #ebebeb); border-radius: 16px; box-shadow: 0 10px 30px -10px rgb(0 0 0 / 0.3); padding: 14px; display: grid; gap: 10px; }
 .dn-panel--inline { position: static; width: auto; margin: 0 auto; }
 .dn-panel label { display: grid; gap: 6px; font-size: 13px; font-weight: 600; text-align: left; }
 .dn-panel input { height: 36px; padding: 0 10px; border: 0; border-radius: 10px; background: var(--n-200, #ebebeb); font: inherit; font-size: 13px; outline: none; width: 100%; }

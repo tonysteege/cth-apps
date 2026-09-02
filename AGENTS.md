@@ -1393,7 +1393,9 @@ the TELESTRATION renderer. No tagging, no library, no folder.
 
 ## Diagrams Notion (/diagrams-notion/) rules
 
-- Fit rule: the rink ALWAYS spans the full embed width (`fit()` overrides the editor's own width/height fit) and the frame height follows; the static image is `width: 100%`. Tony sizes the Notion embed's height, the app never scrolls.
+- Fit rule: the rink ALWAYS spans the full embed width and the frame height follows; the static image is `width: 100%`. Tony sizes the Notion embed's height, the app never scrolls. The width is pinned in CSS (`.dn-edit .ed-zoom { width: 100% !important }`), NOT in JS: the Diagrams editor's `sizeStage()` rewrites the inline width on every toolbar repaint (height-bound), which made the rink shrink and jump on each tool click.
+- Toolbar: a vertical rail on the RIGHT (`.dn-edit .tb`, 44px, 32px buttons, key hints hidden), collapsible with the top-right chevron (`#dnTb`, class `dn-tbhide`, remembered in `cthdn.tb` when storage exists). Tool popups (`.pmenu`) are re-anchored to the left of the rail by a MutationObserver. The corner cluster sits bottom-left.
+- Notion "Diagram" button (Docs database, `ba8cf93f7dd0839cba89815b259ee9fb`): a database button automation "Send webhook" to `POST https://apps-api.coachtonyhockey.com/dg-hook/notion` with the Name property. The Worker creates a blank diagram (own token) and appends its EDIT-link embed to the end of the page through the Notion API (the CTHSA integration behind `NOTION_TOKEN` is connected to the Docs database). Auth: the automation id is pinned in KV `hook:pin` on first use (or the `DG_HOOK_KEY` secret as `X-DG-Hook`, kept in `~/.cth-diagrams-notion-hook.txt`); pages must be in the Docs database; a failed append deletes the diagram again. `GET /dg-hook/notion` with the master key returns the last call (`hook:last`) for diagnosis.
 
 
 CTH Diagrams Notion (2026-09-01, Tony's ask; reshaped the same evening on
