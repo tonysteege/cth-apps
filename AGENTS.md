@@ -1393,6 +1393,9 @@ the TELESTRATION renderer. No tagging, no library, no folder.
 
 ## Diagrams Notion (/diagrams-notion/) rules
 
+- Fit rule: the rink ALWAYS spans the full embed width (`fit()` overrides the editor's own width/height fit) and the frame height follows; the static image is `width: 100%`. Tony sizes the Notion embed's height, the app never scrolls.
+
+
 CTH Diagrams Notion (2026-09-01, Tony's ask; reshaped the same evening on
 his second list) is the Diagrams editor made for NOTION EMBEDS: ONE DIAGRAM
 PER EMBED that Tony edits inside his Notion page (toolbar live during a

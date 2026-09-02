@@ -231,7 +231,13 @@ async function showEditor(doc) {
   const fit = () => {
     window.dispatchEvent(new Event('resize'));
     const z = $('#edZoom'); const st = $('#edStage'); if (!z || !st) return;
-    const w = parseFloat(z.style.width) || z.clientWidth;
+    // WIDTH ALWAYS WINS (Tony's call): the rink spans the whole embed width
+    // and the frame's height follows; the editor's own fit would shrink it
+    // to the height instead.
+    const wrapEl = $('#edStageWrap'); const cs = getComputedStyle(wrapEl);
+    const pad = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+    const w = Math.max(280, wrapEl.clientWidth - pad - 2);
+    z.style.width = `${Math.round(w)}px`;
     st.style.marginTop = `${-(w * 170 / 3200)}px`;
     st.style.marginBottom = `${-(w * 70 / 3200)}px`;
   };

@@ -25,7 +25,7 @@ html, body { height: 100%; overflow: hidden; }
 /* The embed editor: no header. The stage fills what the toolbar leaves and
    never scrolls; the toolbar is a static row at the bottom. */
 .dn-edit .ed-main { flex: 1; min-height: 0; display: flex; }
-.dn-edit .ed-stagewrap { flex: 1; min-height: 0; overflow: hidden; padding: 10px 12px 4px; display: flex; align-items: center; justify-content: center; }
+.dn-edit .ed-stagewrap { flex: 1; min-height: 0; overflow: hidden; padding: 6px 8px 4px; display: flex; align-items: center; justify-content: center; }
 .dn-edit .ed-zoom { margin: 0 auto; }
 .dn-edit .ed-addrow { display: none; }
 .dn-edit .tb { position: static; transform: none; margin: 6px auto 10px; max-width: calc(100vw - 16px); flex: none; }
@@ -35,8 +35,8 @@ html, body { height: 100%; overflow: hidden; }
 .dn-edit .tb { overflow-x: auto; overflow-y: hidden; flex-wrap: nowrap; scrollbar-width: thin; }
 
 /* Static viewer: the one rink, fitted. */
-.dn-static .dn-view { flex: 1; min-height: 0; display: grid; place-items: center; padding: 10px 12px; }
-.dn-still { max-width: 100%; max-height: 100%; width: auto; height: auto; display: block; }
+.dn-static .dn-view { flex: 1; min-height: 0; display: grid; place-items: center; padding: 6px 8px; overflow: hidden; }
+.dn-still { width: 100%; height: auto; display: block; }
 .dn-empty { color: var(--n-500, #737373); padding: 40px; text-align: center; }
 
 /* The corner cluster: up and left of the embed's own resize handles. */
