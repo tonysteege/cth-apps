@@ -1093,7 +1093,8 @@ it and every item is shipped. The rules worth keeping:
   touched. `transform` does not change layout, so the figure keeps its own
   2:1 box and the image is placed inside it - do not "simplify" that to a
   bare rotate, the tall footprint comes straight back.
-- Slide links come from a Notion FORMULA property (name: Slides):
+- Slide links come from a Notion FORMULA property (Docs database, name:
+  Slides URL; the adjacent "Slides" button property is separate):
   `"https://apps.coachtonyhockey.com/slides/#p=" + id()` - the app also
   accepts any pasted Notion URL. The #p=<id>&s=<n> hash format is public.
 - Clips embed URLs, uploaded video files and external video URLs all render
