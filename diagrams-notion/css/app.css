@@ -22,11 +22,14 @@ html, body { height: 100%; overflow: hidden; }
 .dn-signin { max-width: 420px; margin: 80px auto; text-align: center; display: grid; gap: 12px; }
 .dn-signin p { color: var(--n-500, #737373); margin: 0; }
 
-/* The embed editor: no header. The stage fills what the tool rail leaves
-   and never scrolls. The rail is a vertical column on the right, and it
-   collapses (dn-tbhide) so nothing sits over the rink while presenting. */
+/* The embed editor: no header, and the rink sits ON THE TOP EDGE (Tony,
+   2026-09-03 - the centred stage left a dead strip above the rink inside a
+   Notion embed, which reads as a broken block). The stage fills what the
+   tool rail leaves and never scrolls. The rail is a vertical column on the
+   right; it collapses whole (dn-tbhide) for presenting, and within itself
+   it shows only the CORE tools until "More" is expanded (dn-more). */
 .dn-edit .ed-main { flex: 1; min-height: 0; display: flex; }
-.dn-edit .ed-stagewrap { flex: 1; min-width: 0; min-height: 0; overflow: hidden; padding: 6px 6px 4px 8px; display: flex; align-items: center; justify-content: center; }
+.dn-edit .ed-stagewrap { flex: 1; min-width: 0; min-height: 0; overflow: hidden; padding: 2px 4px 4px 6px; display: flex; align-items: flex-start; justify-content: center; }
 /* Width always wins. The editor's sizeStage() writes an inline width on
    every toolbar repaint (height-bound, so the rink shrank and jumped);
    !important here makes that inline width inert. */
@@ -35,25 +38,70 @@ html, body { height: 100%; overflow: hidden; }
 .dn-edit .ed-stage { overflow: visible; }
 /* One rink per embed: no rink names, no per-rink icons. */
 .dn-edit .ed-rinkchip, .dn-edit .ed-rctl, .dn-edit .ed-flabelwrap { display: none; }
+
+/* The rail: the editor's own .tb on top (tools, scrollable), a fixed foot
+   under it (More, Duplicate, key, publish dot). The foot is a SIBLING of
+   #edBar, not inside it - paintTools() rewrites that bar's innerHTML on
+   every tool change and would eat anything parked in there. */
+/* The rail sizes ITSELF. In a short Notion embed the tool column wraps into
+   a second column rather than scrolling or clipping a button - a half-
+   visible tool reads as broken, and Tony resizes these frames by hand. */
+.dn-rail { position: relative; flex: none; display: flex; flex-direction: column; align-items: stretch; width: 46px; margin: 2px 4px 4px 0; }
+/* Publish status is a light, not a control - the smallest thing in the foot. */
+.dn-foot .dn-dot { width: 6px; height: 6px; margin-top: 1px; }
 .dn-edit .tb {
-  position: static; transform: none; flex: none; align-self: stretch;
-  flex-direction: column; flex-wrap: nowrap; gap: 3px;
-  width: 44px; max-width: none; margin: 34px 6px 6px 0; padding: 5px 4px;
-  overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none;
-  border-radius: 12px;
+  /* flex:1 + min-height:0 is what gives the column a DEFINITE height, and a
+     definite height is the only thing that makes flex-wrap wrap. Without it
+     the column just grew and overflow:hidden ate the last tool. */
+  position: static; transform: none; flex: 1 1 auto; min-height: 0; align-self: stretch;
+  flex-flow: column wrap; align-content: flex-start; gap: 3px;
+  width: 100%; margin: 0; padding: 5px 4px;
+  overflow: hidden;
+  border-radius: 12px 12px 0 0;
 }
-.dn-edit .tb-btn, .dn-edit .tb-player, .dn-edit .tb-swatch { width: 32px; height: 32px; flex: none; }
+.dn-edit .tb-btn, .dn-edit .tb-player, .dn-edit .tb-swatch { width: 30px; height: 30px; flex: none; }
 .dn-edit .tb-btn svg { width: 17px; height: 17px; }
 .dn-edit .tb-btn img { width: 21px; height: 21px; }
 .dn-edit .tb-swatch { width: 24px; height: 24px; margin: 2px 4px; }
 .dn-edit .tb-word { width: 32px; padding: 0; font-size: 11px; }
 .dn-edit .tb-key { display: none; }
-.dn-edit .tb-sep { width: auto; height: 1px; align-self: stretch; margin: 2px 4px; }
-.dn-edit.dn-tbhide .tb { display: none; }
-.dn-tbtoggle { position: fixed; top: 6px; right: 6px; z-index: 30; width: 24px; height: 24px; padding: 0; border-radius: 8px; background: #fff; border: 1px solid var(--n-200, #ebebeb); color: var(--n-500, #737373); display: grid; place-items: center; opacity: 0.45; cursor: pointer; }
-.dn-tbtoggle:hover, .dn-tbtoggle:focus-visible { opacity: 1; color: var(--n-900, #171717); }
-.dn-tbtoggle svg { width: 14px; height: 14px; transition: transform 0.15s; }
+/* The editor's own separators go: the core/extra split is the only
+   grouping that survives at this size. */
+.dn-edit .tb-sep { display: none; }
+
+/* MINIMAL BY DEFAULT. Everything tagged .dn-x is folded away until More. */
+.dn-edit:not(.dn-more) .tb .dn-x { display: none; }
+
+.dn-foot { flex: none; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 3px 4px 5px; border-radius: 0 0 12px 12px; background: var(--panel, #fff); border: 1px solid var(--edge, #ebebeb); border-top: 0; }
+.dn-edit .tb { border-bottom: 0; }
+.dn-foot .dn-rule { width: 22px; height: 1px; background: var(--edge, #ebebeb); margin: 2px 0; }
+/* The four colour presets ride in the foot as a 2x2 block, not as four more
+   rows in the tool column: at embed heights those four rows were what
+   pushed the core tools into a scroll. */
+.dn-swatch { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; place-items: center; }
+.dn-edit .dn-swatch .tb-swatch { width: 15px; height: 15px; margin: 0; }
+.dn-fbtn { width: 30px; height: 30px; padding: 0; border: 0; border-radius: 9px; background: transparent; color: var(--n-500, #737373); display: grid; place-items: center; cursor: pointer; }
+.dn-fbtn:hover { background: var(--sunken, #f2f2f2); color: var(--ink, #171717); }
+.dn-fbtn svg { width: 17px; height: 17px; }
+.dn-fbtn.on { background: var(--ink, #171717); color: #fff; }
+#dnMore svg { transition: transform 0.15s; }
+.dn-edit.dn-more #dnMore svg { transform: rotate(180deg); }
+
+/* The whole-rail collapse. The reopen chevron is the only thing left. */
+.dn-edit.dn-tbhide .dn-rail { display: none; }
+.dn-tbtoggle { position: fixed; top: 4px; right: 4px; z-index: 30; width: 22px; height: 22px; padding: 0; border-radius: 7px; background: #fff; border: 1px solid var(--n-200, #ebebeb); color: var(--n-500, #737373); display: grid; place-items: center; opacity: 0; cursor: pointer; transition: opacity 0.12s; }
+.dn-edit:hover .dn-tbtoggle, .dn-tbtoggle:focus-visible, .dn-tbhide .dn-tbtoggle { opacity: 0.45; }
+.dn-tbtoggle:hover { opacity: 1; color: var(--n-900, #171717); }
+.dn-tbtoggle svg { width: 13px; height: 13px; transition: transform 0.15s; }
 .dn-tbhide .dn-tbtoggle svg { transform: rotate(180deg); }
+
+/* KEYS BELONG TO THE DIAGRAM, NOT THE NOTION PAGE. The editor listens on
+   this iframe's window, so a key only reaches it while the iframe holds
+   focus - otherwise Notion takes it and starts editing the page. The shell
+   is focusable and grabs focus on any pointer down; this ring is how Tony
+   can see the diagram currently owns the keyboard. */
+.dn-edit { outline: none; }
+.dn-edit.dn-focus .dn-rail { box-shadow: 0 0 0 2px var(--marquee-soft, rgb(37 99 235 / 0.18)); border-radius: 13px; }
 
 /* Static viewer: the one rink, fitted. */
 .dn-static .dn-view { flex: 1; min-height: 0; display: grid; place-items: center; padding: 6px 8px; overflow: hidden; }

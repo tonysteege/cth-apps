@@ -156,8 +156,16 @@ async function showEmbed(id, forceStatic) {
 }
 
 const CHEV_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
+const DOWN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
 const KEY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2M15 8l3 3M18 5l3 3"/></svg>';
 const DUP_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
+
+// THE MINIMAL RAIL (2026-09-03, Tony's call). The shared toolbar paints ~25
+// buttons; at 44px wide in a Notion embed that is a scrolling column taller
+// than the rink. These are the ones that stay out: everything else folds
+// behind More. Chosen as what a drill actually needs - a select, a skate, a
+// pass, the three player colours, a puck - not as a category.
+const CORE_TOOLS = new Set(['select', 'arrow', 'dasharrow', 'p-0', 'p-1', 'p-2', 'i-puck']);
 
 async function showStatic(doc) {
   const app = $('#app');
@@ -175,9 +183,14 @@ async function showStatic(doc) {
 async function showEditor(doc) {
   const app = $('#app');
   const drill = { id: doc.id, name: doc.name || '', state: doc.state || undefined, created: doc.updated, updated: doc.updated };
+  // Duplicate, the key and the publish dot USED TO FLOAT OVER THE RINK in a
+  // bottom-left cluster. They sit in the rail's foot now (Tony, 2026-09-03):
+  // nothing overlaps the ice, and the two of them are where every other
+  // control already is. The foot is a sibling of #edBar because paintTools()
+  // rewrites that element's innerHTML whenever the armed tool changes.
   app.innerHTML = `
-    <div class="dn ed dn-edit">
-      <span class="ed-status" id="edStatus" hidden>Saved</span>
+    <div class="dn ed dn-edit" id="dnRoot" tabindex="-1">
+      <span class="ed-status" id="edStatus" hidden></span>
       <div class="ed-main">
         <div class="ed-stagewrap" id="edStageWrap">
           <div class="ed-zoom" id="edZoom">
@@ -187,17 +200,23 @@ async function showEditor(doc) {
             <div class="ed-addrow" hidden><button class="ed-addbar" id="edAddBar" hidden>+ Add Rink</button><button class="ed-addbar" id="edDupBar" hidden>Duplicate Rink</button></div>
           </div>
         </div>
-        <div class="tb" id="edBar"></div>
+        <div class="dn-rail" id="dnRail">
+          <div class="tb" id="edBar"></div>
+          <div class="dn-foot">
+            <button class="dn-fbtn" id="dnMore" aria-label="More tools" aria-expanded="false" title="More Tools">${DOWN_ICON}</button>
+            <div class="dn-swatch" id="dnSwatch"></div>
+            <span class="dn-rule"></span>
+            <button class="dn-fbtn" id="dnDup" aria-label="Duplicate into a new embed" title="Duplicate Into A New Embed">${DUP_ICON}</button>
+            <button class="dn-fbtn" id="dnLock" aria-label="Edit key" title="Edit Key">${KEY_ICON}</button>
+            <span class="dn-dot on" id="dnPub" aria-label="Published"></span>
+          </div>
+        </div>
       </div>
       <button class="dn-tbtoggle" id="dnTb" aria-label="Hide tools" aria-expanded="true">${CHEV_ICON}</button>
-      <div class="dn-cluster">
-        ${embedded() ? '' : '<button class="dn-cbtn" id="dnBack" aria-label="Back to your diagrams">Back</button>'}
-        <span class="dn-dot on" id="dnPub" aria-label="Published"></span>
-        <button class="dn-cbtn" id="dnDup" aria-label="Duplicate into a new embed">${DUP_ICON}</button>
-        <button class="dn-cbtn" id="dnLock" aria-label="Edit key">${KEY_ICON}</button>
-      </div>
+      ${embedded() ? '' : '<div class="dn-cluster"><button class="dn-cbtn" id="dnBack" aria-label="Back to your diagrams">Back</button></div>'}
     </div>`;
   await assets();
+  const root = $('#dnRoot');
   let pubT = 0; let inflight = null; let pending = false;
   const pub = $('#dnPub');
   const setPub = (state, label) => { if (pub) { pub.className = `dn-dot ${state}`; pub.setAttribute('aria-label', label); } };
@@ -214,6 +233,7 @@ async function showEditor(doc) {
   let dirty = false;
   const schedule = () => { dirty = true; clearTimeout(pubT); pubT = setTimeout(() => { dirty = false; publish(); }, 1200); setPub('wait', 'Unpublished changes'); };
   await openEditor(drill, { onDirty: (d) => { if (d) schedule(); }, onFrames: () => {} });
+
   $('#dnDup').onclick = async () => {
     try {
       await publish();
@@ -225,14 +245,15 @@ async function showEditor(doc) {
   const back = $('#dnBack'); if (back) back.onclick = () => { location.hash = '#/'; };
   leaving = async () => { clearTimeout(pubT); if (dirty || isDirty() || pending) await publish(); await closeEditor(); };
   window.addEventListener('pagehide', () => { if (dirty) { clearTimeout(pubT); publish(true); } }, { once: true });
-  // Keep the rink fitted and CENTRED. The editor's SVG keeps a 170-unit
-  // label strip above the rink (out of 1600 + 240) even with the label
-  // hidden; pull the stage up by that strip so the rink itself sits in the
-  // middle of the frame. The WIDTH is not set here: the editor's own
-  // sizeStage() re-runs on every toolbar click and used to shrink the rink
-  // to the frame height (Tony's "rink jumps" bug), so the stylesheet pins
-  // `.ed-zoom` to 100% with !important and the editor's inline width is
-  // ignored. Width always wins; the frame height follows.
+
+  // Keep the rink fitted and hard against the TOP of the frame. The editor's
+  // SVG keeps a 170-unit label strip above the rink (out of 1600 + 240) even
+  // with the label hidden; pulling the stage up by that strip is what closes
+  // the blank margin Tony saw between the frame edge and the ice. The WIDTH
+  // is not set here: the editor's own sizeStage() re-runs on every toolbar
+  // click and used to shrink the rink to the frame height (the "rink jumps"
+  // bug), so the stylesheet pins `.ed-zoom` to 100% with !important and the
+  // inline width is ignored. Width always wins; the frame height follows.
   const fit = () => {
     const z = $('#edZoom'); const st = $('#edStage'); if (!z || !st) return;
     const w = z.clientWidth;
@@ -241,25 +262,168 @@ async function showEditor(doc) {
   };
   new ResizeObserver(fit).observe($('#edZoom'));
   fit(); setTimeout(fit, 50);
-  // The tool rail on the right collapses out of the way for presenting.
-  const root = $('.dn-edit'); const tbtn = $('#dnTb');
+
+  // ------------------------------------------------- rail: collapse + More
+  const tbtn = $('#dnTb'); const mbtn = $('#dnMore');
+  // Assigned further down, once the bar exists; setMore runs before then.
+  let reflow = () => {};
+  const readFlag = (k, dflt) => { try { const v = localStorage.getItem(k); return v === null ? dflt : v === '1'; } catch (_) { return dflt; } };
+  const writeFlag = (k, v) => { try { localStorage.setItem(k, v ? '1' : '0'); } catch (_) { /* embeds may have no storage */ } };
   const setTb = (open) => {
     root.classList.toggle('dn-tbhide', !open);
     tbtn.setAttribute('aria-expanded', String(open));
     tbtn.setAttribute('aria-label', open ? 'Hide tools' : 'Show tools');
-    try { localStorage.setItem('cthdn.tb', open ? '1' : '0'); } catch { /* embeds may have no storage */ }
+    writeFlag('cthdn.tb', open);
   };
-  let tbOpen = true; try { tbOpen = localStorage.getItem('cthdn.tb') !== '0'; } catch { /* no storage */ }
-  setTb(tbOpen);
-  tbtn.onclick = () => setTb(root.classList.contains('dn-tbhide'));
+  const setMore = (open) => {
+    root.classList.toggle('dn-more', open);
+    mbtn.setAttribute('aria-expanded', String(open));
+    mbtn.setAttribute('aria-label', open ? 'Fewer tools' : 'More tools');
+    writeFlag('cthdn.more', open);
+    reflow();
+  };
+  setTb(readFlag('cthdn.tb', true));
+  setMore(readFlag('cthdn.more', false));
+  tbtn.onclick = () => { setTb(root.classList.contains('dn-tbhide')); focusDiagram(); };
+  mbtn.onclick = () => { setMore(!root.classList.contains('dn-more')); focusDiagram(); };
+
+  // Tag the folded-away buttons after every repaint. paintTools() replaces
+  // the bar wholesale on each tool change, so this has to re-run then - and
+  // it must not react to its own class writes, hence the attribute filter.
+  const bar = $('#edBar');
+  const swatchHost = $('#dnSwatch');
+  const decorate = () => {
+    // The colour presets move bodily into the foot. paintTools() rebuilds
+    // them (with the right one marked .on) on every repaint, so the old set
+    // is dropped and the new one re-homed each time; the click handlers it
+    // bound travel with the nodes.
+    const swatches = [...bar.querySelectorAll('.tb-swatch')];
+    if (swatches.length) { swatchHost.replaceChildren(...swatches); }
+    let armedHidden = false;
+    for (const b of bar.children) {
+      if (b.classList.contains('tb-sep')) continue;
+      const id = b.dataset.tool || (b.dataset.slot !== undefined ? `c-${b.dataset.slot}` : b.dataset.act || '');
+      const core = CORE_TOOLS.has(id) || id.startsWith('c-');
+      b.classList.toggle('dn-x', !core);
+      if (!core && b.classList.contains('on')) armedHidden = true;
+    }
+    // A SHORTCUT MUST NEVER ARM AN INVISIBLE TOOL. Pressing the key for
+    // something behind More opens More, so the rail always shows what is
+    // actually armed.
+    if (armedHidden && !root.classList.contains('dn-more')) setMore(true);
+  };
+  // A HALF-VISIBLE TOOL READS AS BROKEN. Rather than scroll or clip when the
+  // embed is short, the rail widens into a second (or third) column. The
+  // wrap itself is CSS; the width is not - a column-wrapping flex box
+  // reports its single-column width to the parent, so the rail would stay
+  // 46px and simply hide column two. Hence the explicit count.
+  const rail = $('#dnRail');
+  const BTN = 30; const MAXW = 112; // three columns' worth of rail, at most
+  reflow = () => {
+    if (bar.clientHeight <= 0) return;
+    const cs = getComputedStyle(bar);
+    // Padding and borders are MEASURED, not assumed: guessing them left
+    // column two three pixels short and clipped every time.
+    const chrome = (rail.offsetWidth - bar.offsetWidth) + (bar.offsetWidth - bar.clientWidth)
+      + parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+    // Open the rail to its widest, let the browser wrap where it likes, then
+    // shrink to what the buttons actually occupy. The rail has to be sized
+    // in JS at all because a column-wrapping flex box reports only its
+    // SINGLE-column width to its parent: left to itself the rail stays 46px
+    // wide and simply hides column two. Wrapping in a column depends on
+    // height alone, so the block measured at the widest setting still holds
+    // once the width comes back down.
+    // Clear the scrolling fallback BEFORE probing: with overflow-y on, the
+    // bar scrolls instead of wrapping, so a rail that fell back once on a
+    // short frame would never widen again when the frame was pulled taller.
+    bar.style.flexWrap = 'wrap';
+    bar.style.overflowY = '';
+    rail.style.width = `${chrome + MAXW}px`;
+    // MEASURE the block the buttons actually occupy - do not rebuild it from
+    // a button width. The player swatches carry side margins, so a column is
+    // wider than a button, and every arithmetic guess at this clipped
+    // column two by a few pixels.
+    let lo = Infinity; let hi = -Infinity;
+    for (const b of bar.children) {
+      if (b.offsetParent === null) continue;
+      const m = getComputedStyle(b);
+      lo = Math.min(lo, b.offsetLeft - parseFloat(m.marginLeft));
+      hi = Math.max(hi, b.offsetLeft + b.offsetWidth + parseFloat(m.marginRight));
+    }
+    if (!Number.isFinite(lo)) return;
+    const span = Math.ceil(hi - lo);
+    if (span > MAXW) {
+      // Shorter than even the widest rail can hold: one plain scrolling
+      // column, which at least never shows half a button.
+      bar.style.flexWrap = 'nowrap';
+      bar.style.overflowY = 'auto';
+      rail.style.width = `${chrome + BTN}px`;
+      return;
+    }
+    bar.style.overflowY = '';
+    rail.style.width = `${chrome + span}px`;
+  };
+  // Every trigger measures TWICE: once next frame, once after the layout has
+  // certainly landed. A ResizeObserver fires before the new size has settled,
+  // so a single pass read the old bar height and left the rail at a width the
+  // frame could no longer hold. reflow() is idempotent, so the second pass
+  // costs nothing when the first was already right.
+  let rafId = 0; let lateId = 0;
+  const reflowSoon = () => {
+    cancelAnimationFrame(rafId); clearTimeout(lateId);
+    rafId = requestAnimationFrame(() => reflow());
+    lateId = setTimeout(() => reflow(), 120);
+  };
+  decorate(); reflow();
+  new MutationObserver(() => { decorate(); reflowSoon(); }).observe(bar, { childList: true });
+  new ResizeObserver(reflowSoon).observe($('.ed-main'));
+  window.addEventListener('resize', reflowSoon);
+
+  // ------------------------------------- back to Select after every place
+  // The shared editor deliberately KEEPS a tool armed (2026-08-30) so five
+  // players drop in a row without re-picking. In an embed Tony wants the
+  // opposite: draw one thing, get the cursor back, because the next action
+  // is almost always moving what was just placed. Escape is the editor's own
+  // "step out" key, so this reuses it rather than reaching into its state.
+  // Counted off the RENDERED elements, not currentState(): #edEls holds one
+  // node per element and is always there to read, which currentState() is
+  // not mid-gesture.
+  const count = () => document.getElementById('edEls')?.childElementCount ?? -1;
+  let before = -1;
+  window.addEventListener('pointerdown', () => { before = count(); }, true);
+  window.addEventListener('pointerup', () => {
+    // A popup open means the press was a menu choice, and Escape would close
+    // the menu instead of disarming - leave those alone.
+    if (document.querySelector('.pmenu, .lmenu')) return;
+    if (document.getElementById('edInput')) return; // text is still being typed
+    if (before < 0 || count() <= before) return;
+    before = -1;
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  });
+
+  // ------------------------------------------------------------- keyboard
+  // THE KEYS ARE THE DIAGRAM'S, NOT THE NOTION PAGE'S. The editor listens on
+  // this iframe's window, and a cross-origin iframe only receives keys while
+  // it holds focus - otherwise every letter goes to Notion and starts
+  // editing the page behind the embed. So: take focus on any pointer down,
+  // keep it on a toolbar click (buttons would otherwise steal it and swallow
+  // the next shortcut), and show a ring while we hold it.
+  const focusDiagram = () => { try { window.focus(); } catch (_) {} root.focus({ preventScroll: true }); };
+  root.addEventListener('pointerdown', focusDiagram, true);
+  root.addEventListener('mouseup', () => { if (!root.contains(document.activeElement)) focusDiagram(); });
+  const mark = () => root.classList.toggle('dn-focus', document.hasFocus());
+  window.addEventListener('focus', mark); window.addEventListener('blur', mark);
+  mark();
+  if (!embedded()) focusDiagram();
+
   // The editor drops its tool popups ABOVE the button (a bottom bar habit).
   // Beside a right-hand rail that lands off the top of the frame, so move
   // each popup to the left of the rail, level with its button.
   new MutationObserver((muts) => {
     for (const m of muts) for (const n of m.addedNodes) {
       if (!(n instanceof HTMLElement) || !n.classList.contains('pmenu')) continue;
-      const bar = $('#edBar'); if (!bar) continue;
-      const br = bar.getBoundingClientRect(); const h = n.offsetHeight; const mw = n.offsetWidth;
+      const b = $('#edBar'); if (!b) continue;
+      const br = b.getBoundingClientRect(); const h = n.offsetHeight; const mw = n.offsetWidth;
       const btnTop = (parseFloat(n.style.top) || 0) + h + 10;
       n.style.left = `${Math.max(4, br.left - mw - 6)}px`;
       n.style.top = `${Math.max(4, Math.min(window.innerHeight - h - 4, btnTop + 16 - h / 2))}px`;
