@@ -14,6 +14,15 @@
 // record, which is why a library saved under Dropbox still resolves here
 // with no migration: '/videos/games/x.mp4' just means a different disk.
 //
+// THE VIDEO FOLDER CAN BE MOVED (2026-09-04, Tony's call). '/videos' is a
+// MOUNT, not a fixed location: normally it resolves to <cth>/videos, but
+// Tony can point it at any folder on disk and that choice is remembered in
+// the same IndexedDB, under its own key, so it survives every reload and
+// can be changed or reset at any time. Only the RESOLUTION changes - every
+// stored path string is still '/videos/...', so no game record, export
+// path or clip is rewritten, and resetting to the default makes an old
+// library resolve exactly as it did before.
+//
 // This uses the File System Access API. It is a real browser capability,
 // not a server: nothing is uploaded anywhere, and the app still makes no
 // network calls of its own. Chrome and Edge support it; Safari and Firefox
@@ -35,6 +44,9 @@ const VIDEO_EXT = /\.(mp4|mov|m4v|webm|mkv|avi)$/i;
 const DB = 'cth-files';
 const STORE = 'handles';
 const KEY = 'root';
+// The optional custom video folder. A separate key, so choosing one never
+// disturbs the CTH root that Diagrams and Slides also write through.
+const VKEY = 'videos';
 
 function idb() {
   return new Promise((res, rej) => {
@@ -80,6 +92,11 @@ async function idbDel(key) {
 let root = null;      // FileSystemDirectoryHandle or null
 let granted = false;  // does the handle currently hold readwrite permission
 
+// The custom video folder, when one has been chosen. Null means '/videos'
+// resolves the default way, inside the CTH root.
+let vroot = null;
+let vgranted = false;
+
 export function fsSupported() {
   return typeof window !== 'undefined' && typeof window.showDirectoryPicker === 'function';
 }
@@ -94,6 +111,17 @@ export async function fsInit() {
   try {
     root = (await idbGet(KEY)) || null;
   } catch (_) { root = null; }
+  // The custom video folder is loaded on the same pass and checked the same
+  // way. It is INDEPENDENT of the root: either one can be live while the
+  // other needs a click, so each carries its own granted flag.
+  try {
+    vroot = (await idbGet(VKEY)) || null;
+  } catch (_) { vroot = null; }
+  if (vroot) {
+    try {
+      vgranted = (await vroot.queryPermission({ mode: 'readwrite' })) === 'granted';
+    } catch (_) { vgranted = false; }
+  }
   if (!root) return false;
   try {
     granted = (await root.queryPermission({ mode: 'readwrite' })) === 'granted';
@@ -134,6 +162,51 @@ export async function fsDisconnect() {
   try { await idbDel(KEY); } catch (_) {}
 }
 
+// --------------------------------------------------- the video folder
+
+// Has Tony pointed '/videos' somewhere of his own?
+export function fsVideoCustom() { return !!vroot; }
+// Its name, for the breadcrumb and the sheet. Empty when the default is in use.
+export function fsVideoName() { return vroot ? vroot.name : ''; }
+// A custom folder that is remembered but whose permission has lapsed. Chrome
+// only lets requestPermission run from a click, so the app shows a button.
+export function fsVideoNeedsReconnect() { return !!vroot && !vgranted; }
+
+// Can '/videos' be read and written right now? This is the gate every video
+// path should test, NOT fsConnected: with a custom video folder the CTH root
+// is not on the way to the film at all, so a Clips session can run on the
+// video folder alone.
+export function fsVideosReady() { return vroot ? vgranted : (!!root && granted); }
+
+// Pick a folder to use as '/videos'. Must be called from a user gesture.
+// Any folder on disk will do - inside the CTH folder or on another drive.
+export async function fsPickVideoFolder() {
+  if (!fsSupported()) throw new Error('This Browser Cannot Open A Folder - Use Chrome Or Edge');
+  const h = await window.showDirectoryPicker({ id: 'cth-videos', mode: 'readwrite', startIn: 'videos' });
+  const p = await h.requestPermission({ mode: 'readwrite' });
+  if (p !== 'granted') throw new Error('Folder Permission Was Not Granted');
+  vroot = h;
+  vgranted = true;
+  await idbPut(VKEY, h);
+  return h.name;
+}
+
+// Re-ask for the custom folder already remembered. Must be called from a gesture.
+export async function fsReconnectVideoFolder() {
+  if (!vroot) return fsPickVideoFolder();
+  vgranted = (await vroot.requestPermission({ mode: 'readwrite' })) === 'granted';
+  if (!vgranted) throw new Error('Folder Permission Was Not Granted');
+  return vroot.name;
+}
+
+// Back to the default: '/videos' inside the CTH folder. Nothing stored is
+// rewritten, so an older library resolves exactly as it always did.
+export async function fsResetVideoFolder() {
+  vroot = null;
+  vgranted = false;
+  try { await idbDel(VKEY); } catch (_) {}
+}
+
 // ------------------------------------------------------------- walking
 
 function parts(path) {
@@ -146,10 +219,25 @@ function need() {
   return root;
 }
 
+// Where a path starts. This is the ONE place the video mount is applied: a
+// path whose first segment is 'videos' resolves inside the custom folder
+// when there is one, and inside the CTH root when there is not. Nothing
+// else in any app knows the difference, which is why no stored path had to
+// change. A '/videos' path does not need the root at all while a custom
+// folder is live, so a lapsed root cannot block film that lives elsewhere.
+function baseFor(seg) {
+  if (vroot && seg[0] === 'videos') {
+    if (!vgranted) throw new Error('Video Folder Access Expired - Press Reconnect Video Folder');
+    return { base: vroot, rest: seg.slice(1) };
+  }
+  return { base: need(), rest: seg };
+}
+
 // Walk to a directory. create:true makes every missing level on the way.
 async function dirFor(path, { create = false } = {}) {
-  let d = need();
-  for (const name of parts(path)) {
+  const { base, rest } = baseFor(parts(path));
+  let d = base;
+  for (const name of rest) {
     d = await d.getDirectoryHandle(name, { create });
   }
   return d;
@@ -272,7 +360,11 @@ export async function fsWrite(path, blob, { onProgress = null } = {}) {
 }
 
 // A human label for a path, for toasts: '/videos/exports/x.mp4' reads as
-// 'videos/exports/x.mp4' under the chosen folder.
+// 'videos/exports/x.mp4' under the chosen folder. With a custom video
+// folder the leading 'videos' is swapped for that folder's real name, so a
+// toast names the place the file actually landed.
 export function fsLabel(path) {
-  return parts(path).join('/');
+  const seg = parts(path);
+  if (vroot && seg[0] === 'videos') seg[0] = vroot.name;
+  return seg.join('/');
 }

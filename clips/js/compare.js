@@ -13,7 +13,7 @@
 // one thing here that must not drift.
 
 import { scrubDeltaSeconds, scrubMotionStep, fmtHMS } from './player.js';
-import { fsConnected, fsListFolder, fsGetFile, VIDEO_ROOT } from './localfs.js';
+import { fsVideosReady, fsListFolder, fsGetFile, VIDEO_ROOT } from './localfs.js';
 import { toast, esc } from './ui.js';
 
 let live = null;
@@ -138,7 +138,7 @@ function makePane(root, { label, src, name, onClose }) {
 // Everything in the cth folder that looks like film, flat enough to pick
 // from without building a second file browser.
 async function libraryChoices() {
-  if (!fsConnected()) return [];
+  if (!fsVideosReady()) return [];
   const out = [];
   const walk = async (path, depth) => {
     if (depth > 2 || out.length > 200) return;

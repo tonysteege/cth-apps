@@ -40,7 +40,9 @@ handle is remembered in the `cth-files` IndexedDB (store `handles`, key
   /videos, /videos/exports, /videos/recordings, /diagrams
 
 which are the SAME path strings the Dropbox build stored on each game
-record, so an existing library keeps resolving with no migration. Nothing
+record, so an existing library keeps resolving with no migration.
+`/videos` is a MOUNT (2026-09-04): Clips can point it at any folder on
+disk and remembers that until it is changed - see the Clips rules. Nothing
 is uploaded and no network call is made. Two things only Dropbox could do
 are gone and cannot be rebuilt locally: PUBLIC LINKS for Notion embeds and
 emailed clips (a local file has no URL - `clipEmbedUrl` now throws a
@@ -248,6 +250,35 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
   which is also the scrub decoder's fast path (`File.slice` rather than
   HTTP range requests), so local film scrubs better than Dropbox film did.
   The legacy `cthc.dbx.v1` localStorage key is dead but is left alone.
+- **THE VIDEO FOLDER IS A MOUNT, NOT A FIXED PLACE** (2026-09-04, Tony's
+  call). `/videos` used to mean `<cth>/videos` and nothing else; Tony can now
+  point it at any folder on disk - another drive, a season folder, anywhere -
+  and Clips remembers that choice until he changes it or presses Use Default
+  Folder. Rules that keep this safe:
+  - ONLY THE RESOLUTION CHANGED. Every stored string is still `/videos/...`,
+    so no game record, clip, export path or Dropbox-era library was rewritten
+    and resetting to the default makes an old library resolve exactly as it
+    did. Do not "simplify" this by storing absolute paths on records.
+  - IT IS APPLIED IN EXACTLY ONE PLACE: `baseFor()` in `clips/js/localfs.js`,
+    which `dirFor` calls. A path whose first segment is `videos` starts at the
+    custom handle when there is one; everything else (`/diagrams`) starts at
+    the CTH root, untouched. Nothing else in any app knows the difference.
+  - THE HANDLE HAS ITS OWN IndexedDB KEY (`cth-files` / `handles` / `videos`)
+    and its own permission flag. Choosing a video folder must never disturb
+    the CTH root, which Diagrams and Slides also write through, and either
+    handle can need a click while the other is live - hence the separate
+    Reconnect Your Video Folder card, which is NOT the CTH reconnect card.
+  - `fsVideosReady()`, NOT `fsConnected()`, IS THE GATE FOR A VIDEO PATH. With
+    a custom folder the CTH root is not on the way to the film, so Clips runs
+    on the video folder alone - the point of pointing it at another drive.
+    app.js, export.js and compare.js all use it; a new video-path caller must.
+  - `fsLabel` prints the custom folder's real name in place of `videos`, and
+    the breadcrumb roots the trail at that folder rather than under the CTH
+    chip. Printing "videos" under the CTH folder's name would name a place the
+    film is not in.
+  - Covered by `tests/clips-video-folder.html` (fake handles and a fake
+    IndexedDB): default resolution, a pick, persistence across a reload, the
+    reset, and `/diagrams` staying put.
 - Marks (clips, tags, freezes) AUTOSAVE to the `cth-clips` IndexedDB - a
   coach tagging at game speed cannot stop for a Save button. Do not copy
   the Diagrams manual-save rule here; they are different by design.

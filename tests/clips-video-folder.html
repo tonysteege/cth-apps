@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Clips Video Folder Test</title></head>
+<body>
+  <output id="result">Running</output>
+  <pre id="log"></pre>
+  <script type="module">
+    // What this proves: '/videos' is a MOUNT. The same stored path string
+    // resolves inside the CTH folder by default and inside a folder Tony
+    // picked once he has picked one, the choice survives a reload, resetting
+    // puts it back, and no other path (/diagrams) is affected.
+    const failures = [];
+    const notes = [];
+    const check = (ok, msg) => { if (!ok) failures.push(msg); else notes.push(`ok: ${msg}`); };
+
+    // ---- fake directory handles (the browser's, minus the disk) ----
+    function fdir(name, kids = {}) {
+      return {
+        kind: 'directory', name,
+        async getDirectoryHandle(n, { create = false } = {}) {
+          if (kids[n]?.kind === 'directory') return kids[n];
+          if (!create) { const e = new Error('not found'); e.name = 'NotFoundError'; throw e; }
+          kids[n] = fdir(n); return kids[n];
+        },
+        async getFileHandle(n, { create = false } = {}) {
+          if (kids[n]?.kind === 'file') return kids[n];
+          if (!create) { const e = new Error('not found'); e.name = 'NotFoundError'; throw e; }
+          kids[n] = ffile(n); return kids[n];
+        },
+        async *entries() { for (const [k, v] of Object.entries(kids)) yield [k, v]; },
+        async queryPermission() { return 'granted'; },
+        async requestPermission() { return 'granted'; },
+      };
+    }
+    const ffile = (name) => ({ kind: 'file', name, async getFile() { return new File(['x'], name); } });
+
+    const cth = fdir('cth', {
+      videos: fdir('videos', { 'inside-cth.mp4': ffile('inside-cth.mp4') }),
+      diagrams: fdir('diagrams', { 'from-diagrams': fdir('from-diagrams') }),
+    });
+    const drive = fdir('game-film', { 'on-the-drive.mp4': ffile('on-the-drive.mp4') });
+
+    // ---- fake IndexedDB: the same store across both "sessions" ----
+    const shelf = new Map();
+    const fire = (obj, ev, val) => setTimeout(() => { obj.result = val; obj[ev]?.({ target: obj }); }, 0);
+    const fakeIdb = {
+      open() {
+        const req = {};
+        const store = {
+          get(k) { const r = {}; fire(r, 'onsuccess', shelf.get(k)); return r; },
+          put(v, k) { shelf.set(k, v); return {}; },
+          delete(k) { shelf.delete(k); return {}; },
+        };
+        const db = {
+          createObjectStore() {},
+          transaction() { const tx = { objectStore: () => store }; setTimeout(() => tx.oncomplete?.(), 0); return tx; },
+        };
+        fire(req, 'onsuccess', db);
+        return req;
+      },
+    };
+    Object.defineProperty(window, 'indexedDB', { configurable: true, get: () => fakeIdb });
+
+    let picked = cth;
+    window.showDirectoryPicker = async () => picked;
+
+    const names = async (fs, path) => (await fs.fsListFolder(path)).files.map((f) => f.name).join(',');
+
+    // ---- session one ----
+    const fs = await import('../clips/js/localfs.js?t=1');
+    await fs.fsConnect();
+    check(!fs.fsVideoCustom(), 'a fresh install uses the default videos folder');
+    check(await names(fs, '/videos') === 'inside-cth.mp4', '/videos reads cth/videos by default');
+    check(fs.fsVideosReady(), 'the default folder counts as ready for video paths');
+
+    picked = drive;
+    const chosen = await fs.fsPickVideoFolder();
+    check(chosen === 'game-film', 'picking a folder returns its name');
+    check(fs.fsVideoCustom() && fs.fsVideoName() === 'game-film', 'the custom folder is reported by name');
+    check(await names(fs, '/videos') === 'on-the-drive.mp4', '/videos now reads the picked folder');
+    check(fs.fsLabel('/videos/exports/a.mp4') === 'game-film/exports/a.mp4', 'a toast names the folder the file landed in');
+    const dg = await fs.fsListFolder('/diagrams');
+    check(dg.folders.map((f) => f.name).join(',') === 'from-diagrams', '/diagrams still resolves inside the CTH folder');
+
+    // ---- session two: a reload, same stored handles ----
+    const fs2 = await import('../clips/js/localfs.js?t=2');
+    check(!fs2.fsVideoCustom(), 'a fresh module starts with nothing loaded');
+    await fs2.fsInit();
+    check(fs2.fsVideoCustom() && fs2.fsVideoName() === 'game-film', 'the picked folder is remembered across sessions');
+    check(!fs2.fsVideoNeedsReconnect(), 'a granted folder needs no reconnect');
+    check(await names(fs2, '/videos') === 'on-the-drive.mp4', 'after a reload /videos still reads the picked folder');
+
+    // ---- and it is changeable, both ways ----
+    await fs2.fsResetVideoFolder();
+    check(!fs2.fsVideoCustom(), 'resetting drops the custom folder');
+    check(await names(fs2, '/videos') === 'inside-cth.mp4', 'resetting puts /videos back inside the CTH folder');
+    const fs3 = await import('../clips/js/localfs.js?t=3');
+    await fs3.fsInit();
+    check(!fs3.fsVideoCustom(), 'the reset is remembered too');
+
+    const result = document.getElementById('result');
+    result.dataset.status = failures.length ? 'fail' : 'pass';
+    result.textContent = failures.length ? `FAIL: ${failures.join(' | ')}` : `PASS: ${notes.length} checks`;
+    document.getElementById('log').textContent = notes.join('\n');
+  </script>
+</body>
+</html>

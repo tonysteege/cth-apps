@@ -13,6 +13,8 @@ import {
   fsSupported, fsInit, fsConnect, fsReconnect, fsDisconnect,
   fsConnected, fsRemembered, fsRootName,
   fsListFolder, fsCreateFolder, fsGetFile, fsWrite, fsLabel,
+  fsVideoCustom, fsVideoName, fsVideoNeedsReconnect, fsVideosReady,
+  fsPickVideoFolder, fsReconnectVideoFolder, fsResetVideoFolder,
   VIDEO_ROOT, EXPORT_ROOT,
 } from './localfs.js';
 import { listGames, getGame, putGame, deleteGame, getSettings, putSettings, uid } from './store.js';
@@ -82,21 +84,84 @@ async function go() {
 
 let browsePath = VIDEO_ROOT;
 
+// Can the library browse film right now? With a custom video folder the CTH
+// root is not on the way to it, so Clips runs on the video folder alone -
+// which is the point of being able to point it at another drive.
+const libReady = () => fsVideosReady();
+
 // The folder trail as a BoardUI breadcrumb: every ancestor is a real
 // button that jumps straight there (the old label plus the Up row made
 // deep folders a climb), the current folder is quiet text at the end.
 function crumbsHtml() {
   const segs = browsePath === VIDEO_ROOT ? [] : browsePath.replace(`${VIDEO_ROOT}/`, '').split('/');
-  const parts = [{ label: 'videos', path: VIDEO_ROOT }];
+  // With a custom video folder the trail must name the folder Tony actually
+  // picked: the path string is still '/videos', but printing the word
+  // "videos" under the CTH folder's name would describe a place his film is
+  // not in. The custom folder IS the root of the trail, so the CTH chip goes.
+  const custom = fsVideoCustom();
+  const parts = [{ label: custom ? fsVideoName() : 'videos', path: VIDEO_ROOT }];
   let acc = VIDEO_ROOT;
   for (const seg of segs) { acc += `/${seg}`; parts.push({ label: seg, path: acc }); }
   const items = parts.map((x, i) => (i === parts.length - 1
     ? `<span class="crumb crumb-cur">${esc(x.label)}</span>`
     : `<button class="crumb" data-cd="${esc(x.path)}">${esc(x.label)}</button>`));
   return `<nav class="crumbs" aria-label="Folder Path">
-    <span class="crumb crumb-root">${esc(fsRootName() || 'Folder')}</span>
+    ${custom ? '' : `<span class="crumb crumb-root">${esc(fsRootName() || 'Folder')}</span>`}
     ${items.join('<span class="crumb-sep" aria-hidden="true"></span>')}
   </nav>`;
+}
+
+// The video folder sheet: which folder Clips reads film from, and the two
+// ways to change it. It is its own sheet rather than a Settings row because
+// picking a folder needs a user gesture and reads better beside the trail
+// that shows where you are.
+function videoFolderSheet() {
+  return new Promise((res) => {
+    const custom = fsVideoCustom();
+    const where = custom ? fsVideoName() : `${fsRootName() || 'cth'}/videos`;
+    const wrap = document.createElement('div');
+    wrap.className = 'sheet-veil';
+    wrap.innerHTML = `
+      <div class="sheet" role="dialog" aria-modal="true">
+        <h3>Video Folder</h3>
+        <p>Clips is reading film from <strong>${esc(where)}</strong>${custom ? '' : ', the default folder inside your CTH folder'}. Exports go to an <strong>exports</strong> folder inside it.</p>
+        <p>Pick any folder you like, on this Mac or an external drive. Clips remembers it until you change it again. Your clips and tags are saved per video, so switching back brings them with it.</p>
+        <div class="sheet-row">
+          <button class="btn" data-x="cancel">Cancel</button>
+          ${custom ? '<button class="btn" data-x="reset">Use Default Folder</button>' : ''}
+          <button class="btn btn-ink" data-x="pick">Choose Folder</button>
+        </div>
+      </div>`;
+    const done = (v) => { wrap.remove(); window.removeEventListener('keydown', onEsc, true); res(v); };
+    const onEsc = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(null); } };
+    wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) done(null); });
+    wrap.querySelector('[data-x="cancel"]').onclick = () => done(null);
+    wrap.querySelector('[data-x="reset"]')?.addEventListener('click', () => done('reset'));
+    wrap.querySelector('[data-x="pick"]').onclick = () => done('pick');
+    window.addEventListener('keydown', onEsc, true);
+    document.body.appendChild(wrap);
+    wrap.querySelector('[data-x="pick"]').focus();
+  });
+}
+
+// Shared by the header button and the browser's own prompts.
+async function chooseVideoFolder() {
+  const what = await videoFolderSheet();
+  if (!what) return;
+  try {
+    if (what === 'reset') {
+      await fsResetVideoFolder();
+      toast('Using The Default Videos Folder');
+    } else {
+      const name = await fsPickVideoFolder();
+      toast(`Videos Now Read From ${name}`);
+    }
+    browsePath = VIDEO_ROOT;
+    await showLibrary();
+  } catch (e) {
+    if (e && e.name === 'AbortError') return;
+    toast(e.message || 'Could Not Open That Folder', true);
+  }
 }
 // The library search: what to look through is a scope, because "find the
 // video tagged powerplay" and "find the game with a powerplay clip in it"
@@ -132,7 +197,8 @@ async function showLibrary() {
       </div>
       <div class="lib-actions">
         <button class="btn" id="libLocal" title="Open A Video File From This Device (Marks Still Save)">Open File</button>
-        ${fsConnected() ? '<button class="btn" id="libUpload" title="Copy A Video Into This Folder - As-Is Or Compressed">Add Video</button>' : ''}
+        ${libReady() ? '<button class="btn" id="libUpload" title="Copy A Video Into This Folder - As-Is Or Compressed">Add Video</button>' : ''}
+        ${fsConnected() || fsVideoCustom() ? `<button class="btn" id="libVidFolder" title="Choose Which Folder Clips Reads Film From">${esc(fsVideoCustom() ? fsVideoName() : 'Video Folder')}</button>` : ''}
         ${fsConnected() ? `<button class="btn" id="libDbxOut" title="Choose A Different Folder">${esc(fsRootName())}</button>` : ''}
       </div>
     </header>
@@ -148,7 +214,7 @@ async function showLibrary() {
             </button>`).join('')}
         </div>` : ''}
       ${crumbsHtml()}
-      ${fsConnected() ? `
+      ${libReady() ? `
       <div class="clib-tools">
         <input id="clibSearch" type="search" placeholder="Search Videos, Tags, Clips…" value="${esc(libView.q)}" autocomplete="off">
         <select id="clibScope" title="What The Search Looks Through">
@@ -169,6 +235,8 @@ async function showLibrary() {
   $('#libLocal').onclick = () => $('#libFile').click();
   const up = $('#libUpload');
   if (up) up.onclick = () => openUploadSheet();
+  const vf = $('#libVidFolder');
+  if (vf) vf.onclick = () => void chooseVideoFolder();
   const search = $('#clibSearch');
   if (search) {
     search.addEventListener('input', () => { libView.q = search.value; void paintBrowser(); });
@@ -217,7 +285,27 @@ async function showLibrary() {
 async function paintBrowser() {
   const box = $('#clibBrowser');
   if (!box) return;
-  if (!fsConnected()) {
+  // A custom video folder whose permission lapsed is its own state: the CTH
+  // folder may be perfectly fine, and asking to reconnect that one would not
+  // fix the folder the film is actually in.
+  if (fsVideoNeedsReconnect()) {
+    box.innerHTML = `
+      <div class="dbx-card">
+        <h2>Reconnect Your Video Folder</h2>
+        <p>Clips reads your film from <strong>${esc(fsVideoName())}</strong>. The browser needs you to allow that folder again after a restart.</p>
+        <div class="dbx-row">
+          <button class="btn btn-ink" id="vidGo">Reconnect Video Folder</button>
+          <button class="btn" id="vidOther">Choose A Different Folder</button>
+        </div>
+      </div>`;
+    $('#vidGo').onclick = async () => {
+      try { await fsReconnectVideoFolder(); await showLibrary(); }
+      catch (e) { if (e && e.name !== 'AbortError') toast(e.message || 'Could Not Open That Folder', true); }
+    };
+    $('#vidOther').onclick = () => void chooseVideoFolder();
+    return;
+  }
+  if (!libReady()) {
     const noApi = !fsSupported();
     box.innerHTML = `
       <div class="dbx-card">
@@ -237,6 +325,7 @@ async function paintBrowser() {
           <div class="dbx-row">
             <button class="btn btn-ink" id="dbxGo">${fsRemembered() ? 'Reconnect Folder' : 'Choose Folder'}</button>
             ${fsRemembered() ? '<button class="btn" id="dbxOther">Pick A Different Folder</button>' : ''}
+            <button class="btn" id="dbxVid" title="Use Any Folder On This Mac Or An External Drive For Film">Use A Different Video Folder</button>
           </div>`}
       </div>`;
     $('#dbxGo').onclick = async () => {
@@ -249,6 +338,8 @@ async function paintBrowser() {
         toast(e.message || 'Could Not Open That Folder', true);
       }
     };
+    const vid = $('#dbxVid');
+    if (vid) vid.onclick = () => void chooseVideoFolder();
     const other = $('#dbxOther');
     if (other) other.onclick = async () => {
       try { await fsConnect(); await go(); }
@@ -259,7 +350,10 @@ async function paintBrowser() {
   try {
     const [{ folders, files, missing }, games] = await Promise.all([fsListFolder(browsePath), listGames()]);
     if (missing) {
-      box.innerHTML = `<div class="clib-note">No "videos" Folder In ${esc(fsRootName())} Yet - Create One And Drop Game Film In It.</div>`;
+      box.innerHTML = fsVideoCustom()
+        ? `<div class="clib-note">That Folder Is Not There Any More - <button class="mini" id="dbxPickVid">Choose Another Video Folder</button></div>`
+        : `<div class="clib-note">No "videos" Folder In ${esc(fsRootName())} Yet - Create One And Drop Game Film In It, Or <button class="mini" id="dbxPickVid">Choose Another Video Folder</button>.</div>`;
+      $('#dbxPickVid').onclick = () => void chooseVideoFolder();
       return;
     }
     const byPath = new Map(games.map((g) => [g.id, g]));
@@ -946,7 +1040,7 @@ async function exportClipVideo(game, clip) {
 async function exportFrame(game, canvas, freeze) {
   const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
   const name = `${stem(game.name)}-frame-${fmtTime(freeze.t).replace(':', 'm')}s.png`;
-  if (game.source !== 'local' && fsConnected()) {
+  if (game.source !== 'local' && fsVideosReady()) {
     try {
       await fsWrite(`${EXPORT_ROOT}/${name}`, blob);
       toast(`Frame Saved To ${fsLabel(EXPORT_ROOT)}/${name}`);

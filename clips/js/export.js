@@ -17,7 +17,7 @@
 // The canvas is sized to the video's own pixels so the export looks like the
 // file, which is the same rule the scrub engine had to learn.
 
-import { fsConnected, fsWrite, fsLabel } from './localfs.js';
+import { fsVideosReady, fsWrite, fsLabel } from './localfs.js';
 import { toast } from './ui.js';
 
 const pad2 = (n) => String(n).padStart(2, '0');
@@ -63,7 +63,7 @@ export function sourceFolder(game) {
 // was trying to write, because "export failed" alone is not actionable.
 export async function deliver(game, blob, filename) {
   const dir = sourceFolder(game);
-  if (game.source !== 'local' && dir && fsConnected()) {
+  if (game.source !== 'local' && dir && fsVideosReady()) {
     try {
       await fsWrite(`${dir}/${filename}`, blob);
       return { ok: true, where: `${fsLabel(dir)}/${filename}` };
