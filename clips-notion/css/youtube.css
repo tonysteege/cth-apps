@@ -1,0 +1,18 @@
+/* YouTube source support for Clips Notion. */
+.cn-youtube-stage { outline: none; }
+.cn-youtube-stage:focus-visible { box-shadow: inset 0 0 0 2px #75d8ff; }
+.cn-youtube, .cn-youtube iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.cn-input { position: absolute; inset: 0; z-index: 1; cursor: pointer; touch-action: none; }
+.cn-stage canvas.cn-marks { z-index: 2; }
+.cn-stage.is-armed canvas.cn-marks, .cn-stage.is-select canvas.cn-marks { z-index: 3; }
+.cn-youtube-stage .cn-big { z-index: 2; }
+.cn-loading { position: absolute; inset: 0; z-index: 4; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: rgb(255 255 255 / .72); background: #0a0a0a; font-size: 13px; pointer-events: none; transition: opacity var(--dur) ease; }
+.cn-loading strong { color: #fff; font-size: 15px; font-weight: 600; }
+.cn-stage:not(.is-loading):not(.has-error) .cn-loading { opacity: 0; visibility: hidden; }
+.cn-spinner { width: 24px; height: 24px; border-radius: 999px; border: 2px solid rgb(255 255 255 / .2); border-top-color: #fff; animation: cn-spin 700ms linear infinite; }
+.cn-scrub-hud { position: absolute; left: 50%; bottom: 18px; z-index: 4; transform: translate(-50%, 8px); opacity: 0; min-width: 88px; padding: 8px 12px; border-radius: 8px; background: rgb(10 10 10 / .82); color: #fff; font: 600 13px/1 ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; text-align: center; transition: opacity var(--dur) ease, transform var(--dur) ease; pointer-events: none; }
+.cn-stage.is-scrubbing .cn-scrub-hud { opacity: 1; transform: translate(-50%, 0); }
+.cn-bar a.cn-btn { text-decoration: none; }
+.cn-tl:focus-visible { outline: 2px solid #75d8ff; outline-offset: 2px; border-radius: 8px; }
+@keyframes cn-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .cn-spinner { animation-duration: 1.4s; } .cn-loading, .cn-scrub-hud { transition: none; } }
