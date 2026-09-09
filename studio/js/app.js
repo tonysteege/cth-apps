@@ -13,6 +13,7 @@
 //   #/new?path=  a new project on a Dropbox path
 
 import * as dbx from './dropbox.js';
+import * as lfs from '../../clips/js/localfs.js';
 import * as store from './store.js';
 import { el, h, toast, fail, sheet, confirmSheet, promptSheet, icon, ICONS, bytes, tc } from './ui.js';
 import { openEditor, closeEditor } from './editor.js';
@@ -25,6 +26,11 @@ let booted = false;
 async function boot() {
   if (booted) return;
   booted = true;
+  // The local CTH folder is a File System Access handle remembered in
+  // IndexedDB, on the SAME origin as Clips - so a folder connected in either
+  // app is already live here, and film browses without a second pick. This
+  // never prompts; a lapsed permission just shows a Reconnect button.
+  try { await lfs.fsInit(); } catch (_) {}
   try {
     if (await dbx.finishAuth()) toast('Dropbox connected.', 'ok');
   } catch (e) { fail(e); }
@@ -127,12 +133,126 @@ async function projectMenu(p) {
   }
 }
 
-// ---- the Dropbox browser ---------------------------------------------------
+// ---- the film browser ------------------------------------------------------
+//
+// TWO SOURCES, ONE FOLDER OF FILM. The local folder (File System Access,
+// desktop Chrome/Edge) and Dropbox point at the SAME games, because Tony's
+// local CTH/Videos mirrors Dropbox CTH-DB/Videos. Folder is the fast path on
+// the Mac - real File bytes, no four-hour temp link - and Dropbox stays for
+// the iPad, the phone and inside a Notion embed, where no folder picker
+// exists. The toggle only appears where the folder API does.
 
 async function renderBrowser(host) {
   host.replaceChildren();
-  host.appendChild(h('div', { class: 'row', style: { marginBottom: '10px' } }, h('h2', { text: 'Game film' })));
+  const supported = lfs.fsSupported();
+  let mode = store.settings().filmSource || (supported ? 'folder' : 'dropbox');
+  if (mode === 'folder' && !supported) mode = 'dropbox';
 
+  const head = h('div', { class: 'row', style: { marginBottom: '10px' } }, h('h2', { text: 'Game film' }), h('div', { class: 'grow' }));
+  if (supported) {
+    const seg = h('div', { class: 'seg' });
+    const tab = (id, label) => h('button', {
+      class: id === mode ? 'on' : '',
+      onclick: () => { if (id !== mode) { store.saveSettings({ filmSource: id }); renderBrowser(host); } },
+    }, label);
+    seg.append(tab('folder', 'Folder'), tab('dropbox', 'Dropbox'));
+    head.appendChild(seg);
+  }
+  host.appendChild(head);
+
+  if (mode === 'folder') return renderFolderBrowser(host);
+  return renderDropboxBrowser(host);
+}
+
+// ---- the local folder browser ----------------------------------------------
+
+let folderPath = null;
+
+async function reconnectFolder() {
+  if (lfs.fsVideoNeedsReconnect()) return lfs.fsReconnectVideoFolder();
+  return lfs.fsReconnect();
+}
+
+async function renderFolderBrowser(host) {
+  if (!lfs.fsSupported()) {
+    host.appendChild(h('p', { class: 'small muted', text: 'This browser cannot open a folder. Use Chrome or Edge on a computer, or switch to Dropbox above.' }));
+    return;
+  }
+  if (!lfs.fsVideosReady()) {
+    const remembered = lfs.fsRemembered() || lfs.fsVideoCustom();
+    host.appendChild(h('p', { class: 'small muted', text: remembered
+      ? 'Reconnect your CTH folder to browse game film from this Mac.'
+      : 'Connect your local CTH folder to browse game film from this Mac. It mirrors your Dropbox games folder, and nothing is uploaded.' }));
+    host.appendChild(h('button', {
+      class: 'btn primary', style: { width: '100%', marginBottom: '8px' },
+      onclick: async () => {
+        try { remembered ? await reconnectFolder() : await lfs.fsConnect(); renderLibrary(); }
+        catch (e) { fail(e); }
+      },
+    }, remembered ? 'Reconnect folder' : 'Connect CTH folder'));
+    host.appendChild(h('button', { class: 'btn', style: { width: '100%' }, onclick: openLocal }, 'Open a file instead'));
+    return;
+  }
+
+  const path = folderPath ?? lfs.VIDEO_ROOT;
+  const parts = String(path).split('/').filter(Boolean); // e.g. ['videos','Games']
+  const crumbs = h('div', { class: 'crumbs' });
+  crumbs.appendChild(h('button', { text: lfs.fsVideoName() || 'Videos', onclick: () => { folderPath = lfs.VIDEO_ROOT; renderFolderBrowser(host); } }));
+  parts.slice(1).forEach((seg, i) => {
+    crumbs.appendChild(h('span', { class: 'tiny muted', text: '/' }));
+    const to = `/${parts.slice(0, i + 2).join('/')}`;
+    if (i === parts.length - 2) crumbs.appendChild(h('b', { text: seg }));
+    else crumbs.appendChild(h('button', { text: seg, onclick: () => { folderPath = to; renderFolderBrowser(host); } }));
+  });
+  host.appendChild(crumbs);
+
+  const filter = h('input', { class: 'input', placeholder: 'Filter this folder', style: { marginBottom: '10px' } });
+  host.appendChild(filter);
+  const tree = h('div', { class: 'tree' }, h('div', { class: 'small muted', text: 'Loading' }));
+  host.appendChild(tree);
+
+  let data;
+  try { data = await lfs.fsListFolder(path); }
+  catch (e) { tree.replaceChildren(h('div', { class: 'small muted', style: { padding: '10px 8px' }, text: String(e.message) })); return; }
+
+  function paint() {
+    const q = filter.value.trim().toLowerCase();
+    tree.replaceChildren();
+    if (path !== lfs.VIDEO_ROOT && parts.length) {
+      tree.appendChild(h('button', {
+        class: 'tree-row', onclick: () => { folderPath = `/${parts.slice(0, -1).join('/')}`; renderFolderBrowser(host); },
+      }, icon(ICONS.back), h('span', { class: 'nm muted', text: 'Up' })));
+    }
+    const folders = data.folders.filter((f) => !q || f.name.toLowerCase().includes(q));
+    const files = data.files.filter((f) => !q || f.name.toLowerCase().includes(q));
+    if (data.missing) { tree.appendChild(h('div', { class: 'small muted', style: { padding: '10px 8px' }, text: 'That folder is not here yet.' })); return; }
+    if (!folders.length && !files.length) { tree.appendChild(h('div', { class: 'small muted', style: { padding: '10px 8px' }, text: 'Nothing here.' })); return; }
+    for (const f of folders) {
+      tree.appendChild(h('button', { class: 'tree-row', onclick: () => { folderPath = f.path; renderFolderBrowser(host); } },
+        icon(ICONS.folder), h('span', { class: 'nm', text: f.name })));
+    }
+    for (const f of files) {
+      tree.appendChild(h('button', { class: 'tree-row', onclick: () => startFolderProject(f) },
+        icon(ICONS.film), h('span', { class: 'nm', text: f.name }), h('span', { class: 'tiny muted', text: bytes(f.size) })));
+    }
+  }
+  filter.addEventListener('input', paint);
+  paint();
+}
+
+async function startFolderProject(entry) {
+  const p = store.blankProject({
+    name: entry.name.replace(/\.[a-z0-9]+$/i, ''),
+    source: { kind: 'folder', path: entry.path, name: entry.name, size: entry.size },
+    publish: guessPublish(entry.name),
+  });
+  await store.put(p);
+  go(`#/p/${p.id}`);
+}
+
+// ---- the Dropbox browser ---------------------------------------------------
+
+async function renderDropboxBrowser(host) {
   if (!dbx.appKey()) {
     host.appendChild(h('p', { class: 'small muted', text: 'Connect Dropbox to browse your game folder from any device, including this iPad and inside a Notion embed. Or just open a file from this device.' }));
     host.appendChild(h('button', { class: 'btn primary', style: { width: '100%', marginBottom: '8px' }, onclick: settingsSheet }, 'Set up Dropbox'));
@@ -321,6 +441,33 @@ async function settingsSheet() {
       }, 'Connect'));
     }
     body.appendChild(status);
+
+    // -- Local folder
+    body.appendChild(h('h3', { class: 'small', style: { margin: '4px 0 8px', fontWeight: '800' }, text: 'Local folder' }));
+    if (!lfs.fsSupported()) {
+      body.appendChild(h('p', { class: 'tiny muted', style: { marginBottom: '14px' }, text: 'This browser cannot open a folder. Chrome or Edge on a computer can browse your CTH folder directly; on iPad, phone or inside a Notion embed, use Dropbox above.' }));
+    } else {
+      body.appendChild(h('p', { class: 'tiny muted', text: 'Browse game film straight from your CTH folder on this Mac. It mirrors your Dropbox games folder, reads faster, and never uploads anything. The same folder is shared with Clips.' }));
+      const fstatus = h('div', { class: 'row', style: { marginBottom: '14px' } });
+      if (lfs.fsVideosReady()) {
+        fstatus.appendChild(h('span', { class: 'small muted', text: `Connected: ${lfs.fsVideoName() || lfs.fsRootName()}` }));
+        fstatus.appendChild(h('div', { class: 'grow' }));
+        fstatus.appendChild(h('button', {
+          class: 'btn mini', onclick: async () => { await lfs.fsDisconnect(); toast('Folder disconnected.'); close(null); renderLibrary(); },
+        }, 'Disconnect'));
+      } else if (lfs.fsRemembered() || lfs.fsVideoCustom()) {
+        fstatus.appendChild(h('span', { class: 'small muted', text: 'Folder access expired.' }));
+        fstatus.appendChild(h('div', { class: 'grow' }));
+        fstatus.appendChild(h('button', {
+          class: 'btn mini primary', onclick: async () => { try { await reconnectFolder(); toast('Folder reconnected.', 'ok'); close(null); renderLibrary(); } catch (e) { fail(e); } },
+        }, 'Reconnect'));
+      } else {
+        fstatus.appendChild(h('button', {
+          class: 'btn mini primary', onclick: async () => { try { await lfs.fsConnect(); toast('Folder connected.', 'ok'); close(null); renderLibrary(); } catch (e) { fail(e); } },
+        }, 'Connect CTH folder'));
+      }
+      body.appendChild(fstatus);
+    }
 
     // -- Scrub
     body.appendChild(h('h3', { class: 'small', style: { margin: '4px 0 8px', fontWeight: '800' }, text: 'Scrubbing' }));

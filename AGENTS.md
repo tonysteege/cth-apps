@@ -1544,12 +1544,26 @@ LOGS, STUDIO PRODUCES - two jobs, two apps, one folder. Do not merge them.
   stage is already a canvas, so there is no `.scrub-paint` overlay and no
   settle/swap; and the gesture drives OUTPUT time, so scrubbing through a
   freeze holds and through a ramp slows, for free.
-- **DROPBOX IS THE FILM SOURCE, AND IT IS DELIBERATE** (Tony's call). Clips
-  was right to move to the local CTH folder; Studio has the opposite
-  requirement - it must run on an iPad, a phone and inside a Notion embed,
-  where `showDirectoryPicker` does not exist, and it must hand out a URL,
-  because a video that lives on one Mac cannot be embedded or sent. Those are
-  exactly the two things AGENTS.md says only Dropbox could do.
+- **DROPBOX IS THE PORTABLE FILM SOURCE, AND KEEPING IT IS DELIBERATE**
+  (Tony's call). Clips moved to the local CTH folder; Studio must ALSO run on
+  an iPad, a phone and inside a Notion embed, where `showDirectoryPicker` does
+  not exist, and it must be able to hand out a URL, because a video that lives
+  on one Mac cannot be embedded or sent. So Dropbox stays, and no change may
+  remove it.
+- **THE LOCAL CTH FOLDER IS A SECOND, EQUAL SOURCE ON THE DESKTOP**
+  (2026-09-09, Tony's ask). Studio imports Clips' `clips/js/localfs.js` - never
+  reimplemented - and browses game film straight from the CTH folder via the
+  File System Access API on Chrome/Edge. This is the same directory handle
+  Clips uses: it lives in the per-origin `cth-files` IndexedDB, so a folder
+  connected in either app is already live in the other, and film browses with
+  no second pick. Tony's local CTH/Videos MIRRORS Dropbox CTH-DB/Videos (his
+  Dropbox desktop sync keeps them in step), so both browsers show the same
+  games; the local one is just faster (real `File` bytes, no four-hour temp
+  link) and offline. A `filmSource` setting ('folder' | 'dropbox') remembers
+  the last-used browser and a toggle appears in the library only where the
+  folder API exists. On an iPad, a phone or a Notion embed the toggle is
+  absent and Dropbox is the only browser - which is the whole reason Dropbox
+  stays.
   - AUTH IS PKCE WITH NO SECRET ANYWHERE. A Dropbox app key for a public
     client is an identifier, not a credential. So Studio adds NO Worker route,
     NO repo secret and NO server state - a lower bar than the Slides Worker
@@ -1557,10 +1571,13 @@ LOGS, STUDIO PRODUCES - two jobs, two apps, one folder. Do not merge them.
     localStorage; Disconnect revokes it at Dropbox.
   - Film lives under `/CTH-DB/Videos/Games`, exports under
     `/CTH-DB/Videos/Studio`. Both are settings, not constants.
-  - THERE ARE THREE SOURCES AND NONE IS SECOND CLASS: `dropbox` (a path),
-    `url` (a durable address - a Clips export, a share link, anything hosted)
-    and `local` (a picked File, which no browser can reopen after a reload, so
-    the editor asks for it again and says why).
+  - THERE ARE FOUR SOURCES AND NONE IS SECOND CLASS: `dropbox` (a path),
+    `folder` (a path under the local CTH folder, resolved through
+    `localfs.js`; it DOES survive a reload because the directory handle is
+    remembered, but the grant can lapse after a restart, so the editor asks
+    for it back from a click and says why), `url` (a durable address - a Clips
+    export, a share link, anything hosted) and `local` (a picked File, which
+    no browser can reopen after a reload, so the editor asks for it again).
   - `source.url` MEANS THE DURABLE ADDRESS OF A `kind:'url'` SOURCE AND
     NOTHING ELSE. A Dropbox temp link expires in four hours and an objectURL
     dies with the page; both live on the session (`cur.mediaUrl` /

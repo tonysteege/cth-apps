@@ -14,6 +14,7 @@
 
 import * as store from './store.js';
 import * as dbx from './dropbox.js';
+import * as lfs from '../../clips/js/localfs.js';
 import { ScrubEngine } from './scrub.js';
 import { composite, cameraAt, buildView, formatSize, FORMATS, QUALITY } from './render.js';
 import { compile, sourceAt, rateAt, holdAt, addHold, addRate, addCut, removeOp, uid } from './timemap.js';
@@ -214,6 +215,24 @@ async function loadFilm() {
       }
       url = URL.createObjectURL(file);
       cur.objectUrl = url;
+    } else if (s.kind === 'folder') {
+      // A file in the local CTH folder. Unlike a picked file this DOES survive
+      // a reload - the directory handle is remembered in IndexedDB - but the
+      // browser can still let the grant lapse after a restart, so ask for it
+      // back from a click rather than failing.
+      if (!lfs.fsVideosReady()) {
+        setBadge('Film not loaded', true);
+        const ok = await confirmSheet('Reconnect your film folder',
+          'This project points at a file in your local CTH folder. After a restart the browser needs you to grant access again from a click. The telestration is safe.',
+          { ok: 'Reconnect' });
+        if (!ok) return;
+        if (lfs.fsVideoNeedsReconnect()) await lfs.fsReconnectVideoFolder();
+        else await lfs.fsReconnect();
+        if (!lfs.fsVideosReady()) { setBadge('Film unavailable', true); return; }
+      }
+      file = await lfs.fsGetFile(s.path);
+      url = URL.createObjectURL(file);
+      cur.objectUrl = url;
     } else if (s.kind === 'url') {
       // A plain URL: something already hosted, a Clips export, a share link.
       // It needs CORS and Range to scrub well, and degrades to seeking if not.
@@ -273,7 +292,7 @@ async function loadFilm() {
   // The decoder is the difference between a scrub that reads as film and one
   // that reads as a slideshow; it is opened in the background because it needs
   // to index the file first, and the app must be usable while it does.
-  cur.engine.attach(`studio:${cur.p.id}`, file, s.kind === 'local' ? null : url)
+  cur.engine.attach(`studio:${cur.p.id}`, file, (s.kind === 'local' || s.kind === 'folder') ? null : url)
     .then((src) => { if (src) setBadge('Fast scrub', false, 1400); })
     .catch(() => {});
 

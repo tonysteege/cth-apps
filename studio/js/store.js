@@ -10,7 +10,7 @@
 // a year.
 //
 //   { id, name, created, updated, thumb,
-//     source: { kind:'dropbox'|'local', path, name, w, h, duration },
+//     source: { kind:'dropbox'|'folder'|'url'|'local', path, url, name, w, h, duration },
 //     format: { aspect },
 //     timeline: { in, out, ops[] },
 //     camera: [{ t, cx, cy, zoom }],
@@ -161,6 +161,7 @@ const DEFAULTS = {
   quality: 'hd',
   audio: true,
   saveTo: 'dropbox',      // 'dropbox' | 'download'
+  filmSource: 'folder',   // 'folder' | 'dropbox' - which browser the library shows
   namePattern: '{hook} - {league} {season} - {teamA} - {teamB} - {tag}',
   defaultColor: 'red',
   holdDur: 1.6,
