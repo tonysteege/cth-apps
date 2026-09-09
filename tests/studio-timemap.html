@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Studio Time Map Test</title></head>
+<body>
+  <output id="result">Running</output>
+  <pre id="log"></pre>
+  <script type="module">
+    // What this proves: the time map is the one place output time and source
+    // time meet, and it gets the awkward cases right. Every other clock in
+    // Studio - the playhead, the annotation timings, the exporter's frame loop
+    // - reads through `sourceAt`, so a bug here shows up as an export that
+    // disagrees with the preview, which is the hardest kind to chase.
+    import {
+      compile, sourceAt, outputAt, rateAt, holdAt, normalizeOps,
+      addHold, addRate, addCut, removeOp,
+    } from '../studio/js/timemap.js';
+    import { markPhase, ptsAt } from '../studio/js/marks.js';
+    import { buildView, cameraAt, formatSize } from '../studio/js/render.js';
+
+    const failures = [];
+    const notes = [];
+    const check = (ok, msg) => { if (!ok) failures.push(msg); else notes.push(`ok: ${msg}`); };
+    const near = (a, b, eps = 1e-6) => Math.abs(a - b) < eps;
+    const eq = (a, b, msg, eps) => check(near(a, b, eps), `${msg} (got ${a}, wanted ${b})`);
+
+    // ---- plain playback -----------------------------------------------------
+    {
+      const m = compile({ in: 0, out: 10, ops: [] }, 30);
+      eq(m.duration, 10, 'no ops: output length is the trim');
+      eq(sourceAt(m, 4), 4, 'no ops: output time is source time');
+      eq(rateAt(m, 4), 1, 'no ops: rate is 1');
+      check(!holdAt(m, 4), 'no ops: nothing is frozen');
+    }
+
+    // ---- trim ---------------------------------------------------------------
+    {
+      const m = compile({ in: 5, out: 9, ops: [] }, 30);
+      eq(m.duration, 4, 'trim: output length is out - in');
+      eq(sourceAt(m, 0), 5, 'trim: output zero is the in point');
+      eq(sourceAt(m, 4), 9, 'trim: the end is the out point');
+      // Out of range must CLAMP, never run off the file - the exporter asks for
+      // one frame past the end on the last iteration of a rounded frame count.
+      eq(sourceAt(m, 99), 9, 'trim: past the end clamps to the out point');
+      eq(sourceAt(m, -3), 5, 'trim: before the start clamps to the in point');
+    }
+
+    // ---- freeze -------------------------------------------------------------
+    {
+      const m = compile({ in: 0, out: 10, ops: [{ kind: 'hold', at: 4, dur: 2, id: 'h' }] }, 30);
+      eq(m.duration, 12, 'freeze: adds its length to the output');
+      eq(sourceAt(m, 3), 3, 'freeze: before it, time is untouched');
+      eq(sourceAt(m, 4.5), 4, 'freeze: inside it, the frame is held');
+      eq(sourceAt(m, 5.9), 4, 'freeze: still held at its end');
+      eq(sourceAt(m, 7), 5, 'freeze: after it, time carries on from where it stopped');
+      eq(rateAt(m, 5), 0, 'freeze: the rate is zero');
+      check(!!holdAt(m, 5), 'freeze: holdAt finds it');
+      check(!holdAt(m, 3), 'freeze: holdAt is null outside it');
+      // The op is reachable from the span, which is how "Clear fx" finds it.
+      check(holdAt(m, 5).op.id === 'h', 'freeze: the span carries its op back');
+    }
+
+    // ---- slow motion --------------------------------------------------------
+    {
+      const m = compile({ in: 0, out: 10, ops: [{ kind: 'rate', from: 4, to: 6, rate: 0.5, id: 'r' }] }, 30);
+      eq(m.duration, 12, 'slow: two seconds at half speed take four');
+      eq(sourceAt(m, 4), 4, 'slow: it starts where it says');
+      eq(sourceAt(m, 6), 5, 'slow: halfway through the ramp is halfway through the source');
+      eq(sourceAt(m, 8), 6, 'slow: it ends where it says');
+      eq(sourceAt(m, 9), 7, 'slow: after it, plain speed resumes');
+      eq(rateAt(m, 5), 0.5, 'slow: the rate is reported');
+      eq(rateAt(m, 9), 1, 'slow: outside it the rate is 1');
+    }
+
+    // ---- cut ----------------------------------------------------------------
+    {
+      const m = compile({ in: 0, out: 10, ops: [{ kind: 'cut', from: 3, to: 6, id: 'c' }] }, 30);
+      eq(m.duration, 7, 'cut: removes its length from the output');
+      eq(sourceAt(m, 2.9), 2.9, 'cut: before it, untouched');
+      eq(sourceAt(m, 3.5), 6.5, 'cut: after it, the source jumps past the removed part');
+    }
+
+    // ---- the three together -------------------------------------------------
+    {
+      const tl = {
+        in: 2,
+        out: 12,
+        ops: [{ kind: 'hold', at: 5, dur: 2, id: 'h' }, { kind: 'rate', from: 6, to: 8, rate: 0.25, id: 'r' }],
+      };
+      const m = compile(tl, 20);
+      // 3 played + 2 frozen + 1 played + (2 / 0.25 = 8) slowed + 4 played
+      eq(m.duration, 18, 'combined: lengths add up');
+      eq(sourceAt(m, 3.5), 5, 'combined: the freeze still holds');
+      eq(sourceAt(m, 10), 7, 'combined: the ramp is measured from its own start');
+      eq(sourceAt(m, outputAt(m, 9.3)), 9.3, 'combined: source -> output -> source round-trips');
+      // A frozen frame owns a stretch of output; outputAt answers with the
+      // FIRST moment showing it, which is what "scroll to this frame" wants.
+      eq(outputAt(m, 5), 3, 'combined: outputAt on a held frame gives where the hold starts');
+      // Spans must tile the output with no gaps, or a frame lands nowhere.
+      let edge = 0;
+      let gap = false;
+      for (const sp of m.spans) { if (!near(sp.o0, edge)) gap = true; edge = sp.o1; }
+      check(!gap, 'combined: spans tile output time with no gaps');
+      eq(edge, m.duration, 'combined: spans reach the end');
+    }
+
+    // ---- normalisation ------------------------------------------------------
+    {
+      const n = normalizeOps([
+        { kind: 'rate', from: 8, to: 4, rate: 0.5 },     // backwards
+        { kind: 'rate', from: 1, to: 1, rate: 0.5 },     // empty
+        { kind: 'rate', from: 2, to: 3, rate: 1 },       // a rate of 1 is not an effect
+        { kind: 'hold', at: 3, dur: 0 },                 // a hold of nothing
+        { kind: 'wobble', at: 3 },                       // a kind from the future
+      ], 0, 10);
+      check(n.ranges.length === 1, 'normalise: backwards is flipped, empty and no-op dropped');
+      eq(n.ranges[0].from, 4, 'normalise: the flipped range starts at the lower end');
+      check(n.holds.length === 0, 'normalise: a zero-length hold is dropped');
+      // An unknown kind must be SKIPPED, not guessed at - that is what makes
+      // the format additive: a project written by a newer build still opens.
+      check(!n.ranges.some((o) => o.kind === 'wobble'), 'normalise: an unknown kind is skipped, not guessed');
+    }
+    {
+      // Overlapping ranges: the earlier one wins the contested ground, and
+      // nothing is emitted twice.
+      const m = compile({
+        in: 0, out: 10,
+        ops: [{ kind: 'rate', from: 2, to: 6, rate: 0.5, id: 'a' }, { kind: 'rate', from: 4, to: 8, rate: 0.25, id: 'b' }],
+      }, 20);
+      const covered = m.spans.filter((s) => s.kind === 'rate');
+      let overlap = false;
+      for (let i = 1; i < covered.length; i++) if (covered[i].s0 < covered[i - 1].s1 - 1e-9) overlap = true;
+      check(!overlap, 'overlap: two ramps do not double-cover the same source');
+    }
+    {
+      // Clamping: an op past the end of the trim must not extend the output.
+      const m = compile({ in: 0, out: 5, ops: [{ kind: 'hold', at: 40, dur: 2, id: 'h' }] }, 10);
+      check(m.duration >= 5, 'clamp: an out-of-range hold does not shorten the video');
+      eq(sourceAt(m, 2), 2, 'clamp: an out-of-range hold does not disturb normal time');
+    }
+    {
+      // A zero-length video must not throw or produce NaN - it is what an
+      // editor sees for the instant before metadata arrives.
+      const m = compile({ in: 0, out: null, ops: [] }, 0);
+      check(Number.isFinite(m.duration), 'empty: a zero-length source gives a finite map');
+      check(Number.isFinite(sourceAt(m, 1)), 'empty: sourceAt is still a number');
+    }
+
+    // ---- the editing helpers ------------------------------------------------
+    {
+      let tl = { in: 0, out: 10, ops: [] };
+      tl = addHold(tl, 4, 1.5);
+      tl = addHold(tl, 4.01, 1.5);   // the same frame: merge, do not stack
+      check(tl.ops.filter((o) => o.kind === 'hold').length === 1, 'addHold: two on one frame merge');
+      eq(tl.ops[0].dur, 3, 'addHold: merging adds the durations');
+      tl = addRate(tl, 6, 8, 0.5);
+      tl = addCut(tl, 9, 9.5);
+      check(tl.ops.length === 3, 'helpers: rate and cut are added');
+      const id = tl.ops[1].id;
+      tl = removeOp(tl, id);
+      check(!tl.ops.some((o) => o.id === id), 'removeOp: takes exactly the one asked for');
+      check(tl.ops.length === 2, 'removeOp: leaves the rest alone');
+    }
+
+    // ---- marks read the same clock -----------------------------------------
+    {
+      const m = { t0: 2, t1: 5, anim: 'draw' };
+      check(markPhase(m, 1.9) === null, 'mark: nothing before it starts');
+      check(markPhase(m, 5.1) === null, 'mark: nothing after it ends');
+      const mid = markPhase(m, 3.5);
+      check(mid && mid.alpha > 0.9, 'mark: fully up in the middle');
+      check(mid.grow === 1, 'mark: a draw animation is complete by the middle');
+      const early = markPhase(m, 2.02);
+      check(early && early.alpha < 0.6, 'mark: still arriving just after it starts');
+    }
+    {
+      // Tracking: two keys, eased, held flat outside the range.
+      const m = {
+        t0: 0, t1: 4, pts: [{ x: 0, y: 0 }],
+        keys: [{ t: 1, pts: [{ x: 0, y: 0 }] }, { t: 3, pts: [{ x: 1, y: 0.5 }] }],
+      };
+      eq(ptsAt(m, 0.5)[0].x, 0, 'track: before the first key it holds');
+      eq(ptsAt(m, 3.5)[0].x, 1, 'track: after the last key it holds');
+      eq(ptsAt(m, 2)[0].x, 0.5, 'track: halfway between keys is halfway along');
+      eq(ptsAt(m, 2)[0].y, 0.25, 'track: both axes interpolate');
+      const q = ptsAt(m, 1.2)[0].x;
+      check(q > 0 && q < 0.1, 'track: the ease starts slowly rather than linearly');
+    }
+
+    // ---- the view survives every reframe ------------------------------------
+    {
+      const src = 16 / 9;
+      for (const [aspect, label] of [['16:9', 'landscape'], ['9:16', 'vertical'], ['1:1', 'square']]) {
+        const { w, h } = formatSize(aspect, 'hd');
+        const v = buildView(src, w, h, { cx: 0.5, cy: 0.5, zoom: 1 });
+        eq(v.toX(0.5), w / 2, `${label}: the source centre lands on the output centre`);
+        eq(v.toY(0.5), h / 2, `${label}: vertically too`);
+        eq(v.fromX(v.toX(0.31)), 0.31, `${label}: normalised -> px -> normalised round-trips`, 1e-9);
+        check(v.crop.x >= -1e-9 && v.crop.x + v.crop.w <= 1 + 1e-9, `${label}: the crop stays inside the source`);
+      }
+      // A pan to the edge must CLAMP rather than expose black - the difference
+      // between a reframe tool you can use fast and one that punishes a drag.
+      const p = buildView(src, 720, 1280, { cx: -5, cy: 9, zoom: 2 });
+      check(p.crop.x >= -1e-9, 'pan: hard left clamps to the source edge');
+      check(p.crop.y + p.crop.h <= 1 + 1e-9, 'pan: hard down clamps to the source edge');
+    }
+    {
+      const keys = [{ t: 0, cx: 0.2, cy: 0.5, zoom: 1 }, { t: 2, cx: 0.8, cy: 0.5, zoom: 2 }];
+      eq(cameraAt(keys, -1).cx, 0.2, 'camera: before the first key it holds');
+      eq(cameraAt(keys, 9).zoom, 2, 'camera: after the last key it holds');
+      eq(cameraAt(keys, 1).cx, 0.5, 'camera: the midpoint of an eased pair is the midpoint');
+      eq(cameraAt([], 3).zoom, 1, 'camera: no keys means a static, centred, unzoomed frame');
+    }
+
+    // ---- report -------------------------------------------------------------
+    document.getElementById('log').textContent =
+      `${notes.length} passed\n\n${failures.length ? `FAILURES\n${failures.join('\n')}` : notes.join('\n')}`;
+    document.getElementById('result').textContent =
+      failures.length ? `FAIL (${failures.length} of ${failures.length + notes.length})` : `PASS (${notes.length} checks)`;
+    document.title = failures.length ? 'FAIL - Studio Time Map' : 'PASS - Studio Time Map';
+  </script>
+</body>
+</html>

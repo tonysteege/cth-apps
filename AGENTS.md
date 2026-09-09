@@ -1505,6 +1505,116 @@ Notion presentation) and that players see STATIC on a shared page.
 - THE WORKER'S CORS LIST accepts any `http://localhost:<port>` origin for
   previews. Hub card: "Diagrams Notion", alphabetical after Diagrams.
 
+## Studio (/studio/) rules
+
+Studio (2026-09-08, Tony's ask) turns one clip of game film into the finished
+analysis video he posts: freeze on the read, arrow on the seam, beam on the
+four players in the box, punch in, slow it down, name it, publish it. CLIPS
+LOGS, STUDIO PRODUCES - two jobs, two apps, one folder. Do not merge them.
+
+- **THE STAGE IS A CANVAS SHOWING THE FINISHED FRAME**, not the video with an
+  overlay. `composite()` (js/render.js) paints the preview, the poster, the
+  GIF and every frame of the MP4, so an export cannot look different from what
+  was on screen. There is ONE renderer here - unlike Diagrams' drawEl/svgEl
+  pair, which has to be kept in step by hand. Never add a second one.
+- **EVERY CLOCK IS OUTPUT TIME.** `js/timemap.js` compiles the timeline into
+  spans and answers `sourceAt(outT)`; that is the only place source time
+  exists. Ops are `hold` (freeze), `rate` (slow motion) and `cut`, anchored in
+  SOURCE seconds, additive, normalised so they never overlap. Marks are timed
+  in OUTPUT seconds, which is why a mark drawn during a freeze simply spans it
+  with no special case. `tests/studio-timemap.html` covers it.
+- **GEOMETRY IS NORMALISED (0..1 of the SOURCE frame), NEVER PIXELS.** That is
+  what lets one mark survive a 16:9 preview, a 9:16 reframe, a 2x punch-in and
+  a 1080p export without being re-authored. Anything reading a pointer maps
+  back through `view.fromX/fromY` on the way in.
+- **TRACKING IS THE FEATURE THAT MAKES THIS FAST.** A mark may carry
+  `keys: [{t, pts}]` - two or more keyframes in output seconds, eased between -
+  so a spotlight follows a skater from two clicks instead of being redrawn
+  every eight frames. `ptsAt()` is the single reader; do not interpolate
+  anywhere else.
+- **A NEW MARK STARTS ONE ANIMATION BEFORE THE PLAYHEAD** (`IN_DUR`), so it is
+  fully ARRIVED at the moment it was drawn. Starting it exactly at the
+  playhead is the same as drawing it at zero opacity - correct in the file,
+  and it makes the second and third mark of a set vanish as you place them.
+  The SELECTED mark is additionally drawn at full strength (`emphasize` in
+  composite, editor only, never passed by the exporter).
+- **THE SCRUB IS THE CLIPS CURVE.** `js/scrub.js` carries `deltaSeconds` and
+  `motionStep` to the number and imports the WebCodecs decoder from
+  `clips/js/scrubsource.js` - never reimplement either. What differs: Studio's
+  stage is already a canvas, so there is no `.scrub-paint` overlay and no
+  settle/swap; and the gesture drives OUTPUT time, so scrubbing through a
+  freeze holds and through a ramp slows, for free.
+- **DROPBOX IS THE FILM SOURCE, AND IT IS DELIBERATE** (Tony's call). Clips
+  was right to move to the local CTH folder; Studio has the opposite
+  requirement - it must run on an iPad, a phone and inside a Notion embed,
+  where `showDirectoryPicker` does not exist, and it must hand out a URL,
+  because a video that lives on one Mac cannot be embedded or sent. Those are
+  exactly the two things AGENTS.md says only Dropbox could do.
+  - AUTH IS PKCE WITH NO SECRET ANYWHERE. A Dropbox app key for a public
+    client is an identifier, not a credential. So Studio adds NO Worker route,
+    NO repo secret and NO server state - a lower bar than the Slides Worker
+    already clears under hard rule 5. The refresh token is in this browser's
+    localStorage; Disconnect revokes it at Dropbox.
+  - Film lives under `/CTH-DB/Videos/Games`, exports under
+    `/CTH-DB/Videos/Studio`. Both are settings, not constants.
+  - THERE ARE THREE SOURCES AND NONE IS SECOND CLASS: `dropbox` (a path),
+    `url` (a durable address - a Clips export, a share link, anything hosted)
+    and `local` (a picked File, which no browser can reopen after a reload, so
+    the editor asks for it again and says why).
+  - `source.url` MEANS THE DURABLE ADDRESS OF A `kind:'url'` SOURCE AND
+    NOTHING ELSE. A Dropbox temp link expires in four hours and an objectURL
+    dies with the page; both live on the session (`cur.mediaUrl` /
+    `cur.mediaFile`), never on the project. Writing either into `source.url`
+    is how a saved project came back pointing at "undefined".
+- **THREE EXPORT PATHS, CHOSEN BY CAPABILITY, NEVER BY USER-AGENT**: `mp4`
+  (VideoEncoder plus our own muxer in `js/mp4.js` - faster than real time),
+  `webm` (MediaRecorder on the canvas, real time, works everywhere, the iPad
+  path), `gif` (our own GIF89a writer with a median-cut global palette - a
+  per-frame palette makes the colours crawl, and on white ice with one red
+  arrow crawl is all you see). Plus a PNG still.
+  - THE MUXER IS OURS because the repo has no npm and hard rule 5 forbids
+    third-party embeds. Non-fragmented, moov last, one sample per chunk. It
+    writes `ctts` whenever the encoder reports a composition offset - skip it
+    and a B-frame export plays with its frames out of order.
+  - AUDIO IS RETIMED, NOT COPIED: an OfflineAudioContext rebuilds it span by
+    span, so a freeze is SILENCE (which is what broadcast does, and it makes
+    the freeze land) and a ramp is a resampled read pulled back in gain.
+    Above a 320MB source it is skipped rather than downloading a whole game.
+  - **NOTHING IN THE EXPORT LOOP WAITS ON `requestAnimationFrame` OR ON
+    `requestVideoFrameCallback`.** The film element is offscreen at opacity 0
+    (the stage is the canvas), so it never presents a frame and rVFC never
+    fires - measured at three seconds per frame, every frame. And a
+    backgrounded tab stops rAF entirely, which is what a minute-long export
+    invites the user to do. Every wait is a timer or an event. `seekTo` also
+    returns immediately when it is already within half a frame, or a freeze
+    pays the full seek timeout once per frame for its whole length.
+- **PROJECTS ARE A STORAGE FORMAT** in the `cth-studio` IndexedDB - additive
+  changes only, the same promise Diagrams and Clips make. The film is never
+  stored, only a pointer to it. `js/store.js` drops a cached connection on
+  `close`/`versionchange` and retries once (hard rule 7 applies here too).
+  Autosave is 900ms debounced with `visibilitychange`, `pagehide` and
+  `closeEditor` as the three flush guards.
+- **THE FILE NAME CARRIES THE MEANING**, from Tony's own convention:
+  `{hook} - {league} {season} - {teamA} - {teamB} - {tag}`. Those fields are
+  GUESSED FROM THE SOURCE FILE NAME on import (`guessPublish`) because the
+  convention already holds them; an empty token collapses WITHOUT the dash
+  that joined it, the same rule Clips exports follow.
+- **`embed.html` IS A PUBLIC URL FORMAT - never break it**:
+  `embed.html#v=<encoded url>&t=<seconds>&title=<text>&loop=1`. It plays a
+  finished export with the CTH scrub feel inside Notion, Obsidian's web
+  viewer or any browser, with no project, no storage and no account - which
+  is why it works for someone who is not Tony. Export offers both links: the
+  embed for a Notion block, the direct file for a message.
+- TABLET IS A FIRST-CLASS EDITING SURFACE, not a shrunken desktop: the rail
+  drops under the stage and the timeline keeps its height, because trimming
+  and freezing is most of the work. Phone is review plus quick markup.
+- **THE SHELL IS `height: 100dvh` WITH `overflow: hidden`, AND `#stage` IS
+  ABSOLUTE.** The editor sizes its canvas from the space its parent reports;
+  a shell that can grow to fit content makes that a feedback loop - the canvas
+  grows the wrap, the wrap reports more room, the canvas grows again - and the
+  timeline walks off the bottom of the window. Both halves of that fix must
+  stay.
+
 ## Design system rules (suite-wide)
 
 **shadcn is the design system for new work** (2026-08-30, Tony's call,

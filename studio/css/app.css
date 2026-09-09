@@ -1,0 +1,360 @@
+/* CTH Studio.
+   The token layer is the suite's, copied from diagrams/css/app.css - the ramps,
+   the type scale, the radii and the shadows are BoardUI's and are the only
+   legal values (see AGENTS.md "Design system rules"). THE ACCENT IS BLACK;
+   --marquee is the one place it is not, and it is for chrome drawn over film,
+   whose colour we do not control.
+
+   Studio is DARK where the film is and light where the controls are. That is
+   not a style choice: a white panel beside a video washes out the picture you
+   are grading colour against, and every editor that gets this right does the
+   same thing. */
+
+:root {
+  --n-50:#fafafa; --n-100:#f7f7f7; --n-200:#ebebeb; --n-300:#d4d4d4;
+  --n-400:#a3a3a3; --n-500:#737373; --n-600:#525252; --n-700:#404040;
+  --n-800:#262626; --n-900:#171717; --n-925:#121212; --n-950:#0a0a0a;
+
+  --a-400:#404040; --a-500:#171717; --a-600:#0a0a0a; --a-700:#000000;
+
+  --ink:var(--n-950); --graphite:var(--n-600); --mist:var(--n-500); --soft:var(--n-400);
+  --edge:var(--n-200); --edge-soft:#f0f0f0; --sunken:var(--n-100); --cloud:#ffffff;
+  --page:var(--n-100);
+  --danger:#e7000b; --danger-soft:rgba(231,0,11,.07);
+  --select:var(--a-500); --select-soft:rgba(23,23,23,.10);
+  --marquee:#75d8ff; --marquee-soft:rgba(117,216,255,.20);
+
+  --font:'Inter',-apple-system,'Helvetica Neue',sans-serif;
+
+  --r-xs:4px; --r-sm:8px; --r-md:10px; --r-lg:12px; --r-xl:16px;
+
+  --shadow-2xs:0 1px rgb(0 0 0 / .16);
+  --shadow-1:0 1px 2px rgb(0 0 0 / .05);
+  --shadow-2:0 4px 10px rgb(0 0 0 / .06), 0 1px 3px rgb(0 0 0 / .05);
+  --shadow-3:0 18px 40px rgb(0 0 0 / .14), 0 4px 12px rgb(0 0 0 / .08);
+
+  --dur:150ms;
+  --ease:cubic-bezier(.2,.7,.3,1);
+
+  /* the dark half */
+  --stage:#0a0a0a;
+  --panel:#141414;
+  --panel-2:#1c1c1c;
+  --panel-edge:rgb(255 255 255 / .09);
+  --panel-ink:#f2f2f2;
+  --panel-mist:#9a9a9a;
+
+  --rail:264px;
+  --tl:188px;
+}
+
+* { box-sizing:border-box; }
+html,body { height:100%; }
+body {
+  margin:0; background:var(--page); color:var(--ink);
+  font-family:var(--font); font-size:14px; line-height:20px;
+  -webkit-font-smoothing:antialiased;
+  overscroll-behavior:none;
+}
+button,input,select,textarea { font:inherit; color:inherit; }
+h1,h2,h3 { margin:0; font-weight:800; letter-spacing:0; }
+h1 { font-size:20px; line-height:26px; }
+h2 { font-size:16px; line-height:22px; }
+p { margin:0 0 10px; }
+a { color:inherit; }
+.muted { color:var(--mist); }
+.small { font-size:12px; line-height:16px; letter-spacing:.15px; }
+.tiny { font-size:11px; line-height:15px; letter-spacing:.2px; }
+.grow { flex:1 1 auto; min-width:0; }
+.row { display:flex; align-items:center; gap:8px; }
+.row.end { justify-content:flex-end; margin-top:14px; }
+.wrap { flex-wrap:wrap; }
+[hidden] { display:none !important; }
+:focus-visible { outline:2px solid var(--select); outline-offset:2px; border-radius:var(--r-xs); }
+.dark :focus-visible { outline-color:var(--marquee); }
+
+/* ---- buttons (BoardUI: medium h-9 / r-10 / 14-500, xs h-6 / r-4 / 12-600) */
+.btn {
+  display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  height:36px; padding:0 12px; border-radius:var(--r-md);
+  border:1px solid var(--edge); background:var(--cloud); color:var(--ink);
+  font-size:14px; font-weight:500; cursor:pointer;
+  box-shadow:var(--shadow-1);
+  transition:background var(--dur) var(--ease), border-color var(--dur) var(--ease), transform var(--dur) var(--ease);
+  white-space:nowrap;
+}
+.btn:hover { background:var(--n-50); }
+.btn:active { transform:translateY(.5px); }
+.btn[disabled] { opacity:.45; pointer-events:none; }
+.btn.primary { background:linear-gradient(var(--a-500),var(--a-600)); border-color:var(--a-700); color:#fff; }
+.btn.primary:hover { background:linear-gradient(var(--a-400),var(--a-500)); }
+.btn.danger { color:var(--danger); border-color:rgb(231 0 11 / .3); }
+.btn.danger:hover { background:var(--danger-soft); }
+.btn.ghost { background:transparent; border-color:transparent; box-shadow:none; }
+.btn.ghost:hover { background:var(--n-200); }
+.btn.mini { height:24px; padding:0 8px; border-radius:var(--r-xs); font-size:12px; font-weight:600; }
+.icon-btn {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:32px; height:32px; border-radius:var(--r-sm);
+  border:1px solid transparent; background:transparent; cursor:pointer; color:inherit;
+}
+.icon-btn:hover { background:var(--n-200); }
+.dark .btn, .panel .btn {
+  background:var(--panel-2); border-color:var(--panel-edge); color:var(--panel-ink); box-shadow:none;
+}
+.dark .btn:hover, .panel .btn:hover { background:#242424; }
+.dark .btn.primary, .panel .btn.primary { background:#fff; color:#0a0a0a; border-color:#fff; }
+.dark .btn.primary:hover, .panel .btn.primary:hover { background:#e8e8e8; }
+.dark .icon-btn:hover, .panel .icon-btn:hover { background:rgb(255 255 255 / .1); }
+
+.input, select.input, textarea.input {
+  width:100%; height:36px; padding:0 10px;
+  border:1px solid var(--edge); border-radius:var(--r-md);
+  background:var(--cloud); box-shadow:var(--shadow-1);
+}
+textarea.input { height:auto; padding:8px 10px; resize:vertical; min-height:64px; line-height:20px; }
+.input:focus { border-color:var(--n-400); outline:none; box-shadow:0 0 0 3px var(--select-soft); }
+.panel .input { background:var(--panel-2); border-color:var(--panel-edge); color:var(--panel-ink); box-shadow:none; }
+.panel .input:focus { border-color:var(--marquee); box-shadow:0 0 0 3px var(--marquee-soft); }
+.field { display:block; margin-bottom:12px; }
+.field > span { display:block; font-size:12px; line-height:16px; letter-spacing:.15px; color:var(--mist); margin-bottom:5px; }
+.panel .field > span { color:var(--panel-mist); }
+
+/* segmented control: white thumb on an n-100 track, never the accent */
+.seg { display:inline-flex; gap:2px; padding:4px; background:var(--n-100); border-radius:var(--r-md); }
+.seg button {
+  border:0; background:transparent; padding:4px 10px; border-radius:6px;
+  font-size:12px; line-height:16px; letter-spacing:.15px; font-weight:500;
+  cursor:pointer; color:var(--graphite); white-space:nowrap;
+}
+.seg button.on { background:#fff; color:var(--ink); box-shadow:var(--shadow-2xs); font-weight:600; }
+.panel .seg { background:rgb(255 255 255 / .07); }
+.panel .seg button { color:var(--panel-mist); }
+.panel .seg button.on { background:#333; color:#fff; }
+
+kbd, .key {
+  display:inline-block; min-width:17px; padding:1px 4px; text-align:center;
+  font-family:var(--font); font-size:11px; line-height:15px; letter-spacing:normal; font-weight:600;
+  border:1px solid var(--edge); border-bottom-width:2px; border-radius:var(--r-xs);
+  background:var(--n-50); color:var(--graphite);
+}
+.panel kbd, .panel .key { background:rgb(255 255 255 / .08); border-color:rgb(255 255 255 / .14); color:var(--panel-mist); }
+
+/* ---- app shell ---- */
+/* HEIGHT, NOT MIN-HEIGHT, AND overflow:hidden. The editor sizes its canvas
+   from the space its parent reports; if the shell can grow to fit content,
+   that is a feedback loop - the canvas grows the wrap, the wrap reports more
+   room, the canvas grows again - and the timeline walks off the bottom of the
+   window. The shell is exactly the viewport and the panes scroll inside it. */
+#app { height:100dvh; overflow:hidden; display:flex; flex-direction:column; }
+
+.topbar {
+  display:flex; align-items:center; gap:10px;
+  height:52px; padding:0 12px; flex:none;
+  background:var(--cloud); border-bottom:1px solid var(--edge);
+}
+.topbar { min-width:0; }
+.topbar > * { flex:none; }
+.topbar .brand { display:flex; align-items:center; gap:8px; font-weight:800; text-decoration:none; }
+.topbar .brand img { width:22px; height:22px; border-radius:5px; }
+/* THE NAME IS THE FIRST THING TO GIVE WAY. Everything else in this bar is a
+   control you have to be able to reach; the title is a label you can read from
+   the tab. Without this the name pushed Export off the right of a phone. */
+.topbar .title { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block; }
+
+/* ---- library ---- */
+.lib { flex:1; min-height:0; display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:0; min-height:0; }
+.lib-main { padding:18px; overflow:auto; }
+.lib-side { border-left:1px solid var(--edge); background:var(--cloud); padding:16px; overflow:auto; }
+
+.cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:14px; }
+.card {
+  border:1px solid var(--edge); border-radius:var(--r-lg); background:var(--cloud);
+  overflow:hidden; cursor:pointer; box-shadow:var(--shadow-1);
+  transition:box-shadow var(--dur) var(--ease), transform var(--dur) var(--ease);
+  text-align:left; padding:0; width:100%;
+}
+.card:hover { box-shadow:var(--shadow-2); transform:translateY(-1px); }
+.card .thumb { aspect-ratio:16/9; background:var(--n-900); display:block; width:100%; object-fit:cover; }
+.card .thumb.empty { display:flex; align-items:center; justify-content:center; color:var(--n-600); }
+.card .meta { padding:10px 12px; }
+.card .meta b { display:block; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+.tree { display:flex; flex-direction:column; gap:1px; }
+.tree-row {
+  display:flex; align-items:center; gap:8px; width:100%;
+  padding:7px 8px; border:0; background:transparent; border-radius:var(--r-sm);
+  cursor:pointer; text-align:left; font-size:13px; line-height:18px;
+}
+.tree-row:hover { background:var(--n-100); }
+.tree-row .nm { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tree-row svg { flex:none; color:var(--soft); }
+.crumbs { display:flex; align-items:center; gap:4px; flex-wrap:wrap; margin-bottom:10px; }
+.crumbs button { border:0; background:transparent; padding:2px 4px; border-radius:var(--r-xs); cursor:pointer; font-size:12px; color:var(--mist); }
+.crumbs button:hover { background:var(--n-200); color:var(--ink); }
+.crumbs b { font-size:12px; }
+
+.empty-state { padding:44px 20px; text-align:center; color:var(--mist); }
+.empty-state h2 { color:var(--ink); margin-bottom:6px; }
+
+/* ---- editor ---- */
+/* minmax(0,1fr), NOT 1fr. A bare `1fr` is `minmax(auto, 1fr)`, and `auto`
+   floors the track at the MIN-CONTENT of its widest child - so the timeline's
+   six-button row, which must not wrap, was holding the whole editor open at
+   411px inside a 375px phone and pushing the stage off the screen. The panes
+   scroll their own overflow instead. */
+.editor { flex:1; display:grid; grid-template-columns:minmax(0,1fr) var(--rail); grid-template-rows:minmax(0,1fr) var(--tl); min-height:0; min-width:0; background:var(--stage); }
+.stage-wrap { grid-column:1; grid-row:1; position:relative; min-width:0; min-height:0; overflow:hidden; }
+.rail { grid-column:2; grid-row:1 / span 2; border-left:1px solid var(--panel-edge); background:var(--panel); color:var(--panel-ink); overflow:auto; min-height:0; }
+.timeline-wrap { grid-column:1; grid-row:2; border-top:1px solid var(--panel-edge); background:var(--panel); color:var(--panel-ink); display:flex; flex-direction:column; min-height:0; }
+
+/* ABSOLUTE, so the canvas can never contribute to its parent's height. This
+   is the other half of the fix above: even with a bounded shell, an in-flow
+   canvas makes the measure-then-resize loop possible. Out of flow it cannot. */
+#stage {
+  position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+  display:block; background:#000; touch-action:none;
+  box-shadow:0 0 0 1px rgb(255 255 255 / .07), 0 24px 60px rgb(0 0 0 / .6);
+  cursor:crosshair;
+}
+#stage.panning { cursor:grab; }
+#stage.idle { cursor:default; }
+video#film { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; left:-9999px; }
+
+.stage-hud {
+  position:absolute; left:0; right:0; bottom:0; display:flex; align-items:center; gap:10px;
+  padding:10px 14px; color:#fff;
+  background:linear-gradient(transparent,rgb(0 0 0 / .55));
+  pointer-events:none;
+}
+.stage-hud > * { pointer-events:auto; flex:none; }
+.stage-hud { overflow-x:auto; scrollbar-width:none; }
+.stage-hud::-webkit-scrollbar { display:none; }
+.stage-hud .tcode { font-variant-numeric:tabular-nums; font-size:12px; font-weight:600; letter-spacing:.15px; }
+.stage-badge {
+  position:absolute; top:12px; left:14px; display:flex; gap:6px; align-items:center;
+  padding:4px 9px; border-radius:999px; font-size:11px; font-weight:600; letter-spacing:.2px;
+  background:rgb(0 0 0 / .62); color:#fff; backdrop-filter:blur(6px);
+}
+.stage-badge.hot { background:rgb(231 0 11 / .82); }
+
+/* tool palette */
+.tools { display:flex; flex-wrap:wrap; gap:4px; padding:10px; border-bottom:1px solid var(--panel-edge); }
+.tool {
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;
+  width:calc(25% - 3px); height:52px; border-radius:var(--r-sm);
+  border:1px solid transparent; background:var(--panel-2); color:var(--panel-mist);
+  cursor:pointer; font-size:11px; line-height:14px; letter-spacing:.2px; font-weight:600;
+  transition:background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.tool:hover { background:#262626; color:#fff; }
+.tool.on { background:#fff; color:#0a0a0a; border-color:#fff; }
+.tool .g { font-size:15px; line-height:15px; }
+
+.rail section { padding:12px; border-bottom:1px solid var(--panel-edge); }
+.rail h3 { font-size:11px; line-height:15px; letter-spacing:.2px; font-weight:800; text-transform:uppercase; color:var(--panel-mist); margin:0 0 9px; }
+
+.swatches { display:flex; gap:6px; flex-wrap:wrap; }
+.swatch { width:26px; height:26px; border-radius:var(--r-sm); border:2px solid transparent; cursor:pointer; padding:0; }
+.swatch.on { border-color:var(--marquee); box-shadow:0 0 0 2px rgb(117 216 255 / .3); }
+
+.slider { width:100%; -webkit-appearance:none; appearance:none; background:transparent; height:22px; }
+.slider::-webkit-slider-runnable-track { height:6px; border-radius:999px; background:rgb(255 255 255 / .16); box-shadow:inset 0 1px rgb(0 0 0 / .35); }
+.slider::-webkit-slider-thumb { -webkit-appearance:none; width:16px; height:16px; margin-top:-5px; border-radius:50%; background:#fff; box-shadow:var(--shadow-1); cursor:pointer; }
+.slider::-moz-range-track { height:6px; border-radius:999px; background:rgb(255 255 255 / .16); }
+.slider::-moz-range-thumb { width:16px; height:16px; border:0; border-radius:50%; background:#fff; cursor:pointer; }
+
+/* ---- timeline ---- */
+/* One row, never a wrap: the point of the timeline is to give the stage the
+   window back, and a control bar that wraps at a narrow width takes a row of
+   it straight off again. It scrolls sideways instead - the same call Clips'
+   log header makes, for the same reason. */
+.tl-bar { display:flex; align-items:center; gap:6px; padding:7px 10px; border-bottom:1px solid var(--panel-edge); flex:none; flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; }
+.tl-bar::-webkit-scrollbar { display:none; }
+.tl-bar > * { flex:none; }
+.tl-scroll { flex:1; overflow:auto; min-height:0; }
+#ruler { display:block; width:100%; height:100%; touch-action:none; cursor:pointer; }
+
+.chip {
+  display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 8px;
+  border-radius:999px; font-size:11px; line-height:15px; letter-spacing:.2px; font-weight:600;
+  background:rgb(255 255 255 / .09); color:var(--panel-mist); border:1px solid transparent;
+}
+.chip.on { background:#fff; color:#0a0a0a; }
+.chip button { border:0; background:transparent; cursor:pointer; padding:0 0 0 2px; color:inherit; opacity:.6; }
+.chip button:hover { opacity:1; }
+
+/* ---- sheets, toasts ---- */
+.scrim {
+  position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center;
+  padding:18px; background:rgb(10 10 10 / .5); backdrop-filter:blur(3px);
+  opacity:0; transition:opacity var(--dur) var(--ease);
+}
+.scrim.in { opacity:1; }
+.sheet {
+  width:min(460px,100%); max-height:min(86dvh,760px); overflow:auto;
+  background:var(--cloud); border-radius:var(--r-xl); box-shadow:var(--shadow-3);
+  transform:translateY(6px) scale(.99); transition:transform var(--dur) var(--ease);
+}
+.sheet.wide { width:min(720px,100%); }
+.scrim.in .sheet { transform:none; }
+.sheet-head { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:14px 16px 0; }
+.sheet-body { padding:14px 16px 16px; }
+
+.bar { height:6px; border-radius:999px; background:var(--n-200); overflow:hidden; margin-bottom:10px; }
+.bar-fill { height:100%; width:0; background:var(--a-500); transition:width 120ms linear; }
+
+.toasts { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); z-index:80; display:flex; flex-direction:column; gap:8px; align-items:center; pointer-events:none; }
+.toast {
+  display:flex; align-items:center; gap:8px; max-width:min(520px,92vw);
+  padding:9px 14px; border-radius:999px; background:var(--n-950); color:#fff;
+  box-shadow:var(--shadow-3); font-size:13px; line-height:18px;
+  opacity:0; transform:translateY(8px); transition:opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+  pointer-events:auto; cursor:pointer;
+}
+.toast.in { opacity:1; transform:none; }
+.toast .dot { width:7px; height:7px; border-radius:50%; background:var(--n-400); flex:none; }
+.toast.error .dot { background:var(--danger); }
+.toast.warn .dot { background:#f5a524; }
+.toast.ok .dot { background:#17c964; }
+
+/* ---- responsive ----
+   TABLET is a first-class editing surface, not a shrunken desktop: the rail
+   drops under the stage as a scrolling strip and the timeline keeps its height,
+   because trimming and freezing is most of the work and it needs the room.
+   PHONE is review plus quick markup: the timeline shrinks, the rail becomes a
+   sheet, and the stage takes what is left. */
+@media (max-width:1080px) {
+  :root { --rail:224px; }
+}
+@media (max-width:860px) {
+  .lib { grid-template-columns:1fr; }
+  .lib-side { border-left:0; border-top:1px solid var(--edge); }
+  .editor { grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr) auto var(--tl); }
+  .stage-wrap { grid-row:1; }
+  .rail { grid-column:1; grid-row:2; border-left:0; border-top:1px solid var(--panel-edge); max-height:246px; }
+  .timeline-wrap { grid-row:3; }
+  .tool { width:calc(20% - 4px); }
+}
+@media (max-width:560px) {
+  :root { --tl:132px; }
+  .topbar { height:48px; padding:0 8px; gap:6px; }
+  .topbar .brand span { display:none; }   /* the mark alone still gets you home */
+  .topbar .title { font-size:13px; }
+  .rail { max-height:200px; }
+  .tool { width:calc(25% - 3px); height:46px; }
+  .cards { grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); }
+  .hide-phone { display:none !important; }
+}
+
+/* Coarse pointers get bigger targets everywhere, which is the accessibility
+   floor and also just what a gloved hand at a rink needs. */
+@media (pointer:coarse) {
+  .btn { height:40px; }
+  .icon-btn { width:38px; height:38px; }
+  .tool { height:56px; }
+}
+
+@media (prefers-reduced-motion:reduce) {
+  * { animation-duration:.01ms !important; transition-duration:.01ms !important; }
+}
