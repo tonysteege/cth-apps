@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>CTH Studio clip</title>
+  <meta name="theme-color" content="#0a0a0a">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap" rel="stylesheet">
+  <style>
+    /* The embeddable player. It is its own page inside an iframe, so it carries
+       the handful of tokens it needs rather than pulling the app stylesheet -
+       the same choice clips/embed.html made, for the same reason.
+
+       WHAT IT IS FOR: a finished Studio export, played with the CTH scrub feel,
+       inside Notion, Obsidian's web viewer, or any browser. The telestration is
+       already burned into the file, so this needs no project, no storage and no
+       account - which is exactly why it works for someone who is not Tony. */
+    :root {
+      --n-400:#a3a3a3; --n-800:#262626; --n-900:#171717; --n-950:#0a0a0a;
+      --dur:150ms;
+    }
+    * { box-sizing:border-box; }
+    html,body { height:100%; }
+    body {
+      margin:0; background:var(--n-950); color:#fff;
+      font-family:'Inter',-apple-system,'Helvetica Neue',sans-serif;
+      -webkit-font-smoothing:antialiased;
+      overscroll-behavior:none;
+    }
+    .wrap { position:relative; width:100vw; height:100dvh; display:flex; flex-direction:column; background:#000; }
+    video { flex:1; width:100%; min-height:0; object-fit:contain; background:#000; touch-action:none; }
+    .bar {
+      display:flex; align-items:center; gap:10px; flex:none;
+      padding:8px 12px; background:var(--n-900);
+      border-top:1px solid rgb(255 255 255 / .08);
+      font-size:13px; line-height:18px;
+    }
+    .bar b { font-weight:600; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    button {
+      flex:none; display:inline-flex; align-items:center; justify-content:center;
+      min-width:34px; height:34px; padding:0 9px;
+      border:1px solid rgb(255 255 255 / .16); border-radius:8px;
+      background:rgb(255 255 255 / .06); color:#fff; cursor:pointer;
+      font:inherit; font-weight:500;
+      transition:background var(--dur) cubic-bezier(.2,.7,.3,1);
+    }
+    button:hover { background:rgb(255 255 255 / .14); }
+    button:focus-visible { outline:2px solid #75d8ff; outline-offset:2px; }
+    .grow { flex:1 1 auto; min-width:0; }
+    .tc { font-variant-numeric:tabular-nums; font-size:12px; color:var(--n-400); font-weight:600; }
+    /* The scrub bar IS the timeline: one lane, no chrome, big enough to hit on
+       a phone. */
+    .seek { position:relative; height:26px; flex:1 1 auto; min-width:60px; cursor:pointer; touch-action:none; }
+    .seek .track { position:absolute; left:0; right:0; top:11px; height:4px; border-radius:999px; background:rgb(255 255 255 / .18); }
+    .seek .fill { position:absolute; left:0; top:11px; height:4px; border-radius:999px; background:#fff; width:0; }
+    .seek .head { position:absolute; top:7px; width:12px; height:12px; margin-left:-6px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgb(0 0 0 / .5); }
+    .msg { margin:auto; padding:24px; text-align:center; color:var(--n-400); font-size:13px; max-width:420px; }
+    .msg a { color:#fff; }
+    @media (pointer:coarse) { button { min-width:40px; height:40px; } }
+    @media (prefers-reduced-motion:reduce) { * { transition-duration:.01ms !important; } }
+  </style>
+</head>
+<body>
+  <div class="wrap" id="wrap"></div>
+
+  <script type="module">
+    // The two tuned functions, imported rather than reimplemented - that curve
+    // was measured against CTH Film Room and is the one thing here that must
+    // never drift. (Same rule Clips Notion and Boards follow.)
+    import { deltaSeconds, motionStep } from './js/scrub.js';
+
+    // PUBLIC URL FORMAT - never break it:
+    //   embed.html#v=<encoded video url>&t=<start seconds>&title=<text>&loop=1
+    const wrap = document.getElementById('wrap');
+
+    // IT REBUILDS ON A HASH CHANGE. Changing only the hash does not reload the
+    // document, so a page that read the hash once at startup shows the empty
+    // state forever after - which is what a host swapping the embed's URL, or
+    // any in-page link, actually does.
+    addEventListener('hashchange', render);
+    render();
+
+    function render() {
+      const q = new URLSearchParams(location.hash.replace(/^#/, ''));
+      const src = q.get('v') || '';
+      wrap.replaceChildren();
+      if (!src) {
+        wrap.innerHTML = '<p class="msg">This embed needs a video link.<br><br>'
+          + 'Export a clip from <a href="./">CTH Studio</a>, copy the link it gives you, '
+          + 'and put it in this page’s address as <code>#v=&lt;link&gt;</code>.</p>';
+        return;
+      }
+      buildPlayer(src, Number(q.get('t') || 0) || 0, q.get('title') || '', q.get('loop') === '1');
+    }
+
+    function buildPlayer(src, start, title, loop) {
+      const v = document.createElement('video');
+      v.src = src;
+      v.playsInline = true;
+      v.preload = 'metadata';
+      v.loop = loop;
+      if (start) v.addEventListener('loadedmetadata', () => { v.currentTime = start; }, { once: true });
+
+      const play = btn('Play', '▶');
+      const time = span('tc', '0:00');
+      const dur = span('tc', '');
+      const seek = document.createElement('div');
+      seek.className = 'seek';
+      seek.setAttribute('role', 'slider');
+      seek.setAttribute('aria-label', 'Seek');
+      seek.setAttribute('tabindex', '0');
+      const fill = div('fill'); const head = div('head');
+      seek.append(div('track'), fill, head);
+      const full = btn('Fullscreen', '⤡');
+
+      const bar = document.createElement('div');
+      bar.className = 'bar';
+      if (title) bar.append(Object.assign(document.createElement('b'), { textContent: title }));
+      bar.append(play, time, seek, dur, full);
+      wrap.append(v, bar);
+
+      const fmt = (t) => {
+        const s = Math.max(0, Math.floor(t || 0));
+        return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+      };
+      const paint = () => {
+        const d = v.duration || 0;
+        const f = d ? Math.min(1, v.currentTime / d) : 0;
+        fill.style.width = `${f * 100}%`;
+        head.style.left = `${f * 100}%`;
+        time.textContent = fmt(v.currentTime);
+        seek.setAttribute('aria-valuenow', String(Math.round(f * 100)));
+      };
+      v.addEventListener('loadedmetadata', () => { dur.textContent = fmt(v.duration); paint(); });
+      v.addEventListener('timeupdate', paint);
+      v.addEventListener('play', () => { play.textContent = '⏸'; });
+      v.addEventListener('pause', () => { play.textContent = '▶'; });
+      v.addEventListener('error', () => {
+        wrap.innerHTML = '<p class="msg">That video would not load.<br><br>'
+          + 'A Dropbox link has to be the direct one (dl.dropboxusercontent.com) '
+          + 'for a browser to play it.</p>';
+      });
+
+      const toggle = () => (v.paused ? v.play().catch(() => {}) : v.pause());
+      play.onclick = toggle;
+      v.addEventListener('click', toggle);
+      full.onclick = () => {
+        if (document.fullscreenElement) document.exitFullscreen();
+        else wrap.requestFullscreen?.().catch(() => {});
+      };
+
+      // ---- the scrub ----
+      // Horizontal two-finger travel over the picture scrubs, on the eased
+      // spring; vertical is left alone so the Notion page behind the embed can
+      // still scroll, which is the difference between an embed that feels
+      // native and one that traps the page.
+      let aim = null; let pos = null; let raf = 0; let last = 0; let idle = 0;
+      const pump = () => {
+        raf = 0;
+        if (pos == null || aim == null) return;
+        const now = performance.now();
+        const dt = Math.max(4, now - (last || now - 8));
+        last = now;
+        pos = motionStep(pos, aim, dt, 30);
+        v.currentTime = Math.max(0, Math.min(v.duration || 0, pos));
+        paint();
+        if (Math.abs(aim - pos) > 1e-3) raf = requestAnimationFrame(pump);
+        else pos = aim;
+      };
+      v.addEventListener('wheel', (e) => {
+        if (e.ctrlKey || Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+        e.preventDefault();
+        v.pause();
+        const now = performance.now();
+        const step = deltaSeconds(e.deltaX, last ? now - last : 8, 1, e.shiftKey);
+        if (pos == null) pos = v.currentTime;
+        aim = Math.max(0, Math.min(v.duration || 0, (aim == null ? v.currentTime : aim) - step));
+        if (!raf) raf = requestAnimationFrame(pump);
+        clearTimeout(idle);
+        idle = setTimeout(() => { pos = null; aim = null; }, 260);
+      }, { passive: false });
+
+      // ---- the seek bar ----
+      let dragging = false;
+      const at = (e) => {
+        const r = seek.getBoundingClientRect();
+        return ((e.clientX - r.left) / Math.max(1, r.width)) * (v.duration || 0);
+      };
+      seek.addEventListener('pointerdown', (e) => {
+        seek.setPointerCapture(e.pointerId); dragging = true; v.currentTime = at(e); paint();
+      });
+      seek.addEventListener('pointermove', (e) => { if (dragging) { v.currentTime = at(e); paint(); } });
+      const stop = (e) => {
+        if (!dragging) return; dragging = false;
+        try { seek.releasePointerCapture(e.pointerId); } catch (_) { /* already gone */ }
+      };
+      seek.addEventListener('pointerup', stop);
+      seek.addEventListener('pointercancel', stop);
+      seek.addEventListener('keydown', (e) => {
+        const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+        if (!d) return;
+        e.preventDefault();
+        v.currentTime = Math.max(0, Math.min(v.duration || 0, v.currentTime + d * (e.shiftKey ? 1 : 1 / 30)));
+        paint();
+      });
+
+      // Keys work only while the embed has focus, so an iframe never steals
+      // typing from the Notion page around it.
+      wrap.tabIndex = -1;
+      wrap.addEventListener('keydown', (e) => {
+        if (e.key === ' ' || e.key === 'k') { e.preventDefault(); toggle(); }
+        else if (e.key === 'ArrowLeft') { e.preventDefault(); v.currentTime -= e.shiftKey ? 1 : 1 / 30; }
+        else if (e.key === 'ArrowRight') { e.preventDefault(); v.currentTime += e.shiftKey ? 1 : 1 / 30; }
+        else if (e.key === 'f') { e.preventDefault(); full.click(); }
+      });
+      wrap.addEventListener('pointerdown', () => wrap.focus());
+    }
+
+    function btn(label, glyph) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.setAttribute('aria-label', label); b.textContent = glyph;
+      return b;
+    }
+    function span(cls, text) {
+      const s = document.createElement('span'); s.className = cls; s.textContent = text; return s;
+    }
+    function div(cls) { const d = document.createElement('div'); d.className = cls; return d; }
+  </script>
+</body>
+</html>

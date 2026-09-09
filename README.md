@@ -16,6 +16,14 @@ lives in a subfolder and serves at its own path.
   into the CTH folder. Links come from one Notion formula property; content is always
   live, so nothing ever needs republishing.
 - `/present/` remains a compatibility redirect that preserves existing slide links.
+- **Studio** (`/studio/`) - game film into the finished analysis video:
+  telestration that animates (spotlights, light beams, tapered arrows,
+  hatched walls, zone shading, label chips), freeze frames, slow motion,
+  punch-in camera moves, and reframing to 9:16 or 1:1 with a keyframed
+  crop that follows the play. Marks can TRACK a player from two clicks.
+  Exports a real MP4 in the browser, plus GIF and stills, straight into
+  Dropbox with a link ready for Notion. Reads film from Dropbox, a file
+  on the device, or any video URL.
 - **Clips** (`/clips/`) - video tagging and clipping: game film read
   straight from the CTH folder's `videos` (pick the folder once), two-tier
   tag buttons with hotkeys and lead/lag, trackpad scrubbing, a filterable
@@ -77,6 +85,25 @@ js/store.js       IndexedDB storage
 js/png.js         PNG tEXt chunk read/write (cthDiagram state)
 js/ui.js          toasts, confirm sheet, helpers
 assets/           rink art and shape images
+```
+
+## Studio's File Map
+
+```
+studio/index.html      app shell
+studio/embed.html      the Notion / Obsidian embed player (public URL format)
+studio/css/app.css     all styling (CTH tokens, dark where the film is)
+studio/js/app.js       shell, library, Dropbox browser, settings
+studio/js/editor.js    stage, tools, inspector, timeline, export flow
+studio/js/timemap.js   output time <-> source time: freeze, slow, cut, trim
+studio/js/marks.js     the telestration vocabulary and its ONE renderer
+studio/js/render.js    the compositor: picture + camera + marks -> a frame
+studio/js/scrub.js     the Clips/Film Room scrub curve over the time map
+studio/js/encode.js    MP4 / WebM / GIF / PNG export, retimed audio
+studio/js/mp4.js       a minimal ISO BMFF muxer (no dependency)
+studio/js/dropbox.js   PKCE auth, browse, temp links, upload, share links
+studio/js/store.js     IndexedDB projects, settings, backup
+studio/js/ui.js        toasts, sheets, progress, icons
 ```
 
 ## Development
