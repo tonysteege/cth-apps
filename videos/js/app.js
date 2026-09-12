@@ -9,6 +9,7 @@
 import * as api from './api.js';
 import { mountPlayer } from './player.js';
 import { h, el, toast, sheet, confirmSheet, promptSheet, progress, icon, ICONS, bytes, tc } from '../../studio/js/ui.js';
+import { renderTree, treeHidden, setTreeHidden, parentOf, isUnder } from './tree.js';
 
 const STUDIO = '../studio/';
 const CLIPS_NOTION = '../clips-notion/embed.html';
@@ -18,8 +19,6 @@ const go = (hash) => { location.hash = hash; };
 
 let cache = null;      // the index, once fetched
 let player = null;     // the mounted player in the detail view
-
-boot();
 
 function boot() {
   window.addEventListener('hashchange', route);
@@ -31,7 +30,10 @@ function route() {
   const hash = location.hash.replace(/^#\/?/, '');
   const m = hash.match(/^v\/([a-z0-9]{8,16})/);
   if (m) { renderDetail(m[1]); return; }
-  renderLibrary();
+  const f = hash.match(/^f\/(.+)$/);
+  let folder = '';
+  if (f) { try { folder = decodeURIComponent(f[1]); } catch (_) { folder = ''; } }
+  renderLibrary(folder);
 }
 
 // ---- chrome ----------------------------------------------------------------
@@ -63,69 +65,243 @@ async function guarded(fn) {
 }
 
 // ---- library ---------------------------------------------------------------
+//
+// THE LIBRARY IS A FOLDER TREE (2026-09-12, Tony's ask): a Finder-style
+// sidebar on the left, the cards of the selected folder on the right. The
+// route carries the folder: `#/` is everything, `#/f/<path>` is one folder.
+// A card drags onto a tree row (or a subfolder chip) to move it.
 
-async function renderLibrary() {
+let folderList = null;   // every folder path, from the Worker
+let curFolder = '';
+let curFolderQuery = '';
+
+async function loadLibrary() {
+  const [vids, fl] = await Promise.all([api.list(), api.folders()]);
+  cache = vids; folderList = fl;
+}
+
+async function renderLibrary(folder = '') {
+  curFolder = folder;
   const main = h('div', { class: 'lib-main' });
-  const search = h('input', { class: 'input vl-search', type: 'search', placeholder: 'Search videos', 'aria-label': 'Search videos' });
+  const side = h('aside', { class: 'vt', 'aria-label': 'Folders' });
+  const search = h('input', { class: 'input vl-search', type: 'search', value: curFolderQuery, placeholder: 'Search videos', 'aria-label': 'Search videos' });
+  const lib = h('div', { class: `lib vl-lib ${treeHidden() ? 'tree-hidden' : ''}` }, side, main);
+  const toggle = h('button', { class: 'icon-btn', title: 'Show or hide folders', 'aria-label': 'Show or hide folders', onclick: () => { setTreeHidden(!treeHidden()); lib.classList.toggle('tree-hidden', treeHidden()); } }, icon(SIDEBAR_ICON));
   const root = h('div', { id: 'app' },
     topbar(
+      toggle,
       search,
-      h('button', { class: 'btn primary', onclick: () => uploadSheet() }, icon(ICONS.export), 'Upload')),
-    h('div', { class: 'lib vl-lib' }, main));
+      h('button', { class: 'btn primary', onclick: () => uploadSheet([], curFolder) }, icon(ICONS.export), 'Upload')),
+    lib);
   app().replaceWith(root);
+  root.appendChild(makeDropTarget(root));
 
-  const drop = makeDropTarget(root);
-  root.appendChild(drop);
-
-  if (!cache) {
+  if (!cache || !folderList) {
     main.appendChild(h('div', { class: 'empty-state', text: 'Loading' }));
-    cache = await guarded(api.list);
-    if (!cache) {
-      cache = null;
+    const ok = await guarded(loadLibrary);
+    if (ok === null && !cache) {
       main.replaceChildren(h('div', { class: 'empty-state' },
         h('h2', { text: 'The library needs your key' }),
         h('p', { text: 'CTH Videos is private. Enter the key once and this browser keeps it.' }),
-        h('button', { class: 'btn primary', onclick: async () => { if (await needKey('')) { cache = null; renderLibrary(); } } }, 'Enter key')));
+        h('button', { class: 'btn primary', onclick: async () => { if (await needKey('')) { cache = null; renderLibrary(curFolder); } } }, 'Enter key')));
       return;
     }
   }
-  const paint = () => renderCards(main, filterList(cache, search.value));
-  search.addEventListener('input', paint);
-  paint();
+  const paintTree = () => renderTree(side, { folders: folderList, videos: cache, current: curFolder }, treeHandlers);
+  const paintMain = () => renderCards(main, curFolder, search.value);
+  search.addEventListener('input', () => { curFolderQuery = search.value; paintMain(); });
+  paintTree();
+  paintMain();
 }
 
-function filterList(list, q) {
+const SIDEBAR_ICON = '<rect x="2" y="3" width="12" height="10" rx="1.6" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M6 3v10" stroke="currentColor" stroke-width="1.4"/>';
+
+const treeHandlers = {
+  select: (path) => go(path ? `#/f/${encodeURIComponent(path)}` : '#/'),
+  newFolder: (parent) => newFolder(parent),
+  rename: (path) => renameFolder(path),
+  remove: (path) => deleteFolder(path),
+  drop: (ids, path) => moveVideos(ids, path),
+  menu: (path, e) => folderMenu(path, e),
+};
+
+const folderName = (p) => (p.includes('/') ? p.slice(p.lastIndexOf('/') + 1) : p);
+const childFolders = (p) => (folderList || []).filter((f) => parentOf(f) === p).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+function filterList(list, folder, q) {
   const s = (q || '').trim().toLowerCase();
-  if (!s) return list;
-  return list.filter((v) => `${v.name} ${v.fileName || ''}`.toLowerCase().includes(s));
+  // A search looks through the folder AND everything under it; without a
+  // search the view is Finder's: this folder's own videos only.
+  const inScope = list.filter((v) => (s ? isUnder(v.folder || '', folder) : (v.folder || '') === folder));
+  if (!s) return inScope;
+  return inScope.filter((v) => `${v.name} ${v.fileName || ''} ${v.folder || ''}`.toLowerCase().includes(s));
 }
 
-function renderCards(host, list) {
+function crumbs(folder) {
+  const parts = folder ? folder.split('/') : [];
+  const row = h('div', { class: 'vl-crumbs' });
+  const link = (label, path) => h('button', { type: 'button', onclick: () => treeHandlers.select(path) }, label);
+  if (!parts.length) { row.appendChild(h('b', { text: 'All videos' })); return row; }
+  row.appendChild(link('All videos', ''));
+  parts.forEach((name, i) => {
+    row.appendChild(h('span', { class: 'sep', text: '/' }));
+    const path = parts.slice(0, i + 1).join('/');
+    row.appendChild(i === parts.length - 1 ? h('b', { text: name }) : link(name, path));
+  });
+  return row;
+}
+
+function renderCards(host, folder, q) {
   host.replaceChildren();
+  const list = filterList(cache, folder, q);
   host.appendChild(h('div', { class: 'row', style: { marginBottom: '12px' } },
-    h('h1', { text: 'Your videos' }),
+    crumbs(folder),
     h('span', { class: 'vl-count', text: String(list.length) }),
-    h('div', { class: 'grow' })));
+    h('div', { class: 'grow' }),
+    h('button', { class: 'btn mini', onclick: () => newFolder(folder) }, 'New folder')));
+
+  // Subfolders first, as Finder does: a chip per child, and a drop target.
+  const kids = childFolders(folder);
+  if (kids.length && !(q || '').trim()) {
+    const strip = h('div', { class: 'vl-folders' });
+    for (const f of kids) {
+      const n = cache.filter((v) => isUnder(v.folder || '', f)).length;
+      const chip = h('button', { class: 'vl-folder', type: 'button', onclick: () => treeHandlers.select(f) },
+        icon(FOLDER_GLYPH, 15), h('span', { text: folderName(f) }), n ? h('span', { class: 'vt-count', text: String(n) }) : null);
+      chip.querySelector('svg').classList.add('fic');
+      chip.addEventListener('contextmenu', (e) => { e.preventDefault(); folderMenu(f, e); });
+      chip.addEventListener('dragover', (e) => { if (e.dataTransfer.types.includes('text/x-cthv-ids')) { e.preventDefault(); chip.classList.add('drop'); } });
+      chip.addEventListener('dragleave', () => chip.classList.remove('drop'));
+      chip.addEventListener('drop', (e) => { chip.classList.remove('drop'); const ids = (e.dataTransfer.getData('text/x-cthv-ids') || '').split(',').filter(Boolean); if (ids.length) { e.preventDefault(); moveVideos(ids, f); } });
+      strip.appendChild(chip);
+    }
+    host.appendChild(strip);
+  }
+
   if (!list.length) {
+    const any = cache.length;
     host.appendChild(h('div', { class: 'empty-state' },
-      h('h2', { text: cache && cache.length ? 'No matches' : 'Nothing here yet' }),
-      h('p', { text: cache && cache.length ? 'Try a different search.' : 'Drop a video anywhere on this page, or press Upload. Files go up untouched, at full quality, however large they are.' })));
+      h('h2', { text: (q || '').trim() ? 'No matches' : (any ? 'Nothing in this folder' : 'Nothing here yet') }),
+      h('p', { text: (q || '').trim() ? 'Try a different search.' : 'Drop a video anywhere on this page, or press Upload. Drag a video onto a folder to move it there.' })));
     return;
   }
   const grid = h('div', { class: 'cards' });
   for (const v of list) {
-    const card = h('button', { class: 'card', onclick: () => go(`#/v/${v.id}`) },
+    const card = h('button', { class: 'card', draggable: 'true', onclick: () => go(`#/v/${v.id}`) },
       v.poster
-        ? h('img', { class: 'thumb', src: api.posterUrl(v), alt: '', loading: 'lazy' })
+        ? h('img', { class: 'thumb', src: api.posterUrl(v), alt: '', loading: 'lazy', draggable: 'false' })
         : h('div', { class: 'thumb empty' }, icon(ICONS.film, 26)),
       v.duration ? h('span', { class: 'vl-dur', text: tc(v.duration, false) }) : null,
       h('div', { class: 'meta' },
         h('b', { text: v.name }),
-        h('div', { class: 'small muted', text: [bytes(v.size), v.width ? `${v.width}x${v.height}` : '', new Date(v.created).toLocaleDateString()].filter(Boolean).join(' · ') })));
+        h('div', { class: 'small muted', text: [bytes(v.size), v.width ? `${v.width}x${v.height}` : '', (q || '').trim() && v.folder ? v.folder : new Date(v.created).toLocaleDateString()].filter(Boolean).join(' · ') })));
     card.addEventListener('contextmenu', (e) => { e.preventDefault(); videoMenu(v); });
+    card.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/x-cthv-ids', v.id);
+      e.dataTransfer.effectAllowed = 'move';
+      card.classList.add('dragging');
+    });
+    card.addEventListener('dragend', () => card.classList.remove('dragging'));
     grid.appendChild(card);
   }
   host.appendChild(grid);
+}
+
+const FOLDER_GLYPH = '<path d="M2 4.5A1.5 1.5 0 013.5 3h2.2l1.2 1.4h5.6A1.5 1.5 0 0114 5.9v5.6a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 012 11.5z" fill="currentColor"/>';
+
+// ---- folders ---------------------------------------------------------------
+
+const validName = (n) => n && !n.includes('/') && n !== '.' && n !== '..';
+
+async function newFolder(parent) {
+  const name = await promptSheet(parent ? `New folder in ${folderName(parent)}` : 'New folder', 'Name', '', { ok: 'Create', placeholder: 'Jr. Ducks 12BB 2026' });
+  if (!name) return;
+  const clean = name.trim();
+  if (!validName(clean)) { toast('A folder name cannot contain a slash.', 'warn'); return; }
+  const path = parent ? `${parent}/${clean}` : clean;
+  if (folderList.includes(path)) { toast('That folder already exists.', 'warn'); return; }
+  const r = await guarded(() => api.setFolders([...folderList, path]));
+  if (!r) return;
+  folderList = r;
+  toast('Folder created.', 'ok');
+  treeHandlers.select(path);
+}
+
+async function renameFolder(path) {
+  const name = await promptSheet('Rename folder', 'Name', folderName(path));
+  if (!name || name.trim() === folderName(path)) return;
+  const clean = name.trim();
+  if (!validName(clean)) { toast('A folder name cannot contain a slash.', 'warn'); return; }
+  const parent = parentOf(path);
+  const next = parent ? `${parent}/${clean}` : clean;
+  if (folderList.includes(next)) { toast('That folder already exists.', 'warn'); return; }
+  const rekey = (p) => (p === path ? next : p.startsWith(`${path}/`) ? next + p.slice(path.length) : p);
+  const moves = cache.filter((v) => isUnder(v.folder || '', path));
+  const r = await guarded(async () => {
+    for (const v of moves) await api.patch(v.id, { folder: rekey(v.folder) });
+    return api.setFolders(folderList.map(rekey));
+  });
+  if (!r) { cache = null; renderLibrary(curFolder); return; }
+  for (const v of moves) v.folder = rekey(v.folder);
+  folderList = r;
+  toast('Renamed.', 'ok');
+  if (isUnder(curFolder, path)) treeHandlers.select(rekey(curFolder)); else renderLibrary(curFolder);
+}
+
+async function deleteFolder(path) {
+  const inside = cache.filter((v) => isUnder(v.folder || '', path));
+  const parent = parentOf(path);
+  const ok = await confirmSheet('Delete this folder?', inside.length
+    ? `"${folderName(path)}" and its subfolders go away. The ${inside.length} video${inside.length === 1 ? '' : 's'} inside move${inside.length === 1 ? 's' : ''} to ${parent ? folderName(parent) : 'All videos'}; nothing is deleted.`
+    : `"${folderName(path)}" is empty and goes away.`, { ok: 'Delete folder' });
+  if (!ok) return;
+  const r = await guarded(async () => {
+    for (const v of inside) await api.patch(v.id, { folder: parent });
+    return api.setFolders(folderList.filter((f) => !isUnder(f, path)));
+  });
+  if (!r) { cache = null; renderLibrary(curFolder); return; }
+  for (const v of inside) v.folder = parent;
+  folderList = r;
+  toast('Folder deleted.');
+  if (isUnder(curFolder, path)) treeHandlers.select(parent); else renderLibrary(curFolder);
+}
+
+async function moveVideos(ids, folder) {
+  const vids = cache.filter((v) => ids.includes(v.id) && (v.folder || '') !== folder);
+  if (!vids.length) return;
+  const r = await guarded(async () => { for (const v of vids) await api.patch(v.id, { folder }); return true; });
+  if (!r) { cache = null; renderLibrary(curFolder); return; }
+  for (const v of vids) v.folder = folder;
+  toast(vids.length === 1 ? `Moved to ${folder ? folderName(folder) : 'All videos'}.` : `${vids.length} videos moved.`, 'ok');
+  renderLibrary(curFolder);
+}
+
+// Pick a folder from a list (for the card's Move to menu).
+async function pickFolder(title) {
+  return sheet(title, (body, close) => {
+    const item = (label, path, depth) => h('button', {
+      class: 'btn', style: { width: '100%', justifyContent: 'flex-start', marginBottom: '4px', paddingLeft: `${12 + depth * 16}px` }, onclick: () => close({ path }),
+    }, icon(depth < 0 ? SIDEBAR_ICON : FOLDER_GLYPH), label);
+    body.appendChild(item('All videos', '', -1));
+    for (const f of [...folderList].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))) body.appendChild(item(folderName(f), f, f.split('/').length - 1));
+    body.appendChild(h('div', { class: 'row end' }, h('button', { class: 'btn', onclick: () => close(null) }, 'Cancel')));
+  });
+}
+
+async function folderMenu(path, e) {
+  const what = await sheet(folderName(path), (body, close) => {
+    const item = (label, kind, danger) => h('button', {
+      class: `btn ${danger ? 'danger' : ''}`, style: { width: '100%', justifyContent: 'flex-start', marginBottom: '6px' }, onclick: () => close(kind),
+    }, label);
+    body.appendChild(item('Open', 'open'));
+    body.appendChild(item('New subfolder', 'new'));
+    body.appendChild(item('Rename', 'rename'));
+    body.appendChild(item('Delete folder', 'del', true));
+  });
+  if (what === 'open') treeHandlers.select(path);
+  if (what === 'new') await newFolder(path);
+  if (what === 'rename') await renameFolder(path);
+  if (what === 'del') await deleteFolder(path);
 }
 
 async function videoMenu(v) {
@@ -135,11 +311,13 @@ async function videoMenu(v) {
     }, label);
     body.appendChild(item('Open', 'open'));
     body.appendChild(item('Copy share link', 'share'));
+    body.appendChild(item('Move to folder', 'move'));
     body.appendChild(item('Rename', 'rename'));
     body.appendChild(item('Delete', 'del', true));
   });
   if (what === 'open') go(`#/v/${v.id}`);
   if (what === 'share') copy(api.watchUrl(v), 'Share link copied.');
+  if (what === 'move') { const pick = await pickFolder(`Move "${v.name}" to`); if (pick) await moveVideos([v.id], pick.path); }
   if (what === 'rename') await rename(v);
   if (what === 'del') await destroy(v);
 }
@@ -185,17 +363,17 @@ function makeDropTarget(root) {
     e.preventDefault(); depth = 0; veil.classList.remove('on');
     const files = [...e.dataTransfer.files].filter(isVideo);
     if (!files.length) { toast('That is not a video file.', 'warn'); return; }
-    uploadSheet(files);
+    uploadSheet(files, curFolder);
   });
   return veil;
 }
 const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
 const isVideo = (f) => /^video\//.test(f.type) || /\.(mp4|mov|m4v|webm|mkv)$/i.test(f.name);
 
-async function uploadSheet(preset = []) {
+async function uploadSheet(preset = [], folder = curFolder) {
   if (!api.getKey() && !(await needKey())) return;
   let files = [...preset];
-  await sheet('Upload videos', (body, close) => {
+  await sheet(folder ? `Upload into ${folder.split('/').pop()}` : 'Upload videos', (body, close) => {
     const input = h('input', { type: 'file', accept: 'video/*,.mp4,.mov,.m4v,.webm', multiple: true, hidden: true });
     const list = h('div', { class: 'vl-files' });
     const drop = h('button', { class: 'up-drop', type: 'button', onclick: () => input.click() },
@@ -222,11 +400,11 @@ async function uploadSheet(preset = []) {
     paintList();
   }).then(async (go2) => {
     if (!go2 || !files.length) return;
-    await runUploads(files);
+    await runUploads(files, folder);
   });
 }
 
-async function runUploads(files) {
+async function runUploads(files, folder = '') {
   const bar = progress(files.length === 1 ? `Uploading ${files[0].name}` : `Uploading ${files.length} videos`);
   const doneSize = files.reduce((a, f) => a + f.size, 0);
   let before = 0;
@@ -235,6 +413,7 @@ async function runUploads(files) {
     for (const f of files) {
       if (bar.signal.aborted) break;
       const v = await api.upload(f, {
+        folder,
         signal: bar.signal,
         onProgress: (frac, note) => bar.set((before + frac * f.size) / doneSize, files.length === 1 ? note : `${note} ${f.name}`),
       });
@@ -246,14 +425,14 @@ async function runUploads(files) {
     if (last) {
       toast(files.length === 1 ? 'Uploaded.' : `${files.length} videos uploaded.`, 'ok');
       cache = null;
-      if (files.length === 1) go(`#/v/${last.id}`); else renderLibrary();
+      if (files.length === 1) go(`#/v/${last.id}`); else renderLibrary(curFolder);
     }
   } catch (e) {
     bar.close();
-    if (e.name === 'AbortError') { toast('Upload cancelled.'); cache = null; renderLibrary(); return; }
-    if (api.isAuthError(e)) { if (await needKey()) return runUploads(files); return; }
+    if (e.name === 'AbortError') { toast('Upload cancelled.'); cache = null; renderLibrary(curFolder); return; }
+    if (api.isAuthError(e)) { if (await needKey()) return runUploads(files, folder); return; }
     toast(e.message || 'The upload failed.', 'error', 7000);
-    cache = null; renderLibrary();
+    cache = null; renderLibrary(curFolder);
   }
 }
 
@@ -267,7 +446,7 @@ async function renderDetail(id) {
     topbar(),
     h('div', { class: 'vd' }, stageHost, side));
   const bar = root.querySelector('.topbar');
-  bar.insertBefore(h('button', { class: 'btn ghost', onclick: () => go('#/') }, icon(ICONS.back), 'Library'), bar.children[1]);
+  bar.insertBefore(h('button', { class: 'btn ghost', onclick: () => treeHandlers.select(v?.folder || curFolder || '') }, icon(ICONS.back), 'Library'), bar.children[1]);
   bar.insertBefore(title, bar.children[2]);
   app().replaceWith(root);
 
@@ -316,6 +495,7 @@ async function renderDetail(id) {
       details(v),
       h('div', { class: 'row wrap', style: { marginTop: '10px' } },
         h('button', { class: 'btn', onclick: async () => { if (await rename(v)) { title.textContent = v.name; side.querySelector('.vd-name').textContent = v.name; } } }, 'Rename'),
+        h('button', { class: 'btn', onclick: async () => { if (!folderList) await guarded(loadLibrary); const pick = folderList ? await pickFolder(`Move "${v.name}" to`) : null; if (pick) { await guarded(() => api.patch(v.id, { folder: pick.path })); v.folder = pick.path; cache = null; toast('Moved.', 'ok'); renderDetail(v.id); } } }, 'Move to folder'),
         h('button', { class: 'btn', onclick: () => refreshPoster(v) }, 'Set poster from this frame'),
         h('button', { class: 'btn danger', onclick: () => destroy(v) }, icon(ICONS.trash), 'Delete'))),
     h('section', {},
@@ -326,6 +506,7 @@ async function renderDetail(id) {
 function details(v) {
   const rows = [
     ['Name', v.name, 'vd-name'],
+    ['Folder', v.folder || 'All videos'],
     ['File', v.fileName || ''],
     ['Size', bytes(v.size)],
     ['Length', v.duration ? tc(v.duration, false) : 'Unknown'],
@@ -364,6 +545,9 @@ async function settingsSheet() {
     body.appendChild(h('p', { class: 'tiny muted' }, 'Storage: Cloudflare R2, bucket cth-videos. Files are kept byte for byte; nothing is re-encoded.'));
     body.appendChild(h('div', { class: 'row end' },
       h('button', { class: 'btn', onclick: () => close(null) }, 'Cancel'),
-      h('button', { class: 'btn primary', onclick: () => { api.setKey(keyInput.value.trim()); cache = null; close(true); toast('Saved.', 'ok'); route(); } }, 'Save')));
+      h('button', { class: 'btn primary', onclick: () => { api.setKey(keyInput.value.trim()); cache = null; folderList = null; close(true); toast('Saved.', 'ok'); route(); } }, 'Save')));
   });
 }
+
+// Last, so every `let` above is initialised before the first route runs.
+boot();

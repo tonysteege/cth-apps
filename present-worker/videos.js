@@ -66,7 +66,20 @@ async function writeIndex(env, idx) { await env.VIDEOS.put('index', JSON.stringi
 const summary = (v) => ({
   id: v.id, name: v.name, size: v.size, type: v.type, duration: v.duration, width: v.width, height: v.height,
   created: v.created, updated: v.updated, poster: !!v.poster, fileName: v.fileName, status: v.status,
+  folder: v.folder || '',
 });
+
+// A folder path: segments joined by '/', no leading or trailing slash, no
+// empty or dot-only segments. '' is the root.
+const cleanFolder = (f) => String(f ?? '').split('/').map((x) => clean(x, 80)).filter((x) => x && x !== '.' && x !== '..').join('/');
+async function readFolders(env) { return (await env.VIDEOS.get('folders', 'json')) || []; }
+async function writeFolders(env, list) {
+  const set = new Set();
+  for (const f of list) { const c = cleanFolder(f); if (c) { const parts = c.split('/'); for (let i = 1; i <= parts.length; i++) set.add(parts.slice(0, i).join('/')); } }
+  const out = [...set].sort((a, b) => a.localeCompare(b)).slice(0, 2000);
+  await env.VIDEOS.put('folders', JSON.stringify(out));
+  return out;
+}
 
 async function upsertIndex(env, v) {
   const idx = (await readIndex(env)).filter((x) => x.id !== v.id);
@@ -145,6 +158,17 @@ export async function handleVideos(request, env, url, cors) {
   const key = request.headers.get('X-CTH-Key') || '';
   const authed = !!env.VIDEOS_KEY && key === env.VIDEOS_KEY;
   const deny = () => jsonOut({ error: 'auth', message: 'The key is wrong or missing.' }, 401, cors);
+  // The folder list (key-gated): explicit folders, so an empty one exists.
+  if (url.pathname === '/videos/folders') {
+    if (!authed) return deny();
+    if (request.method === 'GET') return jsonOut({ folders: await readFolders(env) }, 200, cors, { 'cache-control': 'no-store' });
+    if (request.method === 'PUT') {
+      let body;
+      try { body = await request.json(); } catch (_) { return jsonOut({ error: 'bad_json', message: 'The body must be JSON.' }, 400, cors); }
+      return jsonOut({ folders: await writeFolders(env, Array.isArray(body.folders) ? body.folders : []) }, 200, cors);
+    }
+    return jsonOut({ error: 'not_found' }, 404, cors);
+  }
   const m = url.pathname.match(/^\/videos(?:\/([a-z0-9]{8,16}))?(?:\/(part|complete|poster|file))?(?:\/(\d+))?(?:\/[^/]*)?$/);
   if (!m) return jsonOut({ error: 'not_found' }, 404, cors);
   const [, id, action, partNo] = m;
@@ -169,6 +193,7 @@ export async function handleVideos(request, env, url, cors) {
         width: num(body.width),
         height: num(body.height),
         codec: clean(body.codec || '', 64),
+        folder: cleanFolder(body.folder),
         notes: '',
         created: Date.now(),
         updated: Date.now(),
@@ -181,6 +206,7 @@ export async function handleVideos(request, env, url, cors) {
       });
       doc.uploadId = mp.uploadId;
       await env.VIDEOS.put(`v:${nid}`, JSON.stringify(doc));
+      if (doc.folder) { const fl = await readFolders(env); if (!fl.includes(doc.folder)) await writeFolders(env, [...fl, doc.folder]); }
       return jsonOut({ id: nid, uploadId: mp.uploadId, partSize: PART_SIZE }, 200, cors);
     }
     return jsonOut({ error: 'not_found' }, 404, cors);
@@ -262,6 +288,10 @@ export async function handleVideos(request, env, url, cors) {
     const next = { ...doc, updated: Date.now() };
     if (body.name != null) next.name = clean(body.name) || doc.name;
     if (body.notes != null) next.notes = clean(body.notes, 4000);
+    if (body.folder != null) {
+      next.folder = cleanFolder(body.folder);
+      if (next.folder) { const fl = await readFolders(env); if (!fl.includes(next.folder)) await writeFolders(env, [...fl, next.folder]); }
+    }
     await env.VIDEOS.put(`v:${id}`, JSON.stringify(next));
     if (next.status === 'ready') await upsertIndex(env, next);
     return jsonOut({ ok: true, video: next }, 200, cors);

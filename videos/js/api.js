@@ -40,6 +40,10 @@ export const list = () => call('/videos').then((j) => j.videos || []);
 export const get = (id) => call(`/videos/${id}`);
 export const patch = (id, fields) => call(`/videos/${id}`, { method: 'PATCH', body: fields });
 export const remove = (id) => call(`/videos/${id}`, { method: 'DELETE' });
+// Folders are paths joined by '/'. The list holds every folder, including
+// empty ones; a video's `folder` is one of them (or '' for the root).
+export const folders = () => call('/videos/folders').then((j) => j.folders || []);
+export const setFolders = (list) => call('/videos/folders', { method: 'PUT', body: { folders: list } }).then((j) => j.folders || []);
 
 // The three public addresses a video has. The share page is what goes to a
 // parent or into a Notion embed block; the file is the bytes themselves.
@@ -114,7 +118,7 @@ function putPart(url, blob, { onProgress, signal }) {
 // Upload one file. `onProgress(fraction, note)`. Resolves to the finished
 // video record. Parts go up three at a time, each retried three times, so a
 // blip on rink wifi costs one part, not the whole game.
-export async function upload(file, { name, onProgress = () => {}, signal } = {}) {
+export async function upload(file, { name, folder = '', onProgress = () => {}, signal } = {}) {
   onProgress(0, 'Reading');
   const info = await probe(file);
   if (signal?.aborted) throw Object.assign(new Error('cancelled'), { name: 'AbortError' });
@@ -123,6 +127,7 @@ export async function upload(file, { name, onProgress = () => {}, signal } = {})
     method: 'POST',
     body: {
       name: name || file.name.replace(/\.[a-z0-9]+$/i, ''),
+      folder,
       fileName: file.name,
       type: file.type || 'video/mp4',
       size: file.size,

@@ -12,7 +12,7 @@
 // and very slightly softer. "Fast" is q50. "Original" sends the bytes as-is.
 //
 // USAGE
-//   cthv upload [--original] [--fast] [--name "Title"] <file>...
+//   cthv upload [--original] [--folder "Team/Season"] [--name "Title"] <file>...
 //   cthv watch               process the drop folder once (launchd runs this)
 //   cthv install             set up the drop folder, the launch agent, `cthv`
 //   cthv list                the library
@@ -131,13 +131,13 @@ async function compress(file, info, onProgress) {
 
 // ---- the upload -------------------------------------------------------------
 
-async function uploadFile(file, { name, onProgress = () => {}, info }) {
+async function uploadFile(file, { name, folder = '', onProgress = () => {}, info }) {
   info = info || await probe(file);
   const size = statSync(file).size;
   const fileName = path.basename(file);
   const start = await api('/videos', {
     method: 'POST',
-    body: { name: name || fileName.replace(/\.[a-z0-9]+$/i, '').replace(/\.fast$/, ''), fileName: fileName.replace('.fast.mp4', '.mp4'), type: 'video/mp4',
+    body: { name: name || fileName.replace(/\.[a-z0-9]+$/i, '').replace(/\.fast$/, ''), folder, fileName: fileName.replace('.fast.mp4', '.mp4'), type: 'video/mp4',
       size, duration: info.duration, width: info.width, height: info.height, codec: info.codec },
   });
   const { id, uploadId, partSize } = start;
@@ -181,7 +181,7 @@ async function uploadFile(file, { name, onProgress = () => {}, info }) {
 }
 
 // One file, start to finish: decide whether to shrink, shrink, upload.
-async function processFile(file, { original = false, name = '' } = {}, prep = null) {
+async function processFile(file, { original = false, name = '', folder = '' } = {}, prep = null) {
   const info = await probe(file);
   const base = path.basename(file);
   // Already HEVC, or already small for its size, is not worth re-encoding.
@@ -199,7 +199,7 @@ async function processFile(file, { original = false, name = '' } = {}, prep = nu
   }
   const sendInfo = toSend === file ? info : await probe(toSend);
   const t1 = Date.now();
-  const v = await uploadFile(toSend, { name: name || base.replace(/\.[a-z0-9]+$/i, ''), info: sendInfo, onProgress: (f) => bar(`Uploading ${base}`, f) });
+  const v = await uploadFile(toSend, { name: name || base.replace(/\.[a-z0-9]+$/i, ''), folder, info: sendInfo, onProgress: (f) => bar(`Uploading ${base}`, f) });
   process.stdout.write('\n');
   const secs = Math.round((Date.now() - t1) / 1000);
   log(`uploaded ${base}: ${fmtBytes(sendInfo.size)} in ${fmtDur(secs)} (${Math.round(sendInfo.size * 8 / 1e6 / Math.max(1, secs))} Mbps) -> ${WATCH_URL}${v.id}`);
@@ -251,11 +251,22 @@ async function settled(file) {
   return false;
 }
 
+// SUBFOLDERS ARE LIBRARY FOLDERS (2026-09-12): a file at
+// `CTH Videos/Jr. Ducks 12BB 2026/Games/x.mp4` lands in the library folder
+// 'Jr. Ducks 12BB 2026/Games', so the Finder tree and the app's tree agree.
+// Uploaded/, Original/ and Failed/ are the tool's own and are not folders.
 async function listDrop() {
-  const pick = async (dir, original) => {
+  const skip = new Set(['Uploaded', 'Original', 'Failed']);
+  const pick = async (dir, original, rel = '') => {
     let names = [];
-    try { names = await fs.readdir(dir); } catch (_) { return []; }
-    return names.filter((n) => !n.startsWith('.') && VIDEO_EXT.test(n)).map((n) => ({ file: path.join(dir, n), original, size: statSync(path.join(dir, n)).size }));
+    try { names = await fs.readdir(dir, { withFileTypes: true }); } catch (_) { return []; }
+    const out = [];
+    for (const d of names) {
+      if (d.name.startsWith('.')) continue;
+      if (d.isDirectory()) { if (!rel && skip.has(d.name)) continue; out.push(...await pick(path.join(dir, d.name), original, rel ? `${rel}/${d.name}` : d.name)); continue; }
+      if (VIDEO_EXT.test(d.name)) out.push({ file: path.join(dir, d.name), original, folder: rel, size: statSync(path.join(dir, d.name)).size });
+    }
+    return out;
   };
   // SMALLEST FIRST (2026-09-12, after a 16 MB clip queued behind four games):
   // a quick clip should never wait two hours behind a full game.
@@ -284,11 +295,12 @@ async function watchOnce() {
       const it = items[0];
       const base = path.basename(it.file);
       if (!await settled(it.file)) { log(`${base} kept changing; giving up on it for now`); break; }
-      log(`drop: ${base}${it.original ? ' (original)' : ''}`);
+      log(`drop: ${base}${it.folder ? ` -> ${it.folder}` : ''}${it.original ? ' (original)' : ''}`);
       try {
-        const v = await processFile(it.file, { original: it.original });
-        await fs.mkdir(DROP_DONE, { recursive: true });
-        await fs.rename(it.file, path.join(DROP_DONE, base)).catch(() => {});
+        const v = await processFile(it.file, { original: it.original, folder: it.folder });
+        const doneDir = path.join(DROP_DONE, it.folder);
+        await fs.mkdir(doneDir, { recursive: true });
+        await fs.rename(it.file, path.join(doneDir, base)).catch(() => {});
         const link = `${WATCH_URL}${v.id}`;
         await fs.appendFile(path.join(DROP_DONE, 'links.txt'), `${new Date().toLocaleString()}  ${v.name}\n  share:  ${link}\n  open:   ${APP_URL}${v.id}\n\n`);
         clip(link);
@@ -313,6 +325,7 @@ async function install() {
   await fs.writeFile(path.join(DROP, 'READ ME.txt'),
     'CTH Videos drop folder\n\n'
     + 'Drop game film here. Each file is shrunk with the Mac\'s hardware encoder (no visible loss) and uploaded to CTH Videos.\n'
+    + 'Make subfolders here and they become folders in the library: CTH Videos/Jr. Ducks 12BB 2026/game.mp4 lands in the folder "Jr. Ducks 12BB 2026".\n'
     + 'Drop into Original/ to upload a file exactly as it is.\n'
     + 'Finished files move to Uploaded/, and Uploaded/links.txt lists every share link. The latest link is also on your clipboard.\n'
     + 'Several files at once are fine: they go one after another, and the next one shrinks while the current one uploads.\n'
@@ -368,13 +381,14 @@ async function main() {
     return;
   }
   if (cmd === 'upload') {
-    const opts = { original: false, name: '' };
+    const opts = { original: false, name: '', folder: '' };
     const files = [];
     for (let i = 0; i < rest.length; i++) {
       const a = rest[i];
       if (a === '--original') opts.original = true;
       else if (a === '--fast') opts.original = false;
       else if (a === '--name') opts.name = rest[++i] || '';
+      else if (a === '--folder') opts.folder = (rest[++i] || '').replace(/^\/+|\/+$/g, '');
       else files.push(path.resolve(a));
     }
     if (!files.length) fail('Give it at least one video file.');

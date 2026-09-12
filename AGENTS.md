@@ -1699,6 +1699,24 @@ and access from an iPad or a Notion page.
   read). It plays one video with the same player and nothing else, no key,
   no library, which is why it is both the share link and the Notion embed.
   The detail view offers it as "Share link", the bytes as "Direct file".
+- **FOLDERS ARE PATHS, AND THE TREE IS FINDER'S** (2026-09-12, Tony's ask).
+  A video carries an optional `folder` ('Jr. Ducks 12BB 2026/Games'; '' is
+  the root), additive. The Worker keeps an explicit list at KV `folders`
+  (`GET|PUT /videos/folders`, key) so an empty folder exists; writing the
+  list also adds every ancestor. `videos/js/tree.js` draws the sidebar from
+  that list plus every video's own folder: chevrons, the Diagrams tree row
+  recipe, the accent pill for the selected folder, counts that include
+  subfolders, arrow-key navigation, right-click for New subfolder / Rename /
+  Delete (deleting moves the videos to the parent, never deletes them),
+  and a card drags onto a row or a subfolder chip to move. Routes:
+  `#/` is everything, `#/f/<encoded path>` one folder. The view is
+  Finder's: a folder shows ITS OWN videos plus chips for its subfolders; a
+  search looks through everything under it. Disclosure state and the hidden
+  sidebar live in localStorage `cthv.tree.*`. The Mac drop folder's
+  SUBFOLDERS map to library folders one to one (`cthv upload --folder`).
+- **NO BIG PLAY BUTTON ON THE PICTURE** (2026-09-12, Tony's call): the stage
+  is for scrubbing. A clean click on the picture still plays or pauses; a
+  gesture that ends in a tap does not.
 - POSTERS are made in the browser at upload (`probe()`: a frame a tenth of
   the way in, 640 wide JPEG) and can be reset from the current frame in the
   detail view. A file the browser cannot decode simply has no poster.

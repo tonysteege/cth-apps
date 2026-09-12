@@ -26,8 +26,8 @@ export function mountPlayer(host, { url, id, title = '', poster = '', autoplay =
   if (poster) video.poster = poster;
   const paint = h('canvas', { class: 'scrub-paint', 'aria-hidden': 'true' });
   const stage = h('div', { class: 'vp-stage', tabindex: '0', 'aria-label': title ? `${title} player` : 'Video player' }, video, paint);
-  const big = h('button', { class: 'vp-big', 'aria-label': 'Play' }, icon(ICONS.play, 34));
-  stage.appendChild(big);
+  // No big play button over the picture (2026-09-12, Tony's call): the
+  // stage is for scrubbing, and a target in the middle of it gets in the way.
 
   const play = h('button', { class: 'vp-btn', 'aria-label': 'Play', title: 'Play (space)' }, icon(ICONS.play, 18));
   const clock = h('span', { class: 'vp-tc', text: '0:00.00' });
@@ -104,8 +104,13 @@ export function mountPlayer(host, { url, id, title = '', poster = '', autoplay =
     else { engine.play(() => RATES[rateIx]); setPlaying(true); }
   };
   play.onclick = togglePlay;
-  big.onclick = togglePlay;
-  stage.addEventListener('click', (e) => { if (e.target === video || e.target === paint) togglePlay(); });
+  // A click on the picture plays or pauses, but only a clean click: a
+  // two-finger gesture that ends in a tap must not toggle playback.
+  let downAt = 0;
+  stage.addEventListener('pointerdown', () => { downAt = performance.now(); });
+  stage.addEventListener('click', (e) => {
+    if ((e.target === video || e.target === paint) && performance.now() - downAt < 300 && engine.pos == null) togglePlay();
+  });
   rate.onclick = () => { rateIx = (rateIx + 1) % RATES.length; rate.textContent = `${RATES[rateIx]}x`; if (engine.playing) video.playbackRate = RATES[rateIx]; };
   full.onclick = () => {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
