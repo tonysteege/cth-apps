@@ -50,6 +50,9 @@ export const isUnder = (p, folder) => p === folder || p.startsWith(`${folder}/`)
 //          drop(videoIds, path), menu(path, event) }.
 export function renderTree(host, state, on) {
   const open = readOpen();
+  // The selected folder is always reachable: its ancestors open, as Finder
+  // reveals a selection.
+  if (state.current) { let p = parentOf(state.current); while (p) { open.add(p); p = parentOf(p); } writeOpen(open); }
   const counts = new Map();   // direct count per folder, plus '' for root
   const deep = new Map();     // count including subfolders
   for (const v of state.videos) {
