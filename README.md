@@ -124,6 +124,8 @@ videos/js/player.js    the player: <video> plus the Studio scrub engine overlay
 videos/js/api.js       the Worker client: key, list, multipart upload, links
 videos/js/watch.js     the share page
 present-worker/videos.js   the API: R2 multipart, Range streaming, KV index
+videos/mac/cthv.mjs    the Mac uploader: hardware HEVC shrink, parallel parts,
+                       the ~/Videos/CTH Videos drop folder and its launch agent
 ```
 
 ## Development

@@ -46,7 +46,7 @@ async function render() {
   player = mountPlayer(host, {
     url: api.fileUrl(v), id: v.id, title: v.name, poster: api.posterUrl(v), start: t, autoplay,
     onError: () => {
-      bar.appendChild(h('span', { class: 'w-note', text: 'This browser cannot play the file. Try Safari, or download it.' }));
+      bar.appendChild(h('span', { class: 'w-note', text: 'This browser cannot play the file. Try Safari or an up-to-date Chrome, or download it.' }));
     },
   });
 }

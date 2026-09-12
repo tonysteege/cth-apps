@@ -280,7 +280,7 @@ async function renderDetail(id) {
 
   player = mountPlayer(stageHost, {
     url: api.fileUrl(v), id: v.id, title: v.name, poster: api.posterUrl(v),
-    onError: () => toast('This browser cannot play that file. Safari plays HEVC (iPhone) files; Chrome needs H.264.', 'warn', 8000),
+    onError: () => toast('This browser cannot play that file. HEVC files need a browser with hardware HEVC support (Safari, and Chrome on most recent machines).', 'warn', 8000),
   });
 
   const share = api.watchUrl(v);

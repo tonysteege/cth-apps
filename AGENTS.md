@@ -1710,6 +1710,22 @@ and access from an iPad or a Notion page.
   the export sheet's Save To has "CTH Videos (share link)" (`saveToVideos` in
   studio/js/editor.js imports `videos/js/api.js` lazily) and shows the share
   and direct links when done; GIFs and stills still download.
+- **THE MAC UPLOADER IS THE FAST PATH** (`videos/mac/cthv.mjs`, 2026-09-12,
+  after the first real upload showed the home upstream at about 3 Mbps). It
+  runs on the Mac, so it can do what a browser cannot: shrink a game with the
+  hardware encoder (`hevc_videotoolbox -q:v 50`, tagged `hvc1`, audio copied)
+  before sending it. Measured on Tony's 1080p30 film at 3.8 Mbps H.264: 2.5x
+  smaller with no visible difference on a frame crop (q40 was 3.7x and very
+  slightly softer). Files already HEVC or under 2.2 Mbps go up untouched;
+  `--original` forces that. Four parts in flight; the next file shrinks while
+  the current one uploads. `cthv install` creates `~/Videos/CTH Videos`
+  (top level = shrink and upload, `Original/` = as-is, finished files move to
+  `Uploaded/` with every share link in `links.txt` and the latest on the
+  clipboard), a launchd agent `com.coachtonyhockey.videos-drop` with
+  WatchPaths on that folder, and a `cthv` symlink on the PATH. A file is only
+  touched once its size has stopped changing for 3 s. Logs to
+  `~/Library/Logs/cth-videos.log`. The key comes from the Keychain. The web
+  uploader stays as the anywhere path; it never re-encodes.
 - Styling sits on `studio/css/app.css` (imported first) plus `videos/css/
   app.css`; the shell, sheets, toasts and cards are Studio's, so the two apps
   read as one. The upload dropzone is the Clips `.up-drop` recipe.
