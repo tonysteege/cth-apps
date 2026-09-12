@@ -40,6 +40,7 @@ export const list = () => call('/videos').then((j) => j.videos || []);
 export const get = (id) => call(`/videos/${id}`);
 export const patch = (id, fields) => call(`/videos/${id}`, { method: 'PATCH', body: fields });
 export const remove = (id) => call(`/videos/${id}`, { method: 'DELETE' });
+export const duplicate = (id, fields = {}) => call(`/videos/${id}/duplicate`, { method: 'POST', body: fields }).then((j) => j.video);
 // Folders are paths joined by '/'. The list holds every folder, including
 // empty ones; a video's `folder` is one of them (or '' for the root).
 export const folders = () => call('/videos/folders').then((j) => j.folders || []);

@@ -169,7 +169,7 @@ export async function handleVideos(request, env, url, cors) {
     }
     return jsonOut({ error: 'not_found' }, 404, cors);
   }
-  const m = url.pathname.match(/^\/videos(?:\/([a-z0-9]{8,16}))?(?:\/(part|complete|poster|file))?(?:\/(\d+))?(?:\/[^/]*)?$/);
+  const m = url.pathname.match(/^\/videos(?:\/([a-z0-9]{8,16}))?(?:\/(part|complete|poster|file|duplicate))?(?:\/(\d+))?(?:\/[^/]*)?$/);
   if (!m) return jsonOut({ error: 'not_found' }, 404, cors);
   const [, id, action, partNo] = m;
 
@@ -270,6 +270,28 @@ export async function handleVideos(request, env, url, cors) {
     } catch (e) {
       return jsonOut({ error: 'complete_failed', message: String(e && e.message || e).slice(0, 300) }, 500, cors);
     }
+  }
+
+  // Duplicate: a byte copy inside R2 (the object streams from the bucket
+  // back into it, never through the browser) under a new id, same folder.
+  if (action === 'duplicate' && request.method === 'POST') {
+    if (doc.status !== 'ready') return jsonOut({ error: 'not_ready', message: 'That video has not finished uploading.' }, 409, cors);
+    const src = await env.VIDEOS_BUCKET.get(`${id}/original`);
+    if (!src) return jsonOut({ error: 'not_found', message: 'The file is missing.' }, 404, cors);
+    if (src.size > 4.9 * 1024 * 1024 * 1024) return jsonOut({ error: 'too_big', message: 'Files over 4.9 GB cannot be duplicated in place yet; download and re-upload instead.' }, 413, cors);
+    const nid = newId();
+    const meta = new Headers(); src.writeHttpMetadata(meta);
+    await env.VIDEOS_BUCKET.put(`${nid}/original`, src.body, { httpMetadata: src.httpMetadata, customMetadata: src.customMetadata });
+    const poster = doc.poster ? await env.VIDEOS_BUCKET.get(`${id}/poster.jpg`) : null;
+    if (poster) await env.VIDEOS_BUCKET.put(`${nid}/poster.jpg`, poster.body, { httpMetadata: poster.httpMetadata });
+    let body = {};
+    try { body = await request.json(); } catch (_) { body = {}; }
+    const next = { ...doc, id: nid, name: clean(body.name) || `${doc.name} copy`, created: Date.now(), updated: Date.now(), poster: !!poster };
+    if (body.folder != null) next.folder = cleanFolder(body.folder);
+    delete next.uploadId;
+    await env.VIDEOS.put(`v:${nid}`, JSON.stringify(next));
+    await upsertIndex(env, next);
+    return jsonOut({ ok: true, video: next }, 200, cors);
   }
 
   if (action === 'poster' && request.method === 'PUT') {

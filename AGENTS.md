@@ -1714,6 +1714,23 @@ and access from an iPad or a Notion page.
   search looks through everything under it. Disclosure state and the hidden
   sidebar live in localStorage `cthv.tree.*`. The Mac drop folder's
   SUBFOLDERS map to library folders one to one (`cthv upload --folder`).
+- **THE SIDEBAR IS WHITE AND STAYS IN BOTH VIEWS** (2026-09-12, Tony's call):
+  one `shell()` in app.js builds topbar + tree + content for the library AND
+  the player, so a video opens from the tree while another plays. The tree
+  lists VIDEOS as film rows under their folders (the selected one wears the
+  pill), not just folders. FOLDERS DRAG INTO FOLDERS (`text/x-cthv-folder`;
+  a closed target springs open after 700 ms; into itself or its own child is
+  a no-op), DOUBLE-CLICK RENAMES IN PLACE (`inlineRename` in js/menu.js, on
+  tree rows, subfolder chips and the player's title), and RIGHT-CLICK IS A
+  REAL MENU AT THE POINTER (`showMenu`), never a sheet: for a video Open,
+  share page, both links, Download, Studio, Clips Notion, Rename, Duplicate,
+  Move, Delete; for a folder Open, New subfolder, Rename, Duplicate, Move,
+  Delete. DUPLICATE IS A BYTE COPY INSIDE R2 (`POST /videos/<id>/duplicate`,
+  key; streams bucket to bucket, never through the browser; refuses over
+  4.9 GB because a single R2 put tops out there) into the same folder as
+  "<name> copy"; a folder duplicate copies its videos one by one behind a
+  progress bar. Manual ordering does not exist: the tree sorts by name,
+  numerically aware, as Finder's list view does.
 - **NO BIG PLAY BUTTON ON THE PICTURE** (2026-09-12, Tony's call): the stage
   is for scrubbing. A clean click on the picture still plays or pauses; a
   gesture that ends in a tap does not.

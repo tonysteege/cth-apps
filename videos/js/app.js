@@ -10,6 +10,7 @@ import * as api from './api.js';
 import { mountPlayer } from './player.js';
 import { h, el, toast, sheet, confirmSheet, promptSheet, progress, icon, ICONS, bytes, tc } from '../../studio/js/ui.js';
 import { renderTree, treeHidden, setTreeHidden, parentOf, isUnder } from './tree.js';
+import { showMenu, inlineRename } from './menu.js';
 
 const STUDIO = '../studio/';
 const CLIPS_NOTION = '../clips-notion/embed.html';
@@ -80,37 +81,46 @@ async function loadLibrary() {
   cache = vids; folderList = fl;
 }
 
+// ONE SHELL FOR BOTH VIEWS (2026-09-12, Tony's ask): the tree stays on the
+// left whether the cards or a player fill the right, so a video opens from
+// the tree while another is playing and folders switch without a detour.
+function shell(extraTop, content, { folder = '', videoId = '' } = {}) {
+  const side = h('aside', { class: 'vt', 'aria-label': 'Library' });
+  const lib = h('div', { class: `lib vl-lib ${treeHidden() ? 'tree-hidden' : ''}` }, side, content);
+  const toggle = h('button', { class: 'icon-btn', title: 'Show or hide the sidebar', 'aria-label': 'Show or hide the sidebar', onclick: () => { setTreeHidden(!treeHidden()); lib.classList.toggle('tree-hidden', treeHidden()); } }, icon(SIDEBAR_ICON));
+  const root = h('div', { id: 'app' }, topbar(toggle, ...extraTop), lib);
+  app().replaceWith(root);
+  root.appendChild(makeDropTarget(root));
+  const paintTree = () => { if (cache && folderList) renderTree(side, { folders: folderList, videos: cache, current: videoId ? null : folder, currentVideo: videoId }, treeHandlers); };
+  return { root, side, lib, paintTree };
+}
+
+async function ensureLibrary(main) {
+  if (cache && folderList) return true;
+  if (main) main.appendChild(h('div', { class: 'empty-state', text: 'Loading' }));
+  const ok = await guarded(loadLibrary);
+  if (ok === null && !cache) {
+    if (main) main.replaceChildren(h('div', { class: 'empty-state' },
+      h('h2', { text: 'The library needs your key' }),
+      h('p', { text: 'CTH Videos is private. Enter the key once and this browser keeps it.' }),
+      h('button', { class: 'btn primary', onclick: async () => { if (await needKey('')) { cache = null; route(); } } }, 'Enter key')));
+    return false;
+  }
+  return true;
+}
+
 async function renderLibrary(folder = '') {
   curFolder = folder;
   const main = h('div', { class: 'lib-main' });
-  const side = h('aside', { class: 'vt', 'aria-label': 'Folders' });
   const search = h('input', { class: 'input vl-search', type: 'search', value: curFolderQuery, placeholder: 'Search videos', 'aria-label': 'Search videos' });
-  const lib = h('div', { class: `lib vl-lib ${treeHidden() ? 'tree-hidden' : ''}` }, side, main);
-  const toggle = h('button', { class: 'icon-btn', title: 'Show or hide folders', 'aria-label': 'Show or hide folders', onclick: () => { setTreeHidden(!treeHidden()); lib.classList.toggle('tree-hidden', treeHidden()); } }, icon(SIDEBAR_ICON));
-  const root = h('div', { id: 'app' },
-    topbar(
-      toggle,
-      search,
-      h('button', { class: 'btn primary', onclick: () => uploadSheet([], curFolder) }, icon(ICONS.export), 'Upload')),
-    lib);
-  app().replaceWith(root);
-  root.appendChild(makeDropTarget(root));
-
-  if (!cache || !folderList) {
-    main.appendChild(h('div', { class: 'empty-state', text: 'Loading' }));
-    const ok = await guarded(loadLibrary);
-    if (ok === null && !cache) {
-      main.replaceChildren(h('div', { class: 'empty-state' },
-        h('h2', { text: 'The library needs your key' }),
-        h('p', { text: 'CTH Videos is private. Enter the key once and this browser keeps it.' }),
-        h('button', { class: 'btn primary', onclick: async () => { if (await needKey('')) { cache = null; renderLibrary(curFolder); } } }, 'Enter key')));
-      return;
-    }
-  }
-  const paintTree = () => renderTree(side, { folders: folderList, videos: cache, current: curFolder }, treeHandlers);
+  const sh = shell([
+    search,
+    h('button', { class: 'btn primary', onclick: () => uploadSheet([], curFolder) }, icon(ICONS.export), 'Upload'),
+  ], main, { folder });
+  if (!await ensureLibrary(main)) return;
   const paintMain = () => renderCards(main, curFolder, search.value);
   search.addEventListener('input', () => { curFolderQuery = search.value; paintMain(); });
-  paintTree();
+  sh.paintTree();
   paintMain();
 }
 
@@ -118,10 +128,15 @@ const SIDEBAR_ICON = '<rect x="2" y="3" width="12" height="10" rx="1.6" stroke="
 
 const treeHandlers = {
   select: (path) => go(path ? `#/f/${encodeURIComponent(path)}` : '#/'),
+  open: (id) => go(`#/v/${id}`),
+  videoMenu: (v, e) => videoMenu(v, e),
   newFolder: (parent) => newFolder(parent),
   rename: (path) => renameFolder(path),
+  renameInline: (path, nameEl) => inlineRename(nameEl, folderName(path), (name) => renameFolderTo(path, name)),
+  renameVideoInline: (v, nameEl) => inlineRename(nameEl, v.name, (name) => renameVideoTo(v, name)),
   remove: (path) => deleteFolder(path),
   drop: (ids, path) => moveVideos(ids, path),
+  dropFolder: (path, into) => moveFolder(path, into),
   menu: (path, e) => folderMenu(path, e),
 };
 
@@ -170,9 +185,17 @@ function renderCards(host, folder, q) {
         icon(FOLDER_GLYPH, 15), h('span', { text: folderName(f) }), n ? h('span', { class: 'vt-count', text: String(n) }) : null);
       chip.querySelector('svg').classList.add('fic');
       chip.addEventListener('contextmenu', (e) => { e.preventDefault(); folderMenu(f, e); });
-      chip.addEventListener('dragover', (e) => { if (e.dataTransfer.types.includes('text/x-cthv-ids')) { e.preventDefault(); chip.classList.add('drop'); } });
+      chip.addEventListener('dragover', (e) => { if (e.dataTransfer.types.includes('text/x-cthv-ids') || e.dataTransfer.types.includes('text/x-cthv-folder')) { e.preventDefault(); chip.classList.add('drop'); } });
       chip.addEventListener('dragleave', () => chip.classList.remove('drop'));
-      chip.addEventListener('drop', (e) => { chip.classList.remove('drop'); const ids = (e.dataTransfer.getData('text/x-cthv-ids') || '').split(',').filter(Boolean); if (ids.length) { e.preventDefault(); moveVideos(ids, f); } });
+      chip.addEventListener('drop', (e) => {
+        chip.classList.remove('drop');
+        const ids = (e.dataTransfer.getData('text/x-cthv-ids') || '').split(',').filter(Boolean);
+        const fol = e.dataTransfer.getData('text/x-cthv-folder') || '';
+        if (ids.length) { e.preventDefault(); moveVideos(ids, f); } else if (fol) { e.preventDefault(); moveFolder(fol, f); }
+      });
+      chip.draggable = true;
+      chip.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/x-cthv-folder', f); e.dataTransfer.effectAllowed = 'move'; });
+      chip.addEventListener('dblclick', (e) => { e.preventDefault(); inlineRename(chip.querySelector('span'), folderName(f), (name) => renameFolderTo(f, name)); });
       strip.appendChild(chip);
     }
     host.appendChild(strip);
@@ -195,7 +218,7 @@ function renderCards(host, folder, q) {
       h('div', { class: 'meta' },
         h('b', { text: v.name }),
         h('div', { class: 'small muted', text: [bytes(v.size), v.width ? `${v.width}x${v.height}` : '', (q || '').trim() && v.folder ? v.folder : new Date(v.created).toLocaleDateString()].filter(Boolean).join(' · ') })));
-    card.addEventListener('contextmenu', (e) => { e.preventDefault(); videoMenu(v); });
+    card.addEventListener('contextmenu', (e) => { e.preventDefault(); videoMenu(v, e); });
     card.addEventListener('dragstart', (e) => {
       e.dataTransfer.setData('text/x-cthv-ids', v.id);
       e.dataTransfer.effectAllowed = 'move';
@@ -230,11 +253,26 @@ async function newFolder(parent) {
 async function renameFolder(path) {
   const name = await promptSheet('Rename folder', 'Name', folderName(path));
   if (!name || name.trim() === folderName(path)) return;
-  const clean = name.trim();
+  await renameFolderTo(path, name.trim());
+}
+
+// Move a folder (and everything under it) under another folder, or to the
+// root with into = ''. Dropping a folder into itself or its own child is a
+// no-op, as is dropping it where it already is.
+async function moveFolder(path, into) {
+  if (!path || into === path || isUnder(into, path) || parentOf(path) === into) return;
+  await relocateFolder(path, into ? `${into}/${folderName(path)}` : folderName(path));
+}
+
+async function renameFolderTo(path, clean) {
   if (!validName(clean)) { toast('A folder name cannot contain a slash.', 'warn'); return; }
   const parent = parentOf(path);
-  const next = parent ? `${parent}/${clean}` : clean;
-  if (folderList.includes(next)) { toast('That folder already exists.', 'warn'); return; }
+  await relocateFolder(path, parent ? `${parent}/${clean}` : clean);
+}
+
+async function relocateFolder(path, next) {
+  if (next === path) return;
+  if (folderList.includes(next)) { toast('A folder with that name is already there.', 'warn'); return; }
   const rekey = (p) => (p === path ? next : p.startsWith(`${path}/`) ? next + p.slice(path.length) : p);
   const moves = cache.filter((v) => isUnder(v.folder || '', path));
   const r = await guarded(async () => {
@@ -244,8 +282,51 @@ async function renameFolder(path) {
   if (!r) { cache = null; renderLibrary(curFolder); return; }
   for (const v of moves) v.folder = rekey(v.folder);
   folderList = r;
+  toast(parentOf(next) === parentOf(path) ? 'Renamed.' : `Moved to ${parentOf(next) ? folderName(parentOf(next)) : 'All videos'}.`, 'ok');
+  if (isUnder(curFolder, path)) treeHandlers.select(rekey(curFolder)); else route();
+}
+
+async function duplicateFolder(path) {
+  const inside = cache.filter((v) => isUnder(v.folder || '', path));
+  const parent = parentOf(path);
+  let next = `${path} copy`; let n = 2;
+  while (folderList.includes(next)) next = `${path} copy ${n++}`;
+  const rekey = (p) => (p === path ? next : p.startsWith(`${path}/`) ? next + p.slice(path.length) : p);
+  const bar = inside.length ? progress(`Duplicating ${folderName(path)}`) : null;
+  const r = await guarded(async () => {
+    let i = 0;
+    for (const v of inside) {
+      if (bar?.signal.aborted) break;
+      await api.duplicate(v.id, { name: v.name, folder: rekey(v.folder || '') });
+      bar?.set(++i / inside.length, 'Copying');
+    }
+    return api.setFolders([...folderList, ...folderList.filter((f) => isUnder(f, path)).map(rekey)]);
+  });
+  bar?.close();
+  if (!r) { cache = null; route(); return; }
+  folderList = r; cache = null;
+  toast(`Duplicated as ${folderName(next)}.`, 'ok');
+  void parent; route();
+}
+
+async function duplicateVideo(v) {
+  const r = await guarded(() => api.duplicate(v.id, { name: `${v.name} copy` }));
+  if (!r) return;
+  if (cache) cache.unshift(r);
+  toast(`Duplicated as ${r.name}.`, 'ok');
+  route();
+}
+
+async function renameVideoTo(v, name) {
+  const clean = name.trim();
+  if (!clean || clean === v.name) return false;
+  const r = await guarded(() => api.patch(v.id, { name: clean }));
+  if (!r) return false;
+  v.name = clean;
+  if (cache) { const i = cache.find((x) => x.id === v.id); if (i) i.name = clean; }
   toast('Renamed.', 'ok');
-  if (isUnder(curFolder, path)) treeHandlers.select(rekey(curFolder)); else renderLibrary(curFolder);
+  route();
+  return true;
 }
 
 async function deleteFolder(path) {
@@ -288,49 +369,45 @@ async function pickFolder(title) {
   });
 }
 
-async function folderMenu(path, e) {
-  const what = await sheet(folderName(path), (body, close) => {
-    const item = (label, kind, danger) => h('button', {
-      class: `btn ${danger ? 'danger' : ''}`, style: { width: '100%', justifyContent: 'flex-start', marginBottom: '6px' }, onclick: () => close(kind),
-    }, label);
-    body.appendChild(item('Open', 'open'));
-    body.appendChild(item('New subfolder', 'new'));
-    body.appendChild(item('Rename', 'rename'));
-    body.appendChild(item('Delete folder', 'del', true));
-  });
-  if (what === 'open') treeHandlers.select(path);
-  if (what === 'new') await newFolder(path);
-  if (what === 'rename') await renameFolder(path);
-  if (what === 'del') await deleteFolder(path);
+function at(e) { return { x: e?.clientX ?? window.innerWidth / 2, y: e?.clientY ?? 120 }; }
+
+function folderMenu(path, e) {
+  showMenu([
+    { label: 'Open', run: () => treeHandlers.select(path) },
+    { label: 'New subfolder', run: () => newFolder(path) },
+    '-',
+    { label: 'Rename', run: () => renameFolder(path) },
+    { label: 'Duplicate', run: () => duplicateFolder(path) },
+    { label: 'Move to folder', run: async () => { const pick = await pickFolder(`Move "${folderName(path)}" to`); if (pick) moveFolder(path, pick.path); } },
+    '-',
+    { label: 'Delete folder', danger: true, run: () => deleteFolder(path) },
+  ], { ...at(e), title: folderName(path) });
 }
 
-async function videoMenu(v) {
-  const what = await sheet(v.name, (body, close) => {
-    const item = (label, kind, danger) => h('button', {
-      class: `btn ${danger ? 'danger' : ''}`, style: { width: '100%', justifyContent: 'flex-start', marginBottom: '6px' }, onclick: () => close(kind),
-    }, label);
-    body.appendChild(item('Open', 'open'));
-    body.appendChild(item('Copy share link', 'share'));
-    body.appendChild(item('Move to folder', 'move'));
-    body.appendChild(item('Rename', 'rename'));
-    body.appendChild(item('Delete', 'del', true));
-  });
-  if (what === 'open') go(`#/v/${v.id}`);
-  if (what === 'share') copy(api.watchUrl(v), 'Share link copied.');
-  if (what === 'move') { const pick = await pickFolder(`Move "${v.name}" to`); if (pick) await moveVideos([v.id], pick.path); }
-  if (what === 'rename') await rename(v);
-  if (what === 'del') await destroy(v);
+function videoMenu(v, e) {
+  showMenu([
+    { label: 'Open', run: () => go(`#/v/${v.id}`) },
+    { label: 'Open share page', run: () => window.open(api.watchUrl(v), '_blank', 'noopener') },
+    '-',
+    { label: 'Copy share link', run: () => copy(api.watchUrl(v), 'Share link copied.') },
+    { label: 'Copy direct link', run: () => copy(api.fileUrl(v), 'Direct link copied.') },
+    { label: 'Download', run: () => { const a = h('a', { href: api.fileUrl(v), download: v.fileName || '', target: '_blank', rel: 'noopener' }); document.body.appendChild(a); a.click(); a.remove(); } },
+    '-',
+    { label: 'Open in Studio', run: () => window.open(`${STUDIO}#/new?url=${encodeURIComponent(api.fileUrl(v))}&name=${encodeURIComponent(v.name)}`, '_blank', 'noopener') },
+    { label: 'Open in Clips Notion', run: () => window.open(`${CLIPS_NOTION}#src=${encodeURIComponent(api.fileUrl(v))}&mode=edit`, '_blank', 'noopener') },
+    '-',
+    { label: 'Rename', run: () => rename(v) },
+    { label: 'Duplicate', run: () => duplicateVideo(v) },
+    { label: 'Move to folder', run: async () => { const pick = await pickFolder(`Move "${v.name}" to`); if (pick) await moveVideos([v.id], pick.path); } },
+    '-',
+    { label: 'Delete', danger: true, run: () => destroy(v) },
+  ], { ...at(e), title: v.name });
 }
 
 async function rename(v) {
   const name = await promptSheet('Rename', 'Name', v.name);
-  if (!name || name === v.name) return false;
-  const r = await guarded(() => api.patch(v.id, { name }));
-  if (!r) return false;
-  v.name = name;
-  if (cache) { const i = cache.find((x) => x.id === v.id); if (i) i.name = name; }
-  toast('Renamed.', 'ok');
-  return true;
+  if (!name) return false;
+  return renameVideoTo(v, name);
 }
 
 async function destroy(v) {
@@ -441,21 +518,25 @@ async function runUploads(files, folder = '') {
 async function renderDetail(id) {
   const stageHost = h('div', { class: 'vd-player' });
   const side = h('aside', { class: 'vd-side' });
-  const title = h('span', { class: 'title', text: '' });
-  const root = h('div', { id: 'app' },
-    topbar(),
-    h('div', { class: 'vd' }, stageHost, side));
-  const bar = root.querySelector('.topbar');
-  bar.insertBefore(h('button', { class: 'btn ghost', onclick: () => treeHandlers.select(v?.folder || curFolder || '') }, icon(ICONS.back), 'Library'), bar.children[1]);
-  bar.insertBefore(title, bar.children[2]);
-  app().replaceWith(root);
+  const title = h('span', { class: 'title vd-title', text: '', title: 'Double-click to rename' });
+  const content = h('div', { class: 'vd' }, stageHost, side);
+  const sh = shell([
+    h('button', { class: 'btn ghost', onclick: () => treeHandlers.select(curFolder) }, icon(ICONS.back), 'Library'),
+    title,
+    h('div', { class: 'grow' }),
+  ], content, { videoId: id });
 
   let v = cache?.find((x) => x.id === id) || null;
+  // The tree needs the library; the player does not wait for it.
+  ensureLibrary(null).then(() => { const vv = cache?.find((x) => x.id === id); if (vv) curFolder = vv.folder || ''; sh.paintTree(); });
   try { v = await api.get(id); } catch (e) {
     if (!v) { toast('That video is not in the library.', 'warn'); go('#/'); return; }
   }
+  curFolder = v.folder || '';
   title.textContent = v.name;
   document.title = `${v.name} - CTH Videos`;
+  title.addEventListener('dblclick', () => inlineRename(title, v.name, (name) => renameVideoTo(v, name)));
+  title.addEventListener('contextmenu', (e) => { e.preventDefault(); videoMenu(v, e); });
 
   player = mountPlayer(stageHost, {
     url: api.fileUrl(v), id: v.id, title: v.name, poster: api.posterUrl(v),
@@ -494,7 +575,7 @@ async function renderDetail(id) {
       h('h3', { text: 'Details' }),
       details(v),
       h('div', { class: 'row wrap', style: { marginTop: '10px' } },
-        h('button', { class: 'btn', onclick: async () => { if (await rename(v)) { title.textContent = v.name; side.querySelector('.vd-name').textContent = v.name; } } }, 'Rename'),
+        h('button', { class: 'btn', onclick: async () => { if (await rename(v)) { title.textContent = v.name; side.querySelector('.vd-name').textContent = v.name; sh.paintTree(); } } }, 'Rename'),
         h('button', { class: 'btn', onclick: async () => { if (!folderList) await guarded(loadLibrary); const pick = folderList ? await pickFolder(`Move "${v.name}" to`) : null; if (pick) { await guarded(() => api.patch(v.id, { folder: pick.path })); v.folder = pick.path; cache = null; toast('Moved.', 'ok'); renderDetail(v.id); } } }, 'Move to folder'),
         h('button', { class: 'btn', onclick: () => refreshPoster(v) }, 'Set poster from this frame'),
         h('button', { class: 'btn danger', onclick: () => destroy(v) }, icon(ICONS.trash), 'Delete'))),
