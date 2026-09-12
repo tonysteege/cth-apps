@@ -75,6 +75,7 @@ async function guarded(fn) {
 let folderList = null;   // every folder path, from the Worker
 let curFolder = '';
 let curFolderQuery = '';
+let curTags = new Set();   // active tag filters (AND), a per-session choice
 
 async function loadLibrary() {
   const [vids, fl] = await Promise.all([api.list(), api.folders()]);
@@ -112,7 +113,7 @@ async function ensureLibrary(main) {
 async function renderLibrary(folder = '') {
   curFolder = folder;
   const main = h('div', { class: 'lib-main' });
-  const search = h('input', { class: 'input vl-search', type: 'search', value: curFolderQuery, placeholder: 'Search videos', 'aria-label': 'Search videos' });
+  const search = h('input', { class: 'input vl-search', type: 'search', value: curFolderQuery, placeholder: 'Search names and tags, or #tag', 'aria-label': 'Search videos' });
   const sh = shell([
     search,
     h('button', { class: 'btn primary', onclick: () => uploadSheet([], curFolder) }, icon(ICONS.export), 'Upload'),
@@ -143,14 +144,34 @@ const treeHandlers = {
 const folderName = (p) => (p.includes('/') ? p.slice(p.lastIndexOf('/') + 1) : p);
 const childFolders = (p) => (folderList || []).filter((f) => parentOf(f) === p).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
+// A search: words match the name, file name, folder and tags; a `#word`
+// token must match a tag exactly. Active tag chips are ANDed on top. Either
+// one widens the view from this folder to everything under it; with neither
+// the view is Finder's: this folder's own videos only.
 function filterList(list, folder, q) {
-  const s = (q || '').trim().toLowerCase();
-  // A search looks through the folder AND everything under it; without a
-  // search the view is Finder's: this folder's own videos only.
-  const inScope = list.filter((v) => (s ? isUnder(v.folder || '', folder) : (v.folder || '') === folder));
-  if (!s) return inScope;
-  return inScope.filter((v) => `${v.name} ${v.fileName || ''} ${v.folder || ''}`.toLowerCase().includes(s));
+  const raw = (q || '').trim().toLowerCase();
+  const words = raw.split(/\s+/).filter(Boolean);
+  const wantTags = [...curTags].map((t) => t.toLowerCase());
+  for (const w of words) if (w.startsWith('#') && w.length > 1) wantTags.push(w.slice(1));
+  const free = words.filter((w) => !w.startsWith('#'));
+  const active = free.length || wantTags.length;
+  const inScope = list.filter((v) => (active ? isUnder(v.folder || '', folder) : (v.folder || '') === folder));
+  if (!active) return inScope;
+  return inScope.filter((v) => {
+    const tags = (v.tags || []).map((t) => t.toLowerCase());
+    if (!wantTags.every((t) => tags.includes(t))) return false;
+    const hay = `${v.name} ${v.fileName || ''} ${v.folder || ''} ${tags.join(' ')}`.toLowerCase();
+    return free.every((w) => hay.includes(w));
+  });
 }
+
+// Every tag in scope with its count, most used first.
+function tagCounts(folder) {
+  const m = new Map();
+  for (const v of cache) if (isUnder(v.folder || '', folder)) for (const t of v.tags || []) m.set(t, (m.get(t) || 0) + 1);
+  return [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+}
+const allTags = () => [...new Set(cache.flatMap((v) => v.tags || []))].sort((a, b) => a.localeCompare(b));
 
 function crumbs(folder) {
   const parts = folder ? folder.split('/') : [];
@@ -174,6 +195,21 @@ function renderCards(host, folder, q) {
     h('span', { class: 'vl-count', text: String(list.length) }),
     h('div', { class: 'grow' }),
     h('button', { class: 'btn mini', onclick: () => newFolder(folder) }, 'New folder')));
+
+  // The tag filter row: every tag used in this folder or below, click to
+  // toggle, several at once narrow (AND). Hidden when there are no tags yet.
+  const tagList = tagCounts(folder);
+  if (tagList.length) {
+    const rowEl = h('div', { class: 'vl-tags' }, h('span', { class: 'vl-tags-label', text: 'Tags' }));
+    for (const [t, n] of tagList) {
+      const on = curTags.has(t);
+      rowEl.appendChild(h('button', { class: `vl-tag ${on ? 'on' : ''}`, type: 'button', 'aria-pressed': on ? 'true' : 'false',
+        onclick: () => { if (curTags.has(t)) curTags.delete(t); else curTags.add(t); renderCards(host, folder, q); } },
+        h('span', { text: `#${t}` }), h('span', { class: 'vl-tag-n', text: String(n) })));
+    }
+    if (curTags.size) rowEl.appendChild(h('button', { class: 'btn mini', type: 'button', onclick: () => { curTags.clear(); renderCards(host, folder, q); } }, 'Clear'));
+    host.appendChild(rowEl);
+  }
 
   // Subfolders first, as Finder does: a chip per child, and a drop target.
   const kids = childFolders(folder);
@@ -217,7 +253,9 @@ function renderCards(host, folder, q) {
       v.duration ? h('span', { class: 'vl-dur', text: tc(v.duration, false) }) : null,
       h('div', { class: 'meta' },
         h('b', { text: v.name }),
-        h('div', { class: 'small muted', text: [bytes(v.size), v.width ? `${v.width}x${v.height}` : '', (q || '').trim() && v.folder ? v.folder : new Date(v.created).toLocaleDateString()].filter(Boolean).join(' · ') })));
+        h('div', { class: 'small muted', text: [bytes(v.size), v.width ? `${v.width}x${v.height}` : '', ((q || '').trim() || curTags.size) && v.folder ? v.folder : new Date(v.created).toLocaleDateString()].filter(Boolean).join(' · ') }),
+        (v.tags || []).length ? h('div', { class: 'vl-cardtags' }, ...(v.tags || []).slice(0, 6).map((t) => h('span', { class: 'vl-chip', text: `#${t}`,
+          onclick: (e) => { e.stopPropagation(); curTags = new Set([t]); renderCards(host, folder, q); } }))) : null));
     card.addEventListener('contextmenu', (e) => { e.preventDefault(); videoMenu(v, e); });
     card.addEventListener('dragstart', (e) => {
       e.dataTransfer.setData('text/x-cthv-ids', v.id);
@@ -231,6 +269,59 @@ function renderCards(host, folder, q) {
 }
 
 const FOLDER_GLYPH = '<path d="M2 4.5A1.5 1.5 0 013.5 3h2.2l1.2 1.4h5.6A1.5 1.5 0 0114 5.9v5.6a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 012 11.5z" fill="currentColor"/>';
+
+// ---- tags ------------------------------------------------------------------
+
+// Chips plus a write-in box: Enter or comma adds, the x removes, Backspace
+// on an empty box removes the last one. Every change is saved at once.
+function tagEditor(v, onChange = () => {}) {
+  const wrap = h('div', { class: 'tg' });
+  const listId = `tg-${v.id}`;
+  const input = h('input', { class: 'tg-in', list: listId, placeholder: (v.tags || []).length ? 'Add a tag' : 'Add tags: goal, power play, #12', 'aria-label': 'Add a tag' });
+  const dl = h('datalist', { id: listId });
+  const save = async (tags) => {
+    const r = await guarded(() => api.patch(v.id, { tags }));
+    if (!r) return false;
+    v.tags = r.video.tags;
+    const c = cache?.find((x) => x.id === v.id); if (c) c.tags = v.tags;
+    onChange(v.tags);
+    return true;
+  };
+  const paint = () => {
+    wrap.replaceChildren();
+    for (const t of v.tags || []) {
+      wrap.appendChild(h('span', { class: 'vl-chip tg-chip' }, h('span', { text: `#${t}` }),
+        h('button', { class: 'tg-x', type: 'button', 'aria-label': `Remove ${t}`, onclick: () => save((v.tags || []).filter((x) => x !== t)).then(paint) }, '×')));
+    }
+    dl.replaceChildren(...(cache ? allTags() : []).filter((t) => !(v.tags || []).includes(t)).map((t) => h('option', { value: t })));
+    wrap.append(input, dl);
+  };
+  const add = async () => {
+    const parts = input.value.split(/[,\n]/).map((x) => x.trim().replace(/^#+/, '')).filter(Boolean);
+    input.value = '';
+    if (!parts.length) return;
+    const next = [...(v.tags || [])];
+    for (const p of parts) if (!next.some((x) => x.toLowerCase() === p.toLowerCase())) next.push(p);
+    if (next.length !== (v.tags || []).length) { await save(next); paint(); input.focus(); }
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); add(); }
+    else if (e.key === 'Backspace' && !input.value && (v.tags || []).length) { e.preventDefault(); save((v.tags || []).slice(0, -1)).then(paint); }
+    e.stopPropagation();
+  });
+  input.addEventListener('blur', add);
+  paint();
+  return wrap;
+}
+
+async function tagsSheet(v) {
+  await sheet(`Tags for ${v.name}`, (body, close) => {
+    body.appendChild(tagEditor(v));
+    body.appendChild(h('p', { class: 'tiny muted', style: { marginTop: '8px' }, text: 'Enter or a comma adds a tag. Tags are searchable from the box at the top, or type #tag.' }));
+    body.appendChild(h('div', { class: 'row end' }, h('button', { class: 'btn primary', onclick: () => close(true) }, 'Done')));
+  });
+  route();
+}
 
 // ---- folders ---------------------------------------------------------------
 
@@ -397,6 +488,7 @@ function videoMenu(v, e) {
     { label: 'Open in Clips Notion', run: () => window.open(`${CLIPS_NOTION}#src=${encodeURIComponent(api.fileUrl(v))}&mode=edit`, '_blank', 'noopener') },
     '-',
     { label: 'Rename', run: () => rename(v) },
+    { label: 'Edit tags', run: () => tagsSheet(v) },
     { label: 'Duplicate', run: () => duplicateVideo(v) },
     { label: 'Move to folder', run: async () => { const pick = await pickFolder(`Move "${v.name}" to`); if (pick) await moveVideos([v.id], pick.path); } },
     '-',
@@ -565,6 +657,10 @@ async function renderDetail(id) {
       h('div', { class: 'row wrap', style: { marginTop: '6px' } },
         h('button', { class: 'btn primary', onclick: () => copy(share, 'Share link copied.') }, icon(ICONS.copy), 'Copy share link'),
         h('a', { class: 'btn', href: file, download: v.fileName || '', target: '_blank', rel: 'noopener' }, 'Download'))),
+    h('section', {},
+      h('h3', { text: 'Tags' }),
+      tagEditor(v, () => sh.paintTree()),
+      h('p', { class: 'tiny muted', style: { marginTop: '8px' }, text: 'Enter or a comma adds a tag. Search the library by tag from the box at the top, or click a tag on a card.' })),
     h('section', {},
       h('h3', { text: 'Work on it' }),
       h('div', { class: 'row wrap' },

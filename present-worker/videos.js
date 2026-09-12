@@ -67,7 +67,20 @@ const summary = (v) => ({
   id: v.id, name: v.name, size: v.size, type: v.type, duration: v.duration, width: v.width, height: v.height,
   created: v.created, updated: v.updated, poster: !!v.poster, fileName: v.fileName, status: v.status,
   folder: v.folder || '',
+  tags: v.tags || [],
 });
+
+// Tags: short labels, no leading '#', unique case-insensitively, at most 40.
+function cleanTags(list) {
+  const out = []; const seen = new Set();
+  for (const t of Array.isArray(list) ? list : []) {
+    const c = clean(String(t).replace(/^#+/, ''), 40).replace(/\s+/g, ' ');
+    if (!c || seen.has(c.toLowerCase())) continue;
+    seen.add(c.toLowerCase()); out.push(c);
+    if (out.length >= 40) break;
+  }
+  return out;
+}
 
 // A folder path: segments joined by '/', no leading or trailing slash, no
 // empty or dot-only segments. '' is the root.
@@ -194,6 +207,7 @@ export async function handleVideos(request, env, url, cors) {
         height: num(body.height),
         codec: clean(body.codec || '', 64),
         folder: cleanFolder(body.folder),
+        tags: cleanTags(body.tags),
         notes: '',
         created: Date.now(),
         updated: Date.now(),
@@ -310,6 +324,7 @@ export async function handleVideos(request, env, url, cors) {
     const next = { ...doc, updated: Date.now() };
     if (body.name != null) next.name = clean(body.name) || doc.name;
     if (body.notes != null) next.notes = clean(body.notes, 4000);
+    if (body.tags != null) next.tags = cleanTags(body.tags);
     if (body.folder != null) {
       next.folder = cleanFolder(body.folder);
       if (next.folder) { const fl = await readFolders(env); if (!fl.includes(next.folder)) await writeFolders(env, [...fl, next.folder]); }

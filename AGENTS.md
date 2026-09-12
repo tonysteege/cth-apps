@@ -1731,6 +1731,18 @@ and access from an iPad or a Notion page.
   "<name> copy"; a folder duplicate copies its videos one by one behind a
   progress bar. Manual ordering does not exist: the tree sorts by name,
   numerically aware, as Finder's list view does.
+- **TAGS** (2026-09-12, Tony's ask): a video carries `tags: string[]`,
+  additive; the Worker strips a leading `#`, dedupes case-insensitively and
+  caps at 40 (`cleanTags`). Edited as chips with a write-in box
+  (`tagEditor` in app.js: Enter or comma adds, x removes, Backspace on an
+  empty box removes the last, a datalist suggests every tag in use), on the
+  player's panel and from the card menu's Edit tags. Cards print their tags
+  as `#chips`; clicking one filters by it. The search box matches name,
+  file name, folder and tags, and a `#word` token must match a tag exactly;
+  the tag row above the cards toggles filters that AND together. A search
+  or a tag filter widens the view from the folder to everything under it,
+  the same rule the Clips library follows. Tag filters are session state,
+  not URL state.
 - **NO BIG PLAY BUTTON ON THE PICTURE** (2026-09-12, Tony's call): the stage
   is for scrubbing. A clean click on the picture still plays or pauses; a
   gesture that ends in a tap does not.

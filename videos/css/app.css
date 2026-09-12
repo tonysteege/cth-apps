@@ -267,3 +267,32 @@ body.watch .msg a { color: #fff; }
 .vt-row.dragging { opacity: .5; }
 .vd-title { cursor: text; }
 .topbar .vd-title .vt-edit { font-size: 14px; height: 26px; width: 320px; }
+
+/* ---- tags (2026-09-12) ---- */
+.vl-tags { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: -4px 0 14px; }
+.vl-tags-label { font-size: 12px; line-height: 16px; letter-spacing: .15px; color: var(--mist); margin-right: 2px; }
+.vl-tag {
+  display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px;
+  border: 1px solid var(--edge); border-radius: 999px; background: var(--cloud);
+  font: inherit; font-size: 12px; line-height: 16px; letter-spacing: .15px; font-weight: 500; color: var(--n-700);
+  cursor: pointer; box-shadow: var(--shadow-1);
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.vl-tag:hover { background: var(--n-100); border-color: var(--n-300); }
+.vl-tag.on { background: linear-gradient(180deg, var(--a-500) 0%, var(--a-600) 100%); color: #fff; border-color: var(--a-700); }
+.vl-tag-n { color: var(--soft); font-variant-numeric: tabular-nums; }
+.vl-tag.on .vl-tag-n { color: rgb(255 255 255 / .75); }
+.vl-cardtags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.vl-chip {
+  display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px;
+  border-radius: 6px; background: var(--n-200); color: var(--n-600);
+  font-size: 11px; line-height: 15px; letter-spacing: .2px; font-weight: 500; cursor: pointer;
+}
+.vl-chip:hover { background: var(--n-300); color: var(--ink); }
+.tg { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 36px; padding: 6px 8px; border: 1px solid var(--edge); border-radius: var(--r-md); background: var(--cloud); box-shadow: var(--shadow-1); cursor: text; }
+.tg:focus-within { border-color: var(--n-400); box-shadow: 0 0 0 3px var(--select-soft); }
+.tg-chip { height: 22px; cursor: default; }
+.tg-x { border: 0; background: transparent; color: inherit; cursor: pointer; padding: 0 0 0 2px; font: inherit; font-size: 13px; line-height: 1; opacity: .6; }
+.tg-x:hover { opacity: 1; }
+.tg-in { flex: 1; min-width: 120px; height: 22px; border: 0; outline: none; background: transparent; font: inherit; font-size: 13px; color: var(--ink); }
+.tg-in::-webkit-calendar-picker-indicator { display: none !important; }
