@@ -255,9 +255,11 @@ async function listDrop() {
   const pick = async (dir, original) => {
     let names = [];
     try { names = await fs.readdir(dir); } catch (_) { return []; }
-    return names.filter((n) => !n.startsWith('.') && VIDEO_EXT.test(n)).sort().map((n) => ({ file: path.join(dir, n), original }));
+    return names.filter((n) => !n.startsWith('.') && VIDEO_EXT.test(n)).map((n) => ({ file: path.join(dir, n), original, size: statSync(path.join(dir, n)).size }));
   };
-  return [...await pick(DROP, false), ...await pick(DROP_ORIGINAL, true)];
+  // SMALLEST FIRST (2026-09-12, after a 16 MB clip queued behind four games):
+  // a quick clip should never wait two hours behind a full game.
+  return [...await pick(DROP, false), ...await pick(DROP_ORIGINAL, true)].sort((a, b) => a.size - b.size || a.file.localeCompare(b.file));
 }
 
 async function notify(title, text) {

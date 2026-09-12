@@ -1721,7 +1721,8 @@ and access from an iPad or a Notion page.
   the current one uploads. `cthv install` creates `~/Videos/CTH Videos`
   (top level = shrink and upload, `Original/` = as-is, finished files move to
   `Uploaded/` with every share link in `links.txt` and the latest on the
-  clipboard), a launchd agent `com.coachtonyhockey.videos-drop` with
+  clipboard; the queue runs SMALLEST FILE FIRST so a clip never waits behind a game),
+  a launchd agent `com.coachtonyhockey.videos-drop` with
   WatchPaths on that folder, and a `cthv` symlink on the PATH. A file is only
   touched once its size has stopped changing for 3 s. Logs to
   `~/Library/Logs/cth-videos.log`. The key comes from the Keychain. The web
