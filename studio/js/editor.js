@@ -1088,6 +1088,7 @@ async function exportSheet() {
 
     const dest = h('select', { class: 'input' },
       h('option', { value: 'dropbox', selected: s.saveTo === 'dropbox' || null, disabled: !dbx.connected() || null, text: dbx.connected() ? `Dropbox ${dbx.EXPORT_ROOT}` : 'Dropbox (not connected)' }),
+      h('option', { value: 'videos', selected: s.saveTo === 'videos' || null, text: 'CTH Videos (share link)' }),
       h('option', { value: 'download', selected: s.saveTo === 'download' || !dbx.connected() || null, text: 'Download to this device' }));
     body.appendChild(h('label', { class: 'field' }, h('span', { text: 'Save to' }), dest));
 
@@ -1115,7 +1116,12 @@ async function exportSheet() {
     bar.close();
 
     const name = `${stem}.${ext}`;
-    if (what.dest === 'dropbox' && dbx.connected()) {
+    if (what.dest === 'videos' && what.kind !== 'gif' && what.kind !== 'png') {
+      // CTH Videos is the storage centre (2026-09-12): the export goes up
+      // untouched and comes back as a share link that plays with the same
+      // scrub feel. GIFs and stills are not videos and still download.
+      await saveToVideos(blob, name);
+    } else if (what.dest === 'dropbox' && dbx.connected()) {
       const up = progress('Saving to Dropbox');
       try {
         await dbx.ensureFolder(dbx.EXPORT_ROOT);
@@ -1135,6 +1141,51 @@ async function exportSheet() {
     fail(e);
   } finally {
     cur.engine.seek(cur.engine.time, true);
+  }
+}
+
+// Hand the export to CTH Videos (../videos/js/api.js does the multipart
+// upload) and show the links it comes back with. A missing key falls back to
+// a download rather than losing the export.
+async function saveToVideos(blob, name) {
+  const api = await import('../../videos/js/api.js');
+  if (!api.getKey()) {
+    const k = await promptSheet('CTH Videos key', 'Key', '', { ok: 'Save', placeholder: 'Paste the key from Videos settings' });
+    if (!k) { dbx.download(blob, name); toast(`${name} downloaded instead.`, 'warn'); return; }
+    api.setKey(k);
+  }
+  const up = progress('Saving to CTH Videos');
+  try {
+    const file = new File([blob], name, { type: blob.type || 'video/mp4' });
+    const v = await api.upload(file, { name: cur.p.name, signal: up.signal, onProgress: (f, note) => up.set(f, note) });
+    up.close();
+    const base = `${location.origin}${location.pathname.replace(/[^/]*$/, '')}../videos/`;
+    const share = `${base}watch.html?v=${v.id}`;
+    const field = (label, value, note) => {
+      const i = h('input', { class: 'input', value, readonly: true });
+      i.addEventListener('focus', () => i.select());
+      const copy = h('button', {
+        class: 'btn mini',
+        onclick: async () => {
+          try { await navigator.clipboard.writeText(value); toast('Copied.', 'ok'); }
+          catch (_) { i.focus(); }
+        },
+      }, 'Copy');
+      return h('div', { style: { marginBottom: '12px' } },
+        h('div', { class: 'small', style: { fontWeight: '600', marginBottom: '4px' }, text: label }),
+        h('div', { class: 'tiny muted', style: { marginBottom: '5px' }, text: note }),
+        h('div', { class: 'row' }, i, copy));
+    };
+    await sheet('Saved to CTH Videos', (body, close) => {
+      body.appendChild(field('Share link', share, 'For players, parents and a Notion embed block. Plays with the CTH scrub.'));
+      body.appendChild(field('Direct link', api.fileUrl(v), 'The file itself. Plays in a browser, sends in a message.'));
+      body.appendChild(h('div', { class: 'row end' },
+        h('a', { class: 'btn', href: `${base}#/v/${v.id}`, target: '_blank', rel: 'noopener' }, 'Open in Videos'),
+        h('button', { class: 'btn primary', onclick: () => close(null) }, 'Done')));
+    });
+  } catch (e) {
+    up.close();
+    if (e.name !== 'AbortError') { fail(e); dbx.download(blob, name); }
   }
 }
 

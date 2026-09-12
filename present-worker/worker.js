@@ -18,6 +18,8 @@
 // Secret: npx wrangler secret put NOTION_TOKEN   (Slides only - the bots
 //         need no key at all, see the Workers AI note below)
 
+import { handleVideos } from './videos.js';
+
 const ALLOWED_ORIGINS = [
   'https://apps.coachtonyhockey.com',
   'http://localhost:8642',
@@ -35,8 +37,9 @@ function cors(req) {
   const ok = ALLOWED_ORIGINS.includes(o) || /^http:\/\/localhost:\d+$/.test(o);
   return {
     'Access-Control-Allow-Origin': ok ? o : ALLOWED_ORIGINS[0],
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, X-DG-Key, X-DG-Token',
+    'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, X-DG-Key, X-DG-Token, X-CTH-Key, Range',
+    'Access-Control-Expose-Headers': 'Content-Range, Content-Length, Accept-Ranges, ETag',
     Vary: 'Origin',
   };
 }
@@ -467,6 +470,8 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { headers: cors(request) });
     const url = new URL(request.url);
     if (url.pathname.startsWith('/ai/')) return handleAi(request, env, url.pathname);
+    // CTH Videos: R2-backed video storage, Range streaming, multipart upload.
+    if (url.pathname === '/videos' || url.pathname.startsWith('/videos/')) return handleVideos(request, env, url, cors(request));
     if (url.pathname === '/dg-hook/notion') return handleDgHook(request, env, url);
     if (url.pathname.startsWith('/dg/') || url.pathname === '/dg') return handleDg(request, env, url);
     const m = url.pathname.match(/^\/notion\/page\/([0-9a-f]{32})$/);

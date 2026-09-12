@@ -1,0 +1,162 @@
+/* CTH Videos. Sits on studio/css/app.css (the tokens, the topbar, the
+   library cards, sheets, toasts, buttons). Everything below is what Videos
+   adds: the player, the detail layout, the upload pieces, the share page. */
+
+/* ---- library ---- */
+.vl-lib { grid-template-columns: minmax(0, 1fr); }
+.vl-search { width: min(320px, 40vw); height: 34px; border-radius: 999px; padding: 0 14px; }
+.vl-count {
+  display: inline-flex; align-items: center; height: 22px; padding: 0 8px; margin-left: 8px;
+  border-radius: 6px; background: var(--n-200); color: var(--n-500);
+  font-size: 12px; line-height: 16px; letter-spacing: .15px; font-weight: 500;
+}
+.card { position: relative; }
+.vl-dur {
+  position: absolute; right: 8px; top: 8px;
+  padding: 2px 7px; border-radius: 6px;
+  background: rgb(0 0 0 / .68); color: #fff;
+  font-size: 11px; line-height: 15px; letter-spacing: .2px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* the page-wide drop target */
+.vl-dropveil {
+  position: fixed; inset: 0; z-index: 55; display: none;
+  align-items: center; justify-content: center;
+  background: rgb(10 10 10 / .35); backdrop-filter: blur(3px);
+  pointer-events: none;
+}
+.vl-dropveil.on { display: flex; }
+.vl-dropcard {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 34px 44px; border-radius: var(--r-xl);
+  background: var(--cloud); box-shadow: var(--shadow-3);
+  border: 2px dashed var(--n-400);
+  font-size: 16px; line-height: 22px;
+}
+
+/* the upload sheet: the Clips dropzone recipe */
+.up-drop {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px; width: 100%; min-height: 128px;
+  margin: 0 0 10px; padding: 18px;
+  border: none; border-radius: 16px;
+  background: var(--n-100); cursor: pointer; font: inherit;
+  transition: background var(--dur) var(--ease);
+}
+.up-drop::before {
+  content: ''; position: absolute; inset: 0;
+  border: 2px dashed var(--n-300); border-radius: 16px;
+  pointer-events: none; transition: border-color var(--dur) var(--ease);
+}
+.up-drop:hover::before, .up-drop.over::before { border-color: var(--n-400); }
+.up-drop.over { background: var(--a-50); }
+.up-drop.over::before { border-color: var(--a-400); }
+.up-drop-ic {
+  display: flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; margin-bottom: 4px; border-radius: 50%;
+  background: var(--n-300); color: var(--n-500);
+  transition: color var(--dur) var(--ease);
+}
+.up-drop:hover .up-drop-ic { color: var(--n-600); }
+.up-drop-main { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; line-height: 18px; font-weight: 500; color: var(--n-700); }
+.up-drop-sub { font-size: 12px; line-height: 16px; letter-spacing: .15px; color: var(--soft); }
+.up-drop.has-file { background: var(--a-50); }
+.up-drop.has-file::before { border-color: var(--a-300); }
+.up-drop.has-file .up-drop-ic { background: var(--a-100); color: var(--a-600); }
+.vl-files { display: flex; flex-direction: column; gap: 2px; }
+.vl-file {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 4px 4px 10px; border-radius: var(--r-sm);
+  font-size: 13px; line-height: 18px;
+}
+.vl-file:hover { background: var(--n-100); }
+.vl-file .grow { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- one video ---- */
+.vd { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 360px; }
+.vd-player { min-width: 0; min-height: 0; background: var(--stage); display: flex; }
+.vd-side { border-left: 1px solid var(--edge); background: var(--cloud); overflow: auto; min-height: 0; }
+.vd-side section { padding: 14px 16px; border-bottom: 1px solid var(--edge); }
+.vd-side h3 { font-size: 14px; line-height: 20px; font-weight: 700; color: var(--ink); margin: 0 0 8px; }
+.vd-link { margin-bottom: 10px; }
+.vd-link .input { font-size: 12px; letter-spacing: .15px; height: 32px; }
+.vd-dl { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 3px 10px; margin: 0; font-size: 12px; line-height: 16px; letter-spacing: .15px; }
+.vd-dl dt { color: var(--mist); }
+.vd-dl dd { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 860px) {
+  .vd { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); overflow: auto; }
+  .vd-player { aspect-ratio: 16 / 9; max-height: 60dvh; }
+  .vd-side { border-left: 0; border-top: 1px solid var(--edge); overflow: visible; }
+  .vl-search { width: 40vw; }
+}
+
+/* ---- the player ---- */
+.vp { display: flex; flex-direction: column; width: 100%; min-height: 0; background: #000; color: #fff; }
+.vp:fullscreen { width: 100vw; height: 100vh; }
+.vp-stage {
+  position: relative; flex: 1; min-height: 0; overflow: hidden;
+  background: #000; touch-action: pan-y; outline: none; cursor: default;
+}
+.vp-stage:focus-visible { box-shadow: inset 0 0 0 2px var(--marquee); }
+.vp-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
+/* Decoded frames paint here during a gesture; hidden the rest of the time so
+   the element, not a copy of it, is what plays. */
+.scrub-paint { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: none; pointer-events: none; }
+.scrub-paint.on { display: block; }
+.vp-big {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 72px; height: 72px; border-radius: 50%; border: 0;
+  background: rgb(0 0 0 / .55); color: #fff; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(6px); box-shadow: 0 0 0 1px rgb(255 255 255 / .18);
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+.vp-big:hover { transform: translate(-50%, -50%) scale(1.04); }
+.vp.playing .vp-big { opacity: 0; pointer-events: none; }
+.vp.broken .vp-big { display: none; }
+.vp-bar {
+  display: flex; align-items: center; gap: 8px; flex: none;
+  padding: 8px 12px; background: var(--n-900);
+  border-top: 1px solid rgb(255 255 255 / .08);
+  font-size: 13px; line-height: 18px;
+}
+.vp-btn {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  min-width: 34px; height: 34px; padding: 0 9px;
+  border: 1px solid rgb(255 255 255 / .16); border-radius: var(--r-sm);
+  background: rgb(255 255 255 / .06); color: #fff; cursor: pointer;
+  font: inherit; font-weight: 600; font-size: 12px; letter-spacing: .15px;
+  transition: background var(--dur) var(--ease);
+}
+.vp-btn:hover { background: rgb(255 255 255 / .14); }
+.vp-btn:focus-visible { outline: 2px solid var(--marquee); outline-offset: 2px; }
+.vp-rate { min-width: 44px; font-variant-numeric: tabular-nums; }
+.vp-tc { flex: none; font-variant-numeric: tabular-nums; font-size: 12px; line-height: 16px; letter-spacing: .15px; font-weight: 600; color: #fff; }
+.vp-tc-dim { color: var(--n-400); }
+.vp-seek { position: relative; height: 26px; flex: 1 1 auto; min-width: 60px; cursor: pointer; touch-action: none; }
+.vp-seek:focus-visible { outline: 2px solid var(--marquee); outline-offset: 2px; border-radius: 4px; }
+.vp-track { position: absolute; left: 0; right: 0; top: 11px; height: 4px; border-radius: 999px; background: rgb(255 255 255 / .18); }
+.vp-fill { position: absolute; left: 0; top: 11px; height: 4px; border-radius: 999px; background: #fff; width: 0; }
+.vp-head { position: absolute; top: 7px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgb(0 0 0 / .5); }
+@media (pointer: coarse) { .vp-btn { min-width: 40px; height: 40px; } .vp-seek { height: 32px; } .vp-track, .vp-fill { top: 14px; } .vp-head { top: 10px; } }
+
+/* ---- the share page ---- */
+body.watch { background: var(--n-950); color: #fff; overscroll-behavior: none; }
+body.watch .wrap { position: relative; width: 100vw; height: 100dvh; display: flex; flex-direction: column; background: #000; }
+.w-player { flex: 1; min-height: 0; display: flex; }
+.w-player .vp { flex: 1; }
+.w-bar {
+  display: flex; align-items: center; gap: 10px; flex: none;
+  padding: 6px 12px; background: var(--n-950);
+  border-top: 1px solid rgb(255 255 255 / .08);
+  font-size: 12px; line-height: 16px; letter-spacing: .15px;
+}
+.w-title { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.w-link { color: var(--n-400); text-decoration: none; }
+.w-link:hover { color: #fff; }
+.w-note { color: var(--n-400); }
+body.watch .msg { margin: auto; padding: 24px; text-align: center; color: var(--n-400); font-size: 13px; line-height: 18px; max-width: 420px; }
+body.watch .msg a { color: #fff; }

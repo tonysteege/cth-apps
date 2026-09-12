@@ -43,7 +43,9 @@ function route() {
   const [head, ...rest] = hash.split('/');
   closeEditor();
   if (head === 'p' && rest[0]) { openProject(rest[0]); return; }
-  if (head === 'new') { newFromQuery(hash); return; }
+  // `#/new?url=...` carries its query on the head segment itself, so the
+  // comparison has to strip it (found 2026-09-12: the route never matched).
+  if (head.split('?')[0] === 'new') { newFromQuery(hash); return; }
   renderLibrary();
 }
 
@@ -395,6 +397,21 @@ export function takeFile(id) { const f = pending.get(id); return f || null; }
 
 async function newFromQuery(hash) {
   const q = new URLSearchParams(hash.split('?')[1] || '');
+  // `url` is how CTH Videos hands a stored file across (2026-09-12): a
+  // durable address, so the project survives a reload like any url source.
+  const url = q.get('url');
+  if (url && /^https?:/.test(url)) {
+    let name = q.get('name') || '';
+    if (!name) { try { name = decodeURIComponent(new URL(url).pathname.split('/').pop() || 'clip'); } catch (_) { name = 'clip'; } }
+    const p = store.blankProject({
+      name: name.replace(/\.[a-z0-9]+$/i, ''),
+      source: { kind: 'url', url, name },
+      publish: guessPublish(name),
+    });
+    await store.put(p);
+    go(`#/p/${p.id}`);
+    return;
+  }
   const path = q.get('path');
   if (!path) { go('#/'); return; }
   await startProject({ path, name: path.split('/').pop() || 'clip', size: 0, dir: false });

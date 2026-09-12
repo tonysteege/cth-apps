@@ -17,3 +17,14 @@ binding = "AI"
 [[kv_namespaces]]
 binding = "DG"
 id = "ac2eee393d714cebbfcc6e560166d87f"
+
+# CTH Videos (2026-09-12): the library index (one JSON per video plus an
+# `index` list) and the bucket the bytes live in, untouched. Writes are gated
+# by the VIDEOS_KEY secret (npx wrangler secret put VIDEOS_KEY).
+[[kv_namespaces]]
+binding = "VIDEOS"
+id = "089691b1fc8f4c99b8a57eaa3d3c6b34"
+
+[[r2_buckets]]
+binding = "VIDEOS_BUCKET"
+bucket_name = "cth-videos"

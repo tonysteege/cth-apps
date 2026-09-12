@@ -24,6 +24,13 @@ lives in a subfolder and serves at its own path.
   Exports a real MP4 in the browser, plus GIF and stills, straight into
   Dropbox with a link ready for Notion. Reads film from Dropbox, a file
   on the device, or any video URL.
+- **Videos** (`/videos/`) - the video storage centre: upload any size
+  at full quality (multipart into Cloudflare R2 through the API Worker,
+  nothing re-encoded), a library with posters, a player with the Studio
+  scrub feel (WebCodecs decoder over a Range-capable stream), share links
+  for players and parents that also embed in Notion (`watch.html?v=<id>`),
+  a direct file link, and one-click hand-off into Studio and Clips Notion.
+  Studio can export straight into it.
 - **Clips** (`/clips/`) - video tagging and clipping: game film read
   straight from the CTH folder's `videos` (pick the folder once), two-tier
   tag buttons with hotkeys and lead/lag, trackpad scrubbing, a filterable
@@ -104,6 +111,19 @@ studio/js/mp4.js       a minimal ISO BMFF muxer (no dependency)
 studio/js/dropbox.js   PKCE auth, browse, temp links, upload, share links
 studio/js/store.js     IndexedDB projects, settings, backup
 studio/js/ui.js        toasts, sheets, progress, icons
+```
+
+## Videos' File Map
+
+```
+videos/index.html      app shell (library, upload, one video with its links)
+videos/watch.html      the public share / Notion embed player (public URL format)
+videos/css/app.css     what Videos adds on top of studio/css/app.css
+videos/js/app.js       routes, library, upload sheet, detail view, settings
+videos/js/player.js    the player: <video> plus the Studio scrub engine overlay
+videos/js/api.js       the Worker client: key, list, multipart upload, links
+videos/js/watch.js     the share page
+present-worker/videos.js   the API: R2 multipart, Range streaming, KV index
 ```
 
 ## Development

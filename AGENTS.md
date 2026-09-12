@@ -7,11 +7,14 @@ GitHub-connected agents). Read this fully before changing anything.
 
 CTH Apps - Tony's web app hub, live at https://apps.coachtonyhockey.com/.
 The repo root `index.html` is the hub (a launcher page listing every app);
-each app lives in its own subfolder and serves at its path. Today there
-are four apps: **Diagrams** at `/diagrams/` (the hockey diagram editor),
-**Clips** at `/clips/` (video tagging and clipping over Tony's own folder), and
-**Slides** at `/slides/` (Notion pages as film-session slideshows), and
-**Bots** at `/bots/` (a board of small single-purpose AI helpers). `/present/`
+each app lives in its own subfolder and serves at its path. The apps
+are **Diagrams** at `/diagrams/` (the hockey diagram editor), **Clips** at
+`/clips/` (video tagging and clipping over Tony's own folder), **Slides** at
+`/slides/` (Notion pages as film-session slideshows), **Bots** at `/bots/` (a
+board of small single-purpose AI helpers), **Studio** at `/studio/`
+(telestrated analysis videos), **Videos** at `/videos/` (the video storage
+centre: R2-backed, share links, Notion embeds, added 2026-09-12), plus
+Boards, Clips Notion and Diagrams Notion, each with a rules section below. `/present/`
 is a compatibility redirect that preserves existing `#p=...&s=...` links. Static
 site, no build step: GitHub Pages serves the `main` branch as-is. **Merging
 to `main` IS the deploy** - the live site updates within about a minute.
@@ -126,8 +129,11 @@ origin. Its DNS record must stay proxied or the Worker route never runs.
    through the CTH Worker in `present-worker/`: Slides fetches Notion, and
    Bots (2026-08-27, Tony's call) calls the model providers. Provider keys
    are WORKER SECRETS and never touch this repo or the browser. Adding a
-   third destination to that Worker needs the same bar: Tony's ask, a
-   locked CORS origin list, no stored state, no logged prompts.
+   destination to that Worker needs the same bar: Tony's ask, a locked CORS
+   origin list, no logged prompts. Diagrams Notion (KV) and Videos (R2 plus
+   KV, 2026-09-12) are the two that store state, each by Tony's ask; the
+   Videos file and poster routes are the one place CORS is open to any
+   origin, because a share link has to play anywhere.
 6. **Diagrams AUTOSAVES** (Tony's call 2026-08-26, reversing the
    manual-save rule of 2026-08-24). An edit calls `markDirty()`, which
    raises the flag and schedules the write; `saveNow()` runs once the edits
@@ -1631,6 +1637,85 @@ LOGS, STUDIO PRODUCES - two jobs, two apps, one folder. Do not merge them.
   grows the wrap, the wrap reports more room, the canvas grows again - and the
   timeline walks off the bottom of the window. Both halves of that fix must
   stay.
+
+## Videos (/videos/) rules
+
+Videos (2026-09-12, Tony's ask) is the VIDEO STORAGE CENTRE: every video
+Tony keeps goes up here at full quality, plays with the Studio scrub feel,
+and comes back out as a share link for a player or a parent, a Notion embed,
+or a direct file. It is the first app in the hub that STORES BYTES on a
+server, and the reasons are the two things no local folder can do: a URL,
+and access from an iPad or a Notion page.
+
+- **THE FILE IS STORED BYTE FOR BYTE.** Cloudflare R2 bucket `cth-videos`,
+  object `<id>/original`; nothing is transcoded, resized or "optimised", ever.
+  A coaching video re-encoded for the web is a coaching video with the puck
+  smeared. The one consequence, stated in the UI: an HEVC iPhone file plays
+  in Safari and not in Chrome. Uploading it anyway is correct; Tony can
+  convert a copy if he needs it in Chrome.
+- **THE WORKER IS THE ONLY DOOR** (`present-worker/videos.js`, the fourth
+  destination on cth-present-api under hard rule 5). Routes under `/videos`:
+  `GET /videos` (list, key), `POST /videos` (start an upload, key),
+  `PUT /videos/<id>/part/<n>?uploadId=` (one part, key),
+  `POST /videos/<id>/complete` (key), `PATCH` and `DELETE /videos/<id>`
+  (key), `PUT /videos/<id>/poster` (key), and PUBLIC `GET /videos/<id>`
+  (metadata, no-store), `GET|HEAD /videos/<id>/file[/<name>]` (the bytes) and
+  `GET /videos/<id>/poster`. The key is the `VIDEOS_KEY` Worker secret sent as
+  `X-CTH-Key`; it lives in the macOS Keychain (`security find-generic-password
+  -s cth-videos-key -w`) and in the browser's localStorage `cthv.key`. The
+  index is the `VIDEOS` KV namespace (id 089691b1fc8f4c99b8a57eaa3d3c6b34):
+  one `v:<id>` JSON per video plus an `index` list, capped at 3000.
+  - THE ID IS THE SHARE MODEL: 12 unguessable characters, the same model as
+    Notion's "anyone with the link". Public routes never list, never search.
+  - UPLOADS ARE MULTIPART THROUGH THE WORKER, not presigned S3 URLs, so no
+    access key exists anywhere. `videos/js/api.js` cuts the file into EQUAL
+    32 MB parts (R2 refuses unequal parts except the last), PUTs three at a
+    time with three retries each, then completes. Progress comes from XHR
+    upload events, because fetch reports none. A failed upload deletes its
+    own record so no half-file ever appears in the library.
+  - **RANGE IS PARSED BY HAND** (`parseRange`), then passed to R2 as
+    `{offset, length}`, and Content-Range is written from what was parsed.
+    Handing R2 the raw Headers object made it report the served range in a
+    shape that came back as `bytes NaN-NaN`, which the <video> element
+    treats as an unplayable file. HEAD uses `head()`, never `get()`.
+    Content-Range, Content-Length, Accept-Ranges and ETag are CORS-exposed,
+    because the scrub decoder reads them cross-origin.
+  - THE STREAM'S CACHE-CONTROL IS ONE DAY, NOT A YEAR. A broken response
+    served once under `immutable` stays broken in that browser for a year -
+    the same trap the boards2 deploy fell into with `_redirects`.
+- **THE PLAYER IS THE STUDIO ENGINE OVER A <video>** (`videos/js/player.js`).
+  `studio/js/scrub.js` (the Clips curve) and `clips/js/scrubsource.js` (the
+  WebCodecs decoder, reading the Worker stream in 8 MB Range windows) are
+  IMPORTED, never reimplemented. Unlike Studio the element is the picture and
+  plays natively; a `scrub-paint` canvas over it shows decoded frames ONLY
+  while a gesture runs, and drops on `seeked` once the element holds the
+  final frame - the Clips arrangement. Playback runs on the engine's clock
+  (`engine.play`), so a gesture and a resume agree about where the playhead
+  is. Verified live 2026-09-12: 29 of 29 scrub requests on a 20 s H.264 file
+  over the Worker served from decoded frames, zero fallbacks. Debug:
+  `window.__scrubDebug = {}` before a video opens exposes the decoder.
+- **`watch.html` IS A PUBLIC URL FORMAT - never break it**:
+  `watch.html?v=<id>&t=<seconds>&autoplay=1` (the hash form `#v=` is also
+  read). It plays one video with the same player and nothing else, no key,
+  no library, which is why it is both the share link and the Notion embed.
+  The detail view offers it as "Share link", the bytes as "Direct file".
+- POSTERS are made in the browser at upload (`probe()`: a frame a tenth of
+  the way in, 640 wide JPEG) and can be reset from the current frame in the
+  detail view. A file the browser cannot decode simply has no poster.
+- **THE SUITE HANDS OFF BY URL, NOT BY COPY.** "Open in Studio" is
+  `studio/#/new?url=<file>&name=<name>` (Studio's `newFromQuery` accepts
+  `url` since 2026-09-12 and makes a `kind:'url'` project). "Open in Clips
+  Notion" is `clips-notion/embed.html#src=<file>&mode=edit`. Both read the
+  file from the Worker; nothing is duplicated. STUDIO EXPORTS INTO VIDEOS:
+  the export sheet's Save To has "CTH Videos (share link)" (`saveToVideos` in
+  studio/js/editor.js imports `videos/js/api.js` lazily) and shows the share
+  and direct links when done; GIFs and stills still download.
+- Styling sits on `studio/css/app.css` (imported first) plus `videos/css/
+  app.css`; the shell, sheets, toasts and cards are Studio's, so the two apps
+  read as one. The upload dropzone is the Clips `.up-drop` recipe.
+- No analytics, no accounts, no third-party anything. The Worker logs
+  nothing. Deleting a video removes the object, the poster and the index
+  entry, and share links stop working for everyone.
 
 ## Design system rules (suite-wide)
 
